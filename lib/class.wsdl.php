@@ -59,7 +59,11 @@ class wsdl extends XMLSchema {
         if (sizeof($this->import) > 0) {
             foreach($this->import as $ns => $url) {
                 $this->debug('importing wsdl from ' . $url);
-                $this->parseWSDL($url);
+				if($url != ''){
+                	$this->parseWSDL($url);
+				} else {
+					$this->namespaces['ns'.(count($this->namespaces)+1)] = $ns;
+				}
             } 
         } 
     } 

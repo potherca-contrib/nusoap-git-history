@@ -1755,7 +1755,7 @@ class soap_transport_http extends nusoap_base {
 		
 		// loop until msg has been received
 		$strlen = 0;
-	    while ($strlen < $this->incoming_headers['content-length'] || !feof($this->fp)){
+	    while ((isset($this->incoming_headers['content-length'])&&$strlen < $this->incoming_headers['content-length']) || !feof($this->fp)){
 			$tmp = fread($this->fp, 8192);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
@@ -2409,7 +2409,11 @@ class wsdl extends XMLSchema {
         if (sizeof($this->import) > 0) {
             foreach($this->import as $ns => $url) {
                 $this->debug('importing wsdl from ' . $url);
-                $this->parseWSDL($url);
+				if($url != ''){
+                	$this->parseWSDL($url);
+				} else {
+					$this->namespaces['ns'.(count($this->namespaces)+1)] = $ns;
+				}
             } 
         } 
     } 
