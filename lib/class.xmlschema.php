@@ -8,6 +8,7 @@
 * tutorials I refer to :)
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
+* @version  v 0.6.3
 * @access   public
 */
 class XMLSchema extends nusoap_base  {

@@ -3,8 +3,9 @@
 /**
 * transport class for sending/receiving data via HTTP and HTTPS
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
-* HTTPS support is experimental!
 *
+* @author   Dietrich Ayala <dietrich@ganx4.com>
+* @version  v 0.6.3
 * @access public
 */
 class soap_transport_http extends nusoap_base {

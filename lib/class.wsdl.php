@@ -1,11 +1,12 @@
 <?php
 
 /**
- * parses a WSDL file, allows access to it's data, other utility methods
- * 
- * @author Dietrich Ayala <dietrich@ganx4.com> 
- * @access public 
- */
+* parses a WSDL file, allows access to it's data, other utility methods
+* 
+* @author   Dietrich Ayala <dietrich@ganx4.com>
+* @version  v 0.6.3
+* @access public 
+*/
 class wsdl extends XMLSchema {
     var $wsdl; 
     // define internal arrays of bindings, ports, operations, messages, etc.
