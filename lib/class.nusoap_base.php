@@ -249,36 +249,41 @@ class nusoap_base {
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
-					foreach($val as $v){
-                    	if(is_object($v) && get_class($v) == 'soapval'){
-                        	$tt = $v->type;
-                        } else {
-							$tt = gettype($v);
-                        }
-						$array_types[$tt] = 1;
-						$xml .= $this->serialize_val($v,'item');
-						$i = 0;
-						if(is_array($v) && is_numeric(key($v))){
-							$i += sizeof($v);
-						} else {
-							++$i;
+					if(is_array($val) && count($val)> 0){
+						foreach($val as $v){
+	                    	if(is_object($v) && get_class($v) == 'soapval'){
+	                        	$tt = $v->type;
+	                        } else {
+								$tt = gettype($v);
+	                        }
+							$array_types[$tt] = 1;
+							$xml .= $this->serialize_val($v,'item');
+							$i = 0;
+							if(is_array($v) && is_numeric(key($v))){
+								$i += sizeof($v);
+							} else {
+								++$i;
+							}
 						}
-					}
-					if(count($array_types) > 1){
-						$array_typename = 'xsd:ur-type';
-					} elseif(isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
-						$array_typename = 'xsd:'.$tt;
-					} elseif($tt == 'array' || $tt == 'Array'){
-						$array_typename = 'SOAP-ENC:Array';
+						if(count($array_types) > 1){
+							$array_typename = 'xsd:ur-type';
+						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
+							$array_typename = 'xsd:'.$tt;
+						} elseif($tt == 'array' || $tt == 'Array'){
+							$array_typename = 'SOAP-ENC:Array';
+						} else {
+							$array_typename = $tt;
+						}
+						if(isset($array_types['array'])){
+							$array_type = $i.",".$i;
+						} else {
+							$array_type = $i;
+						}
+						$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
+					// empty array
 					} else {
-						$array_typename = $tt;
+						$xml = "<$name xsi:type=\"SOAP-ENC:Array\" $atts>".$xml."</$name>";;
 					}
-					if(isset($array_types['array'])){
-						$array_type = $i.",".$i;
-					} else {
-						$array_type = $i;
-					}
-					$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
 				} else {
 					// got a struct
 					if(isset($type) && isset($type_prefix)){

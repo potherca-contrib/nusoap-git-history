@@ -125,10 +125,8 @@ class wsdl extends XMLSchema {
                 if (isset($wsdl_props['user'])) {
                     $base64auth = base64_encode($wsdl_props['user'] . ":" . $wsdl_props['pass']);
                     $sHeader .= "Authorization: Basic $base64auth\r\n";
-                } 
-
-                $sHeader .= "Host: " . $wsdl_props['host'] . "\r\n\r\n";
-
+                }
+				$sHeader .= "Host: " . $wsdl_props['host'] . ( isset($wsdl_props['port']) ? ":".$wsdl_props['port'] : "" ) . "\r\n\r\n";
                 fputs($fp, $sHeader);
 
                 while (fgets($fp, 1024) != "\r\n") {

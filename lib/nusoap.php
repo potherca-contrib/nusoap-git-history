@@ -249,36 +249,41 @@ class nusoap_base {
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
-					foreach($val as $v){
-                    	if(is_object($v) && get_class($v) == 'soapval'){
-                        	$tt = $v->type;
-                        } else {
-							$tt = gettype($v);
-                        }
-						$array_types[$tt] = 1;
-						$xml .= $this->serialize_val($v,'item');
-						$i = 0;
-						if(is_array($v) && is_numeric(key($v))){
-							$i += sizeof($v);
-						} else {
-							++$i;
+					if(is_array($val) && count($val)> 0){
+						foreach($val as $v){
+	                    	if(is_object($v) && get_class($v) == 'soapval'){
+	                        	$tt = $v->type;
+	                        } else {
+								$tt = gettype($v);
+	                        }
+							$array_types[$tt] = 1;
+							$xml .= $this->serialize_val($v,'item');
+							$i = 0;
+							if(is_array($v) && is_numeric(key($v))){
+								$i += sizeof($v);
+							} else {
+								++$i;
+							}
 						}
-					}
-					if(count($array_types) > 1){
-						$array_typename = 'xsd:ur-type';
-					} elseif(isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
-						$array_typename = 'xsd:'.$tt;
-					} elseif($tt == 'array' || $tt == 'Array'){
-						$array_typename = 'SOAP-ENC:Array';
+						if(count($array_types) > 1){
+							$array_typename = 'xsd:ur-type';
+						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
+							$array_typename = 'xsd:'.$tt;
+						} elseif($tt == 'array' || $tt == 'Array'){
+							$array_typename = 'SOAP-ENC:Array';
+						} else {
+							$array_typename = $tt;
+						}
+						if(isset($array_types['array'])){
+							$array_type = $i.",".$i;
+						} else {
+							$array_type = $i;
+						}
+						$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
+					// empty array
 					} else {
-						$array_typename = $tt;
+						$xml = "<$name xsi:type=\"SOAP-ENC:Array\" $atts>".$xml."</$name>";;
 					}
-					if(isset($array_types['array'])){
-						$array_type = $i.",".$i;
-					} else {
-						$array_type = $i;
-					}
-					$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
 				} else {
 					// got a struct
 					if(isset($type) && isset($type_prefix)){
@@ -2348,10 +2353,8 @@ class wsdl extends XMLSchema {
                 if (isset($wsdl_props['user'])) {
                     $base64auth = base64_encode($wsdl_props['user'] . ":" . $wsdl_props['pass']);
                     $sHeader .= "Authorization: Basic $base64auth\r\n";
-                } 
-
-                $sHeader .= "Host: " . $wsdl_props['host'] . "\r\n\r\n";
-
+                }
+				$sHeader .= "Host: " . $wsdl_props['host'] . ( isset($wsdl_props['port']) ? ":".$wsdl_props['port'] : "" ) . "\r\n\r\n";
                 fputs($fp, $sHeader);
 
                 while (fgets($fp, 1024) != "\r\n") {
@@ -3237,6 +3240,8 @@ class soap_parser extends nusoap_base {
 				$this->message[$pos]['typePrefix'] = $value_prefix;
                 if(isset($this->namespaces[$value_prefix])){
                 	$this->message[$pos]['type_namespace'] = $this->namespaces[$value_prefix];
+                } else if(isset($attrs['xmlns:'.$value_prefix])) {
+					$this->message[$pos]['type_namespace'] = $attrs['xmlns:'.$value_prefix];
                 }
 				// should do something here with the namespace of specified type?
 			} elseif($key_localpart == 'arrayType'){
@@ -3338,17 +3343,7 @@ class soap_parser extends nusoap_base {
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
-			// resolve hrefs/ids
-			if(sizeof($this->multirefs) > 0){
-				foreach($this->multirefs as $id => $hrefs){
-					$this->debug('resolving multirefs for id: '.$id);
-					$idVal = $this->buildVal($this->ids[$id]);
-					foreach($hrefs as $refPos => $ref){
-						$this->debug('resolving href at pos '.$refPos);
-						$this->multirefs[$id][$refPos] = $idVal;
-					}
-				}
-			}
+			//
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
@@ -3369,6 +3364,9 @@ class soap_parser extends nusoap_base {
 	*/
 	function character_data($parser, $data){
 		$pos = $this->depth_array[$this->depth];
+		if ($this->xml_encoding=='UTF-8'){
+			$data = utf8_decode($data);
+		}
         $this->message[$pos]['cdata'] .= $data;
         // for doclit
         if($this->status == 'header'){
@@ -3443,19 +3441,19 @@ class soap_parser extends nusoap_base {
 			} elseif($this->message[$pos]['type'] == 'array' || $this->message[$pos]['type'] == 'Array'){
                 $this->debug('adding array '.$this->message[$pos]['name']);
                 foreach($children as $child_pos){
-                	$params[] = $this->message[$child_pos]['result'];
+                	$params[] = &$this->message[$child_pos]['result'];
                 }
             // apache Map type: java hashtable
             } elseif($this->message[$pos]['type'] == 'Map' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap'){
                 foreach($children as $child_pos){
                 	$kv = explode("|",$this->message[$child_pos]['children']);
-                   	$params[$this->message[$kv[1]]['result']] = $this->message[$kv[2]]['result'];
+                   	$params[$this->message[$kv[1]]['result']] = &$this->message[$kv[2]]['result'];
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
             } else {
             	foreach($children as $child_pos){
-				    $params[$this->message[$child_pos]['name']] =& $this->message[$child_pos]['result'];
+				    $params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
                 }
 			}
 			return is_array($params) ? $params : array();

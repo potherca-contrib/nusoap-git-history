@@ -184,6 +184,8 @@ class soap_parser extends nusoap_base {
 				$this->message[$pos]['typePrefix'] = $value_prefix;
                 if(isset($this->namespaces[$value_prefix])){
                 	$this->message[$pos]['type_namespace'] = $this->namespaces[$value_prefix];
+                } else if(isset($attrs['xmlns:'.$value_prefix])) {
+					$this->message[$pos]['type_namespace'] = $attrs['xmlns:'.$value_prefix];
                 }
 				// should do something here with the namespace of specified type?
 			} elseif($key_localpart == 'arrayType'){
@@ -285,17 +287,7 @@ class soap_parser extends nusoap_base {
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
-			// resolve hrefs/ids
-			if(sizeof($this->multirefs) > 0){
-				foreach($this->multirefs as $id => $hrefs){
-					$this->debug('resolving multirefs for id: '.$id);
-					$idVal = $this->buildVal($this->ids[$id]);
-					foreach($hrefs as $refPos => $ref){
-						$this->debug('resolving href at pos '.$refPos);
-						$this->multirefs[$id][$refPos] = $idVal;
-					}
-				}
-			}
+			//
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
@@ -316,6 +308,9 @@ class soap_parser extends nusoap_base {
 	*/
 	function character_data($parser, $data){
 		$pos = $this->depth_array[$this->depth];
+		if ($this->xml_encoding=='UTF-8'){
+			$data = utf8_decode($data);
+		}
         $this->message[$pos]['cdata'] .= $data;
         // for doclit
         if($this->status == 'header'){
@@ -390,19 +385,19 @@ class soap_parser extends nusoap_base {
 			} elseif($this->message[$pos]['type'] == 'array' || $this->message[$pos]['type'] == 'Array'){
                 $this->debug('adding array '.$this->message[$pos]['name']);
                 foreach($children as $child_pos){
-                	$params[] = $this->message[$child_pos]['result'];
+                	$params[] = &$this->message[$child_pos]['result'];
                 }
             // apache Map type: java hashtable
             } elseif($this->message[$pos]['type'] == 'Map' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap'){
                 foreach($children as $child_pos){
                 	$kv = explode("|",$this->message[$child_pos]['children']);
-                   	$params[$this->message[$kv[1]]['result']] = $this->message[$kv[2]]['result'];
+                   	$params[$this->message[$kv[1]]['result']] = &$this->message[$kv[2]]['result'];
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
             } else {
             	foreach($children as $child_pos){
-				    $params[$this->message[$child_pos]['name']] =& $this->message[$child_pos]['result'];
+				    $params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
                 }
 			}
 			return is_array($params) ? $params : array();
