@@ -536,7 +536,7 @@ class soapclient extends nusoap_base  {
 				$evalStr .= "function $operation ($paramStr){
 					// load params into array
 					\$params = array($paramStr);
-					return \$this->call('$operation',\$params,'".$opData['namespace']."','".$opData['soapAction']."');
+					return \$this->call('$operation',\$params,'".$opData['namespace']."','".(isset($opData['soapAction']) ? $opData['soapAction'] : '')."');
 				}";
 				unset($paramStr);
 			}

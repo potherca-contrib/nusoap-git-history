@@ -239,7 +239,11 @@ class XMLSchema extends nusoap_base  {
 					$this->attributes[$attrs['name']] = $attrs;
 					$aname = $attrs['name'];
 				} elseif(isset($attrs['ref']) && $attrs['ref'] == 'http://schemas.xmlsoap.org/soap/encoding/:arrayType'){
-                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+					if (isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])) {
+	                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+	                } else {
+	                	$aname = '';
+	                }
 				} elseif(isset($attrs['ref'])){
 					$aname = $attrs['ref'];
                     $this->attributes[$attrs['ref']] = $attrs;
@@ -327,10 +331,11 @@ class XMLSchema extends nusoap_base  {
 			//case 'enumeration':
 			//break;
 			case 'import':
-				//$this->xdebug('import namespace ' . $attrs['namespace']);
-			    if (isset($attrs['location'])) {
-                    $this->imports[$attrs['namespace']][] = array('location' => $attrs['location'], 'loaded' => false);
+			    if (isset($attrs['schemaLocation'])) {
+					//$this->xdebug('import namespace ' . $attrs['namespace'] . ' from ' . $attrs['schemaLocation']);
+                    $this->imports[$attrs['namespace']][] = array('location' => $attrs['schemaLocation'], 'loaded' => false);
 				} else {
+					//$this->xdebug('import namespace ' . $attrs['namespace']);
                     $this->imports[$attrs['namespace']][] = array('location' => '', 'loaded' => true);
 					if (! $this->getPrefixFromNamespace($attrs['namespace'])) {
 						$this->namespaces['ns'.(count($this->namespaces)+1)] = $attrs['namespace'];

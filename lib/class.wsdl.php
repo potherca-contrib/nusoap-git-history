@@ -73,27 +73,31 @@ class wsdl extends nusoap_base {
             $this->parseWSDL($wsdl);
         }
         // imports
-        if (sizeof($this->import) > 0) {
+        // TODO: handle imports more properly, grabbing them in-line and nesting them
+        	$imported_urls = array();
         	$imported = 1;
         	while ($imported > 0) {
         		$imported = 0;
         		// Schema imports
         		foreach ($this->schemas as $ns => $list) {
         			foreach ($list as $xs) {
-						$wsdlparts = parse_url($this->wsdl);	// this is bogus!
-			            foreach ($xs->imports as $ns2 => $list) {
-			                for ($ii = 0; $ii < count($list); $ii++) {
-			                	if (! $list[$ii]['loaded']) {
+						$wsdlparts = parse_url($this->wsdl);	// this is bogusly simple!
+			            foreach ($xs->imports as $ns2 => $list2) {
+			                for ($ii = 0; $ii < count($list2); $ii++) {
+			                	if (! $list2[$ii]['loaded']) {
 			                		$this->schemas[$ns]->imports[$ns2][$ii]['loaded'] = true;
-			                		$url = $list[ii]['location'];
+			                		$url = $list2[$ii]['location'];
 									if ($url != '') {
 										$urlparts = parse_url($url);
 										if (!isset($urlparts['host'])) {
 											$url = $wsdlparts['scheme'] . '://' . $wsdlparts['host'] . 
 													substr($wsdlparts['path'],0,strrpos($wsdlparts['path'],'/') + 1) .$urlparts['path'];
 										}
-					                	$this->parseWSDL($url);
-				                		$imported++;
+										if (! in_array($url, $imported_urls)) {
+						                	$this->parseWSDL($url);
+					                		$imported++;
+					                		$imported_urls[] = $url;
+					                	}
 									} else {
 										$this->debug("Unexpected scenario: empty URL for unloaded import");
 									}
@@ -103,7 +107,7 @@ class wsdl extends nusoap_base {
         			}
         		}
         		// WSDL imports
-				$wsdlparts = parse_url($this->wsdl);
+				$wsdlparts = parse_url($this->wsdl);	// this is bogusly simple!
 	            foreach ($this->import as $ns => $list) {
 	                for ($ii = 0; $ii < count($list); $ii++) {
 	                	if (! $list[$ii]['loaded']) {
@@ -115,8 +119,11 @@ class wsdl extends nusoap_base {
 									$url = $wsdlparts['scheme'] . '://' . $wsdlparts['host'] . 
 											substr($wsdlparts['path'],0,strrpos($wsdlparts['path'],'/') + 1) .$urlparts['path'];
 								}
-			                	$this->parseWSDL($url);
-		                		$imported++;
+								if (! in_array($url, $imported_urls)) {
+				                	$this->parseWSDL($url);
+			                		$imported++;
+			                		$imported_urls[] = $url;
+			                	}
 							} else {
 								$this->debug("Unexpected scenario: empty URL for unloaded import");
 							}
@@ -124,7 +131,6 @@ class wsdl extends nusoap_base {
 					}
 	            } 
 			}
-        } 
         // add new data to operation data
         foreach($this->bindings as $binding => $bindingData) {
             if (isset($bindingData['operations']) && is_array($bindingData['operations'])) {
