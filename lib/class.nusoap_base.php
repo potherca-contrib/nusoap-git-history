@@ -75,7 +75,7 @@ class nusoap_base {
 	var $XMLSchemaVersion = 'http://www.w3.org/2001/XMLSchema';
 	
     /**
-	*  set default encoding
+	*  set charset encoding for outgoing messages
 	*
 	* @var      soap_defencoding
 	* @access   public
@@ -248,7 +248,9 @@ class nusoap_base {
 				break;
 			case (is_string($val) || $type == 'string'):
 				if($this->charencoding){
-			    	$val = htmlspecialchars($val, ENT_QUOTES);
+			    	$val = str_replace('&', '&amp;', $val);
+			    	$val = str_replace('<', '&lt;', $val);
+			    	$val = str_replace('>', '&gt;', $val);
 			    }
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";

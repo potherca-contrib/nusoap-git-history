@@ -26,3 +26,9 @@
 - wsdl: apply a variant of the patch from Holger to handle empty values for array by serializing an array with 0 elements
 - xmlschema: remove the redundant default namespace attribute on the schema element; everything in xsd is explicitly specified as being from xsd
 - soap_transport_http: fix setCredentials and add TODO comments in sendHTTPS about what to change if this setCredentials stays
+
+2003-07-30, version 0.6.5
+- nusoap_base: change documentation of soap_defencoding to specify it is the encoding for outgoing messages
+- nusoap_base: only change &, <, > to entities, not all HTML entities
+- soap_transport_http: update the Content-Type header in sendRequest, since soap_defencoding could be changed after ctor is called
+- soap_server: use soap_defencoding instead of charset_encoding

@@ -20,7 +20,6 @@ class soap_server extends nusoap_base {
     var $responseHeaders = false;
 	var $headers = '';
 	var $request = '';
-	var $charset_encoding = 'UTF-8';
 	var $fault = false;
 	var $result = 'successful';
 	var $wsdl = false;
@@ -102,7 +101,7 @@ class soap_server extends nusoap_base {
 			}
 			$header[] = "Server: $this->title Server v$this->version\r\n";
 			$header[] = "Connection: Close\r\n";
-			$header[] = "Content-Type: text/xml; charset=$this->charset_encoding\r\n";
+			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
 			if (isset($this->headers))
 			{

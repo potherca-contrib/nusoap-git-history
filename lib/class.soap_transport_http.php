@@ -393,6 +393,8 @@ class soap_transport_http extends nusoap_base {
 	}
 	
 	function sendRequest($data){
+		// update content-type header since we may have changed soap_defencoding
+		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		

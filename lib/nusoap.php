@@ -75,7 +75,7 @@ class nusoap_base {
 	var $XMLSchemaVersion = 'http://www.w3.org/2001/XMLSchema';
 	
     /**
-	*  set default encoding
+	*  set charset encoding for outgoing messages
 	*
 	* @var      soap_defencoding
 	* @access   public
@@ -248,7 +248,9 @@ class nusoap_base {
 				break;
 			case (is_string($val) || $type == 'string'):
 				if($this->charencoding){
-			    	$val = htmlspecialchars($val, ENT_QUOTES);
+			    	$val = str_replace('&', '&amp;', $val);
+			    	$val = str_replace('<', '&lt;', $val);
+			    	$val = str_replace('>', '&gt;', $val);
 			    }
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";
@@ -1698,6 +1700,9 @@ class soap_transport_http extends nusoap_base {
 	}
 	
 	function sendRequest($data){
+		// update content-type header since we may have changed soap_defencoding
+		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
+
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
@@ -1868,7 +1873,6 @@ class soap_server extends nusoap_base {
     var $responseHeaders = false;
 	var $headers = '';
 	var $request = '';
-	var $charset_encoding = 'UTF-8';
 	var $fault = false;
 	var $result = 'successful';
 	var $wsdl = false;
@@ -1950,7 +1954,7 @@ class soap_server extends nusoap_base {
 			}
 			$header[] = "Server: $this->title Server v$this->version\r\n";
 			$header[] = "Connection: Close\r\n";
-			$header[] = "Content-Type: text/xml; charset=$this->charset_encoding\r\n";
+			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
 			if (isset($this->headers))
 			{
@@ -2005,7 +2009,6 @@ class soap_server extends nusoap_base {
 					$this->xml_encoding = 'us-ascii';
 				}
 			}
-			$this->debug('got encoding: '.$this->xml_encoding);
 		} elseif(is_array($_SERVER)){
 			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
 			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? $_SERVER['SOAPAction'] : '';
@@ -3575,9 +3578,9 @@ class soap_parser extends nusoap_base {
 			} elseif($this->message[$pos]['children'] != ''){
 			
 				// if result has already been generated (struct/array
-				if(!isset($this->message[$pos]['result'])){
+//				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
-				}
+//				}
 				
 			// set value of simple type
 			} else {
