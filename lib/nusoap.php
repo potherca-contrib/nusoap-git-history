@@ -276,6 +276,7 @@ class nusoap_base {
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
+					$i = 0;
 					if(is_array($val) && count($val)> 0){
 						foreach($val as $v){
 	                    	if(is_object($v) && get_class($v) == 'soapval'){
@@ -285,7 +286,6 @@ class nusoap_base {
 	                        }
 							$array_types[$tt] = 1;
 							$xml .= $this->serialize_val($v,'item',false,false,false,false,$use);
-							$i = 0;
 							if(is_array($v) && is_numeric(key($v))){
 								$i += sizeof($v);
 							} else {
@@ -494,7 +494,11 @@ function iso8601_to_timestamp($datestr){
 	}
 }
 
+
+
 ?><?php
+
+
 
 /**
 * soap_fault class, allows for creation of faults
@@ -552,7 +556,11 @@ class soap_fault extends nusoap_base {
 	}
 }
 
+
+
 ?><?php
+
+
 
 /**
 * parses an XML Schema, allows access to it's data, other utility methods
@@ -1214,7 +1222,11 @@ class XMLSchema extends nusoap_base  {
 	}
 }
 
+
+
 ?><?php
+
+
 
 /**
 * for creating serializable abstractions of native PHP types
@@ -1267,7 +1279,11 @@ class soapval extends nusoap_base {
 	}
 }
 
+
+
 ?><?php
+
+
 
 /**
 * transport class for sending/receiving data via HTTP and HTTPS
@@ -1759,7 +1775,11 @@ class soap_transport_http extends nusoap_base {
 	
 }
 
+
+
 ?><?php
+
+
 
 /**
 *
@@ -1854,6 +1874,7 @@ class soap_server extends nusoap_base {
             }
 			// print headers
 			if($this->fault){
+				$header[] = "HTTP/1.0 500 Internal Server Error\r\n";
 				$header[] = "Status: 500 Internal Server Error\r\n";
 			} else {
 				$header[] = "Status: 200 OK\r\n";
@@ -2270,7 +2291,11 @@ class soap_server extends nusoap_base {
     }
 }
 
+
+
 ?><?php
+
+
 
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
@@ -2917,21 +2942,21 @@ class wsdl extends XMLSchema {
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
 			
 			$use = $opData[$direction]['use'];
-			if($use == 'literal'){
-				$unwrap = sizeof($opData[$direction]['parts']) == 1;
-			} else {
-				$unwrap = 0;
-			}
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
+				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// NOTE: add error handling here
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $unwrap);
+					$this->debug('calling serializeType w/ named param');
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
 				} elseif(is_array($parameters)) {
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $unwrap);
-				} 
+					$this->debug('calling serializeType w/ unnamed param');
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+				} else {
+					$this->debug('no parameters passed.');
+				}
 			}
 		}
 		return $xml;
@@ -2940,15 +2965,14 @@ class wsdl extends XMLSchema {
 	/**
 	 * serializes a PHP value according a given type definition
 	 * 
-	 * @param string $name , name of type
-	 * @param string $type , type of type, heh
-	 * @param mixed $value , a native PHP value
-	 * @param string $use , rpc|encoded
-	 * @param boolean $unwrap , if true, unwrap parameter structure if possible
+	 * @param string $name , name of type (part)
+	 * @param string $type , type of type, heh (type or element)
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $use , use for part (encoded|literal)
 	 * @return string serialization
 	 * @access public 
 	 */
-	function serializeType($name, $type, $value, $use='encoded', $unwrap=false)
+	function serializeType($name, $type, $value, $use='encoded')
 	{
 		$this->debug("in serializeType: $name, $type, $value, $use");
 		$xml = '';
@@ -2990,12 +3014,19 @@ class wsdl extends XMLSchema {
 		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . (isset($typeDef['arrayType']) ? $typeDef['arrayType'] : '') ); 
 		// if php type == struct, map value to the <all> element names
 		if ($phpType == 'struct') {
-			if (!$unwrap) {
-				if ($use == 'literal') {
-					$xml = "<$name>";
-				} else {
-					$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
-				}
+			if (isset($typeDef['element']) && $typeDef['element']) {
+				$elementName = $uqType;
+				// TODO: use elementFormDefault="qualified|unqualified" to determine
+				// how to scope the namespace
+				$elementNS = " xmlns=\"$ns\"";
+			} else {
+				$elementName = $name;
+				$elementNS = '';
+			}
+			if ($use == 'literal') {
+				$xml = "<$elementName$elementNS>";
+			} else {
+				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 			}
 			if (is_array($this->complexTypes[$uqType]['elements'])) {
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
@@ -3013,9 +3044,7 @@ class wsdl extends XMLSchema {
 					} 
 				} 
 			}
-			if (! $unwrap) {
-				$xml .= "</$name>";
-			}
+			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
 			$rows = sizeof($value);
 			if (isset($typeDef['multidimensional'])) {
@@ -3127,7 +3156,11 @@ class wsdl extends XMLSchema {
 	} 
 } 
 
+
+
 ?><?php
+
+
 
 /**
 *
@@ -3541,7 +3574,11 @@ class soap_parser extends nusoap_base {
 	}
 }
 
+
+
 ?><?php
+
+
 
 /**
 *
@@ -3610,6 +3647,7 @@ class soapclient extends nusoap_base  {
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
 			$this->wsdl =& new wsdl($this->wsdlFile);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -3632,10 +3670,11 @@ class soapclient extends nusoap_base  {
 	* @param	string $soapAction optional SOAPAction value
 	* @param	boolean $headers optional array of soapval objects for headers
 	* @param	boolean $rpcParams optional treat params as RPC for use="literal"
+	*                   This can be used on a per-call basis to overrider defaultRpcParams.
 	* @return	mixed
 	* @access   public
 	*/
-	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=false){
+	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=null){
 		$this->operation = $operation;
 		$this->fault = false;
 		$this->error_str = '';
@@ -3656,43 +3695,37 @@ class soapclient extends nusoap_base  {
 			}
 			$soapAction = $opData['soapAction'];
 			$this->endpoint = $opData['endpoint'];
-			if (isset($opData['input']['namespace'])) {
-				$namespace =  $opData['input']['namespace'];
-			} else {
-				if (isset($this->wsdl->wsdl_info['targetNamespace'])) {
-					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
-				} else {
-					$namespace = 'http://testuri.org';
-				}
-			}
+			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	'http://testuri.org';
 			$style = $opData['style'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
 				$this->wsdl->namespaces['nu'] = $namespace;
-
-
-
             }
 			// serialize payload
 			
-			if($opData['input']['use'] == 'literal' && !$rpcParams) {
-				$payload = is_array($params) ? array_shift($params) : $params;
-			} else {
-				$this->debug("serializing RPC params for operation $operation");
-				if (!isset($defaultNamespace)) {
-					$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
-					$this->wsdl->serializeRPCParameters($operation,'input',$params).
-					'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
-				} else {
-					$payload = "<$operation xmlns=\"$defaultNamespace\">".
-					$this->wsdl->serializeRPCParameters($operation,'input',$params).
-					"</$operation>";
+			if($opData['input']['use'] == 'literal') {
+				if (is_null($rpcParams)) {
+					$rpcParams = $this->defaultRpcParams;
 				}
+				if ($rpcParams) {
+					$this->debug("serializing literal params for operation $operation");
+					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
+					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
+				} else {
+					$this->debug("serializing literal document for operation $operation");
+					$payload = is_array($params) ? array_shift($params) : $params;
+				}
+			} else {
+				$this->debug("serializing encoded params for operation $operation");
+				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
+				$this->wsdl->serializeRPCParameters($operation,'input',$params).
+				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
 			}
 			$this->debug('payload size: '.strlen($payload));
 			// serialize envelope
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 		} elseif($this->endpointType == 'wsdl') {
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
@@ -4006,6 +4039,7 @@ class soapclient extends nusoap_base  {
 		$proxy->wsdlFile = $this->wsdlFile;
 		$proxy->wsdl = $this->wsdl;
 		$proxy->operations = $this->operations;
+		$proxy->defaultRpcParams = $this->defaultRpcParams;
 		return $proxy;
 	}
 }

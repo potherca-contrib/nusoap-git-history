@@ -1,5 +1,7 @@
 <?php
 
+
+
 /**
 * parses an XML Schema, allows access to it's data, other utility methods
 * no validation... yet.
@@ -659,5 +661,7 @@ class XMLSchema extends nusoap_base  {
 		);
 	}
 }
+
+
 
 ?>

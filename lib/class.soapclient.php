@@ -1,5 +1,7 @@
 <?php
 
+
+
 /**
 *
 * soapclient higher level class for easy usage.
@@ -67,6 +69,7 @@ class soapclient extends nusoap_base  {
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
 			$this->wsdl =& new wsdl($this->wsdlFile);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -89,10 +92,11 @@ class soapclient extends nusoap_base  {
 	* @param	string $soapAction optional SOAPAction value
 	* @param	boolean $headers optional array of soapval objects for headers
 	* @param	boolean $rpcParams optional treat params as RPC for use="literal"
+	*                   This can be used on a per-call basis to overrider defaultRpcParams.
 	* @return	mixed
 	* @access   public
 	*/
-	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=false){
+	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=null){
 		$this->operation = $operation;
 		$this->fault = false;
 		$this->error_str = '';
@@ -113,43 +117,37 @@ class soapclient extends nusoap_base  {
 			}
 			$soapAction = $opData['soapAction'];
 			$this->endpoint = $opData['endpoint'];
-			if (isset($opData['input']['namespace'])) {
-				$namespace =  $opData['input']['namespace'];
-			} else {
-				if (isset($this->wsdl->wsdl_info['targetNamespace'])) {
-					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
-				} else {
-					$namespace = 'http://testuri.org';
-				}
-			}
+			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	'http://testuri.org';
 			$style = $opData['style'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
 				$this->wsdl->namespaces['nu'] = $namespace;
-
-
-
             }
 			// serialize payload
 			
-			if($opData['input']['use'] == 'literal' && !$rpcParams) {
-				$payload = is_array($params) ? array_shift($params) : $params;
-			} else {
-				$this->debug("serializing RPC params for operation $operation");
-				if (!isset($defaultNamespace)) {
-					$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
-					$this->wsdl->serializeRPCParameters($operation,'input',$params).
-					'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
-				} else {
-					$payload = "<$operation xmlns=\"$defaultNamespace\">".
-					$this->wsdl->serializeRPCParameters($operation,'input',$params).
-					"</$operation>";
+			if($opData['input']['use'] == 'literal') {
+				if (is_null($rpcParams)) {
+					$rpcParams = $this->defaultRpcParams;
 				}
+				if ($rpcParams) {
+					$this->debug("serializing literal params for operation $operation");
+					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
+					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
+				} else {
+					$this->debug("serializing literal document for operation $operation");
+					$payload = is_array($params) ? array_shift($params) : $params;
+				}
+			} else {
+				$this->debug("serializing encoded params for operation $operation");
+				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
+				$this->wsdl->serializeRPCParameters($operation,'input',$params).
+				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
 			}
 			$this->debug('payload size: '.strlen($payload));
 			// serialize envelope
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 		} elseif($this->endpointType == 'wsdl') {
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
@@ -463,6 +461,7 @@ class soapclient extends nusoap_base  {
 		$proxy->wsdlFile = $this->wsdlFile;
 		$proxy->wsdl = $this->wsdl;
 		$proxy->operations = $this->operations;
+		$proxy->defaultRpcParams = $this->defaultRpcParams;
 		return $proxy;
 	}
 }

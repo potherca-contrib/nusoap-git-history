@@ -1,5 +1,7 @@
 <?php
 
+
+
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
@@ -645,21 +647,21 @@ class wsdl extends XMLSchema {
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
 			
 			$use = $opData[$direction]['use'];
-			if($use == 'literal'){
-				$unwrap = sizeof($opData[$direction]['parts']) == 1;
-			} else {
-				$unwrap = 0;
-			}
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
+				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// NOTE: add error handling here
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $unwrap);
+					$this->debug('calling serializeType w/ named param');
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
 				} elseif(is_array($parameters)) {
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $unwrap);
-				} 
+					$this->debug('calling serializeType w/ unnamed param');
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+				} else {
+					$this->debug('no parameters passed.');
+				}
 			}
 		}
 		return $xml;
@@ -668,15 +670,14 @@ class wsdl extends XMLSchema {
 	/**
 	 * serializes a PHP value according a given type definition
 	 * 
-	 * @param string $name , name of type
-	 * @param string $type , type of type, heh
-	 * @param mixed $value , a native PHP value
-	 * @param string $use , rpc|encoded
-	 * @param boolean $unwrap , if true, unwrap parameter structure if possible
+	 * @param string $name , name of type (part)
+	 * @param string $type , type of type, heh (type or element)
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $use , use for part (encoded|literal)
 	 * @return string serialization
 	 * @access public 
 	 */
-	function serializeType($name, $type, $value, $use='encoded', $unwrap=false)
+	function serializeType($name, $type, $value, $use='encoded')
 	{
 		$this->debug("in serializeType: $name, $type, $value, $use");
 		$xml = '';
@@ -718,12 +719,19 @@ class wsdl extends XMLSchema {
 		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . (isset($typeDef['arrayType']) ? $typeDef['arrayType'] : '') ); 
 		// if php type == struct, map value to the <all> element names
 		if ($phpType == 'struct') {
-			if (!$unwrap) {
-				if ($use == 'literal') {
-					$xml = "<$name>";
-				} else {
-					$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
-				}
+			if (isset($typeDef['element']) && $typeDef['element']) {
+				$elementName = $uqType;
+				// TODO: use elementFormDefault="qualified|unqualified" to determine
+				// how to scope the namespace
+				$elementNS = " xmlns=\"$ns\"";
+			} else {
+				$elementName = $name;
+				$elementNS = '';
+			}
+			if ($use == 'literal') {
+				$xml = "<$elementName$elementNS>";
+			} else {
+				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 			}
 			if (is_array($this->complexTypes[$uqType]['elements'])) {
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
@@ -741,9 +749,7 @@ class wsdl extends XMLSchema {
 					} 
 				} 
 			}
-			if (! $unwrap) {
-				$xml .= "</$name>";
-			}
+			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
 			$rows = sizeof($value);
 			if (isset($typeDef['multidimensional'])) {
@@ -854,5 +860,7 @@ class wsdl extends XMLSchema {
 	return true;
 	} 
 } 
+
+
 
 ?>

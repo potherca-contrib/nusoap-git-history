@@ -276,6 +276,7 @@ class nusoap_base {
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
+					$i = 0;
 					if(is_array($val) && count($val)> 0){
 						foreach($val as $v){
 	                    	if(is_object($v) && get_class($v) == 'soapval'){
@@ -285,7 +286,6 @@ class nusoap_base {
 	                        }
 							$array_types[$tt] = 1;
 							$xml .= $this->serialize_val($v,'item',false,false,false,false,$use);
-							$i = 0;
 							if(is_array($v) && is_numeric(key($v))){
 								$i += sizeof($v);
 							} else {
@@ -493,5 +493,7 @@ function iso8601_to_timestamp($datestr){
 		return false;
 	}
 }
+
+
 
 ?>

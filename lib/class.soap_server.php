@@ -1,5 +1,7 @@
 <?php
 
+
+
 /**
 *
 * soap_server allows the user to create a SOAP server
@@ -93,6 +95,7 @@ class soap_server extends nusoap_base {
             }
 			// print headers
 			if($this->fault){
+				$header[] = "HTTP/1.0 500 Internal Server Error\r\n";
 				$header[] = "Status: 500 Internal Server Error\r\n";
 			} else {
 				$header[] = "Status: 200 OK\r\n";
@@ -508,5 +511,7 @@ class soap_server extends nusoap_base {
             'bindingType'=>'http://schemas.xmlsoap.org/wsdl/soap/');
     }
 }
+
+
 
 ?>
