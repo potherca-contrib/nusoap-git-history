@@ -14,9 +14,10 @@ class soap_transport_http extends nusoap_base {
 	var $url;
     var $proxyhost = '';
     var $proxyport = '';
-	
+	var $scheme = '';
 	var $protocol_version = '1.0';
 	var $encoding;
+	
 	/**
 	* constructor
 	*/
@@ -28,7 +29,6 @@ class soap_transport_http extends nusoap_base {
 			$this->$k = $v;
 		}
 		if(isset($u['query']) && $u['query'] != ''){
-			//$this->path .= $u['query'];
             $this->path .= '?' . $u['query'];
 		}
 		if(!isset($u['port']) && $u['scheme'] == 'http'){
@@ -71,20 +71,13 @@ class soap_transport_http extends nusoap_base {
 	}
 
 	/**
-	* send the SOAP message via HTTP 1.0
+	* send the SOAP message via HTTP
 	*
-	* @param    string $msg message data
+	* @param    string $data message data
 	* @param    integer $timeout set timeout in seconds
 	* @return	string data
 	* @access   public
 	*/
-	/**
-	 * soap_transport_http::send()
-	 * 
-	 * @param $data
-	 * @param integer $timeout
-	 * @return 
-	 **/
 	function send($data, $timeout=0) {
 	    flush();
 		//global $timer;
@@ -99,15 +92,21 @@ class soap_transport_http extends nusoap_base {
 			$host = $this->host;
 			$port = $this->port;
 		}
+		
+		if($this->scheme == 'https'){
+			$host = 'ssl://'.$host;
+			$port = 443;
+		}
+		
 		if($timeout > 0){
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
 		} else {
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
 		}
 		
-		if (!$fp) {
-			$this->debug('Couldn\'t open socket connection to server: '.$server);
-			$this->setError('Couldn\'t open socket connection to server: '.$server);
+		if(!$fp) {
+			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
+			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
 		$this->debug('socket connected');
@@ -120,9 +119,9 @@ class soap_transport_http extends nusoap_base {
 		}
 
 		if($this->proxyhost && $this->proxyport){
-			$this-> outgoing_payload = "POST $this->url HTTP/$this->protocol_version\r\n";
+			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
-			$this->outgoing_payload = "POST $this->path HTTP/$this->protocol_version\r\n";
+			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
 
 		if($this->encoding != ''){
@@ -185,11 +184,8 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 		$data = $this->incoming_payload."\r\n\r\n\r\n\r\n";
 		
-		//$res = preg_split("/\r?\n\r?\n/s",$data);
-		
 		// remove 100 header
 		if(ereg('^HTTP/1.1 100',$data)){
-			
 			if($pos = strpos($data,"\r\n\r\n") ){
 				$data = ltrim(substr($data,$pos));
 			} elseif($pos = strpos($data,"\n\n") ){
@@ -198,21 +194,18 @@ class soap_transport_http extends nusoap_base {
 		}//
 		
 		// separate content from HTTP headers
-        //if(preg_match("/(.*?)\r?\n\r?\n(.*)/s",$data,$result)) {
 		if( $pos = strpos($data,"\r\n\r\n") ){
-			
+			$lb = "\r\n";
 		} elseif( $pos = strpos($data,"\n\n") ){
-		
+			$lb = "\n";
 		} else {
 			$this->setError('no proper separation of headers and document');
 			return false;
 		}
 		$header_data = trim(substr($data,0,$pos));
-		$header_array = explode("\r\n",$header_data);
+		$header_array = explode($lb,$header_data);
 		$data = ltrim(substr($data,$pos));
 		$this->debug('found proper separation of headers and document');
-		//$header_array = explode("\r\n",$result[1]);
-		//$data = $result[2];
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		// clean headers
 		foreach($header_array as $header_line){
@@ -221,12 +214,11 @@ class soap_transport_http extends nusoap_base {
 		}
 		//print "headers: <pre>$header_data</pre><br>";
 		//print "data: <pre>$data</pre><br>";
-
 		
 		// decode transfer-encoding
 		if($headers['Transfer-Encoding'] == 'chunked'){
 			//$timer->setMarker('starting to decode chunked content');
-			if(!$data = $this->decodeChunked2($data)){
+			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
 			}
@@ -274,11 +266,12 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function sendHTTPS($data, $timeout=0) {
-	    flush();
+	   	global $t;
+		$t->setMarker('inside sendHTTPS()');
 		$this->debug('entered sendHTTPS() with data of length: '.strlen($data));
 		// init CURL
 		$ch = curl_init();
-
+		$t->setMarker('got curl handle');
 		// set proxy
 		if($this->proxyhost && $this->proxyport){
 			$host = $this->proxyhost;
@@ -291,7 +284,7 @@ class soap_transport_http extends nusoap_base {
 		$hostURL = ($port != '') ? "https://$host:$port" : "https://$host";
 		// add path
 		$hostURL .= $this->path;
-
+		
 		curl_setopt($ch, CURLOPT_URL, $hostURL);
 		// set other options
 		curl_setopt($ch, CURLOPT_HEADER, 1);
@@ -300,14 +293,14 @@ class soap_transport_http extends nusoap_base {
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		}
-
+		
 		$credentials = '';
 		if($this->username != '') {
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
 
 		if($this->proxyhost && $this->proxyport){
-			$this-> outgoing_payload = "POST $this->url HTTP/1.0\r\n";
+			$this->outgoing_payload = "POST $this->url HTTP/1.0\r\n";
 		} else {
 			$this->outgoing_payload = "POST $this->path HTTP/1.0\r\n";
 		}
@@ -322,9 +315,10 @@ class soap_transport_http extends nusoap_base {
 
 		// set payload
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
-
+		$t->setMarker('set curl options, executing...');
 		// send and receive
 		$this->incoming_payload = curl_exec($ch);
+		$t->setMarker('executed transfer');
 		$data = $this->incoming_payload;
 
         $cErr = curl_error($ch);
@@ -337,27 +331,38 @@ class soap_transport_http extends nusoap_base {
 			$this->setError($err);
 			curl_close($ch);
 	    	return false;
+		} else {
+			var_dump(curl_getinfo($ch));
 		}
 
 		curl_close($ch);
-
+		$t->setMarker('closed curl');
 		// separate content from HTTP headers
-		if(ereg("^(.*)\r?\n\r?\n",$data)) {
-			$this->debug('found proper separation of headers and document');
-			$this->debug('getting rid of headers, stringlen: '.strlen($data));
-			$clean_data = ereg_replace("^[^<]*\r\n\r\n","", $data);
-			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
+		if( $pos = strpos($data,"\r\n\r\n") ){
+			$lb = "\r\n";
+		} elseif( $pos = strpos($data,"\n\n") ){
+			$lb = "\n";
 		} else {
-			$this->setError('no proper separation of headers and document.');
+			$this->setError('no proper separation of headers and document');
 			return false;
 		}
-		if(strlen($clean_data) == 0){
+		$header_data = trim(substr($data,0,$pos));
+		$header_array = explode($lb,$header_data);
+		$data = ltrim(substr($data,$pos));
+		$this->debug('found proper separation of headers and document');
+		$this->debug('cleaned data, stringlen: '.strlen($data));
+		// clean headers
+		foreach($header_array as $header_line){
+			$arr = explode(':',$header_line);
+			$headers[trim($arr[0])] = trim($arr[1]);
+		}
+		if(strlen($data) == 0){
 			$this->debug('no data after headers!');
 			$this->setError('no data present after HTTP headers.');
 			return false;
 		}
 
-		return $clean_data;
+		return $data;
 	}
 	
 	function setEncoding($enc='gzip, deflate'){
@@ -365,38 +370,9 @@ class soap_transport_http extends nusoap_base {
 		$this->protocol_version = '1.1';
 	}
 	
-	function decodeChunked($message) {
-    
-    	//CHUNKED MESSAGES ARE FORMATTED LIKE THIS (Extension Not Supported)
-    	//HEXA_CHUNK_SIZE|CRLF|DATA|HEXA_CHUNK_SIZE|CRLF|HEXA_CHUNK_SIZE|CRLF|DATA|HEXA_CHUNK_SIZE|...|0
-    	//(0 means next CHUNK SIZE=0)
-    	//pipe are not in chunked message (just for your eyes...)
-    	$CRLF_LENGTH = 2;// equal to "\r\n"
-    	$crlf_pos = strpos ($message , "\r\n" , 0); //Look for first 
-    	$chunk_size = chop(substr($message,0,$crlf_pos));
-    	$octets_to_read = hexdec($chunk_size);
-    	$start_read = $crlf_pos + $CRLF_LENGTH;
-    	while($octets_to_read > 0){
-    		$buffer .= substr($message,$start_read,$octets_to_read);
-    		$chunk_pos = $start_read + $octets_to_read + $CRLF_LENGTH;
-    		if( strlen($message) > $chunk_pos ) {
-    			$crlf_pos = @strpos($message , "\r\n" , $chunk_pos);
-        		$chunk_size = chop(substr($message,$chunk_pos,$crlf_pos-$chunk_pos));
-        		$octets_to_read = hexdec($chunk_size);
-        		$start_read = $crlf_pos + $CRLF_LENGTH;
-    		} else {
-				$octets_to_read = 0;
-			}
-    	}
-		if($buffer == ''){
-			return false;
-		}
-    	return $buffer;
-    }
-	
 	// This function will decode "chunked' transfer encoding
  	// as defined in RFC2068 19.4.6
-	function decodeChunked2($buffer){
+	function decodeChunked($buffer){
 		// length := 0
 		$length = 0;
 		$new = '';

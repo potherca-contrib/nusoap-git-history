@@ -17,7 +17,8 @@ class XMLSchema extends nusoap_base  {
 	var $xml = '';
 	// define internal arrays of bindings, ports, operations, messages, etc.
 	var $complexTypes = array();
-
+	// target namespace
+	var $schemaTargetNamespace = '';
 	// parser vars
 	var $parser;
 	var $position;
@@ -208,6 +209,9 @@ class XMLSchema extends nusoap_base  {
                     $this->complexTypes[$this->currentComplexType]['arrayType'] = $v;
 				}
 			break;
+			case 'choice':
+				$this->complexTypes[$this->currentComplexType]['compositor'] = 'choice';
+			break;
 			case 'complexContent':
 
 			break;
@@ -315,70 +319,68 @@ class XMLSchema extends nusoap_base  {
 	function serializeSchema(){
 
 		$schemaPrefix = $this->getPrefixFromNamespace($this->XMLSchemaVersion);
+		$xml = '';
 		// complex types
 		foreach($this->complexTypes as $typeName => $attrs){
-			$contentStr = "";
+			$contentStr = '';
 			// serialize child elements
 			if(count($attrs['elements']) > 0){
 				foreach($attrs['elements'] as $element => $eParts){
-					$contentStr .= "<element ref=\"$element\"/>\n";
+					if($eParts['ref']){
+						$contentStr .= "<element ref=\"$element\"/>";
+					} else {
+						$contentStr .= "<element name=\"$element\" type=\"$eParts[type]\"/>";
+					}
 				}
 			}
-			// serialize attributes
-			if(count($attrs['attrs']) > 0){
+			// attributes
+			if(count($attrs['attrs']) >= 1){
 				foreach($attrs['attrs'] as $attr => $aParts){
-					$contentStr .= "<attribute ref=\"$attr\"/>\n";
+					$contentStr .= '<attribute ref="'.$aParts['ref'].'"';
+					if(isset($aParts['wsdl:arrayType'])){
+						$contentStr .= ' wsdl:arrayType="'.$aParts['wsdl:arrayType'].'"';
+					}
+					$contentStr .= '/>';
 				}
 			}
-
+			// "all" compositor obviates complex/simple content
+			if(isset($attrs['compositor']) && $attrs['compositor'] == 'all'){
+				$contentStr = "<$schemaPrefix:$attrs[compositor]>".$contentStr."</$schemaPrefix:$attrs[compositor]>";
+			}
+			// complex or simple content
+			elseif( count($attrs['elements']) > 0 || count($attrs['attrs']) > 0){
+				$contentStr = "<$schemaPrefix:complexContent>".$contentStr."</$schemaPrefix:complexContent>";
+			}
+			// compositors
+			if(isset($attrs['compositor']) && $attrs['compositor'] != '' && $attrs['compositor'] != 'all'){
+				$contentStr = "<$schemaPrefix:$attrs[compositor]>".$contentStr."</$schemaPrefix:$attrs[compositor]>";
+			}
 			// if restriction
-			if($attrs['restrictionBase']){
-				$contentStr = "<$schemaPrefix:restriction base=\"".$attrs["restrictionBase"]."\">\n".
-				$contentStr."</$schemaPrefix:restriction>\n";
+			if( isset($attrs['restrictionBase']) && $attrs['restrictionBase'] != ''){
+				$contentStr = "<$schemaPrefix:restriction base=\"".$attrs['restrictionBase']."\">".$contentStr."</$schemaPrefix:restriction>";
 			}
-			if($attrs['complexContent']){
-				$contentStr = "<$schemaPrefix:complexContent>\n".
-				$contentStr."</$schemaPrefix:complexContent>\n";
-			} elseif($attrs['sequence']){
-				$contentStr = "<$schemaPrefix:sequence>\n".
-				$contentStr."</$schemaPrefix:sequence>\n";
-			} elseif($attrs['all']){
-				$contentStr = "<$schemaPrefix:all>\n".
-				$contentStr."</$schemaPrefix:all>\n";
-			}
-			if($attrs['element']){
-				if($contentStr != ''){
-					$contentStr = "<$schemaPrefix:element name=\"$typeName\">\n"."<$schemaPrefix:complexType>\n".
-					$contentStr."</$schemaPrefix:complexType>\n"."</$schemaPrefix:element>\n";
-				} else {
-					$contentStr = "<$schemaPrefix:element name=\"$typeName\">\n"."<$schemaPrefix:complexType/>\n".
-					"</$schemaPrefix:element>\n";
-				}
+			// finalize complex type
+			if($contentStr != ''){
+				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\" $attrsStr>".$contentStr."</$schemaPrefix:complexType>";
 			} else {
-				if($contentStr != ''){
-					$contentStr = "<$schemaPrefix:complexType name=\"$typeName\">\n".
-					$contentStr."</$schemaPrefix:complexType>\n";
-				} else {
-					$contentStr = "<$schemaPrefix:complexType name=\"$typeName\"/>\n";
-				}
+				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\" $attrsStr/>";
 			}
 			$xml .= $contentStr;
 		}
 		// elements
 		if(count($this->elements) > 0){
 			foreach($this->elements as $element => $eParts){
-				$xml .= "<$schemaPrefix:element name=\"$element\" type=\"".$eParts['type']."\"/>\n";
+				$xml .= "<$schemaPrefix:element name=\"$element\" type=\"".$eParts['type']."\"/>";
 			}
 		}
 		// attributes
 		if(count($this->attributes) > 0){
 			foreach($this->attributes as $attr => $aParts){
-				$xml .= "<$schemaPrefix:attribute name=\"$attr\" type=\"".$aParts['type']."\"/>\n";
+				$xml .= "<$schemaPrefix:attribute name=\"$attr\" type=\"".$aParts['type']."\"/>";
 			}
 		}
-		$xml = "<$schemaPrefix:schema targetNamespace=\"".$this->schema["targetNamespace"]."\">\n".
-		$xml."</$schemaPrefix:schema>\n";
-
+		// finish 'er up
+		$xml = "<$schemaPrefix:schema xmlns=\"$this->XMLSchemaVersion\" targetNamespace=\"$this->schemaTargetNamespace\">".$xml."</$schemaPrefix:schema>";
 		return $xml;
 	}
 
@@ -551,15 +553,15 @@ class XMLSchema extends nusoap_base  {
 	    }
 	    $str .= " xmlns=\"".$this->schema['targetNamespace']."\"";
 	    if(count($typeDef['elements']) > 0){
-		$str .= ">\n";
+		$str .= ">";
 		foreach($typeDef['elements'] as $element => $eData){
 		    $str .= $this->serializeTypeDef($element);
 		}
-		$str .= "</$type>\n";
+		$str .= "</$type>";
 	    } elseif($typeDef['typeClass'] == 'element') {
-		$str .= "></$type>\n";
+		$str .= "></$type>";
 	    } else {
-		$str .= "/>\n";
+		$str .= "/>";
 	    }
 			return $str;
 	}
@@ -604,6 +606,59 @@ class XMLSchema extends nusoap_base  {
 			$buffer .= "<input type='text' name='parameters[$name]'>";
 		}
 		return $buffer;
+	}
+	
+	/**
+	* adds an XML Schema complex type to the WSDL types
+	* 
+	* example: array
+	* 
+	* addType(
+	* 	'ArrayOfstring',
+	* 	'complexType',
+	* 	'array',
+	* 	'',
+	* 	'SOAP-ENC:Array',
+	* 	array('ref'=>'SOAP-ENC:arrayType','wsdl:arrayType'=>'string[]'),
+	* 	'xsd:string'
+	* );
+	* 
+	* example: PHP associative array ( SOAP Struct )
+	* 
+	* addType(
+	* 	'SOAPStruct',
+	* 	'complexType',
+	* 	'struct',
+	* 	'all',
+	* 	array('myVar'=> array('name'=>'myVar','type'=>'string')
+	* );
+	* 
+	* @param name
+	* @param typeClass (complexType|simpleType|attribute)
+	* @param phpType: currently supported are array and struct (php assoc array)
+	* @param compositor (all|sequence|choice)
+	* @param restrictionBase namespace:name (http://schemas.xmlsoap.org/soap/encoding/:Array)
+	* @param elements = array ( name = array(name=>'',type=>'') )
+	* @param attrs = array(
+	* 	array(
+	*		'ref' => "http://schemas.xmlsoap.org/soap/encoding/:arrayType",
+	*		"http://schemas.xmlsoap.org/wsdl/:arrayType" => "string[]"
+	* 	)
+	* )
+	* @param arrayType: namespace:name (http://www.w3.org/2001/XMLSchema:string)
+	*
+	*/
+	function addComplexType($name,$typeClass='complexType',$phpType='array',$compositor='',$restrictionBase='',$elements=array(),$attrs=array(),$arrayType=''){
+		$this->complexTypes[$name] = array(
+	    'name'		=> $name,
+	    'typeClass'	=> $typeClass,
+	    'phpType'	=> $phpType,
+		'compositor'=> $compositor,
+	    'restrictionBase' => $restrictionBase,
+		'elements'	=> $elements,
+	    'attrs'		=> $attrs,
+	    'arrayType'	=> $arrayType
+		);
 	}
 }
 

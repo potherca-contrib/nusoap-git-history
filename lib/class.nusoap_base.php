@@ -203,30 +203,30 @@ class nusoap_base {
 		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
-        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>\n";
+        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
         }
 		// detect type and serialize
 		switch(true) {
 			case ($type == '' && is_null($val)):
-				$xml .= "<$name$xmlns xsi:type=\"xsd:nil\"/>\n";
+				$xml .= "<$name$xmlns xsi:type=\"xsd:nil\"/>";
 				break;
 			case (is_bool($val) || $type == 'boolean'):
 				if(!$val){
 			    	$val = 0;
 				}
-				$xml .= "<$name$xmlns xsi:type=\"xsd:boolean\"$atts>$val</$name>\n";
+				$xml .= "<$name$xmlns xsi:type=\"xsd:boolean\"$atts>$val</$name>";
 				break;
 			case (is_int($val) || is_long($val) || $type == 'int'):
-				$xml .= "<$name$xmlns xsi:type=\"xsd:int\"$atts>$val</$name>\n";
+				$xml .= "<$name$xmlns xsi:type=\"xsd:int\"$atts>$val</$name>";
 				break;
 			case (is_float($val)|| is_double($val) || $type == 'float'):
-				$xml .= "<$name$xmlns xsi:type=\"xsd:float\"$atts>$val</$name>\n";
+				$xml .= "<$name$xmlns xsi:type=\"xsd:float\"$atts>$val</$name>";
 				break;
 			case (is_string($val) || $type == 'string'):
 				if($this->charencoding){
 			    	$val = htmlspecialchars($val, ENT_QUOTES);
 			    }
-				$xml .= "<$name$xmlns xsi:type=\"xsd:string\"$atts>$val</$name>\n";
+				$xml .= "<$name$xmlns xsi:type=\"xsd:string\"$atts>$val</$name>";
 				break;
 			case is_object($val):
 				break;
@@ -269,17 +269,17 @@ class nusoap_base {
 					} else {
 						$array_type = $i;
 					}
-					$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>\n".$xml."</$name>\n";
+					$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
 				} else {
 					// got a struct
 					if($type && $type_prefix){
 						$type_str = " xsi:type=\"$type_prefix:$type\"";
 					}
-					$xml .= "<$name$xmlns$type_str$atts>\n";
+					$xml .= "<$name$xmlns$type_str$atts>";
 					foreach($val as $k => $v){
 						$xml .= $this->serialize_val($v,$k);
 					}
-					$xml .= "</$name>\n";
+					$xml .= "</$name>";
 				}
 				break;
 			default:
@@ -302,21 +302,21 @@ class nusoap_base {
 	// serialize namespaces
     $ns_string = '';
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){
-		$ns_string .= "\n  xmlns:$k=\"$v\"";
+		$ns_string .= "  xmlns:$k=\"$v\"";
 	}
 	// serialize headers
 	if($headers){
-		$headers = "<SOAP-ENV:Header>\n".$headers."</SOAP-ENV:Header>\n";
+		$headers = "<SOAP-ENV:Header>".$headers."</SOAP-ENV:Header>";
 	}
 	// serialize envelope
 	return
-	'<?xml version="1.0" encoding="'.$this->soap_defencoding .'"?'.">\n".
-	'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">\n".
+	'<?xml version="1.0" encoding="'.$this->soap_defencoding .'"?'.">".
+	'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">".
 	$headers.
-	"<SOAP-ENV:Body>\n".
+	"<SOAP-ENV:Body>".
 		$body.
-	"</SOAP-ENV:Body>\n".
-	"</SOAP-ENV:Envelope>\n";
+	"</SOAP-ENV:Body>".
+	"</SOAP-ENV:Envelope>";
     }
 
     function formatDump($str){

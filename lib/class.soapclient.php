@@ -47,28 +47,31 @@ class soapclient extends nusoap_base  {
 	* constructor
 	*
 	* @param    string $endpoint SOAP server or WSDL URL
-	* @param    string $wsdl optional, set to true if using WSDL
+	* @param    bool $wsdl optional, set to true if using WSDL
 	* @param	int $portName optional portName in WSDL document
 	* @access   public
 	*/
-	function soapclient($endpoint,$wsdl=''){
+	function soapclient($endpoint,$wsdl = false){
 		$this->endpoint = $endpoint;
 
 		// make values
-		if($wsdl != ''){
+		if($wsdl){
 			$this->endpointType = 'wsdl';
 			$this->wsdlFile = $this->endpoint;
-
+			
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =  new wsdl($this->wsdlFile);
+			$this->wsdl =& new wsdl($this->wsdlFile);
+			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
-				$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 				$this->setError('wsdl error: '.$errstr);
 			} elseif($this->operations = $this->wsdl->getOperations()){
 				$this->debug( 'got '.count($this->operations).' operations from wsdl '.$this->wsdlFile);
+			} else {
+				$this->debug( 'getOperations returned false');
+				$this->setError('no operations defined in the WSDL document!');
 			}
 		}
 	}
@@ -132,13 +135,13 @@ class soapclient extends nusoap_base  {
 			}
             if($namespace == ''){
             	$namespace = 'http://testuri.org';
-                $this->wsdl->namespaces['nu'] = $namespace;
+                $this->wsdl->namespaces['ns1'] = $namespace;
             }
 			// serialize envelope
 			foreach($params as $k => $v){
 				$payload .= $this->serialize_val($v,$k);
 			}
-			$payload = "<nu:$operation xmlns:nu=\"$namespace\">\n".$payload."</nu:$operation>\n";
+			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">\n".$payload."</ns1:$operation>\n";
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders);
 		}
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");
@@ -228,13 +231,18 @@ class soapclient extends nusoap_base  {
                     $this->request = $http->outgoing_payload;
 					$this->response = $http->incoming_payload;
 				} elseif(ereg('^https',$this->endpoint)){
-					if (!extension_loaded('curl')) {
-				    	$this->setError('CURL Extension is required for HTTPS');
+					if(phpversion() == '4.3.0-dev'){
+						$response = $http->send($msg,$timeout);
+                   		$this->request = $http->outgoing_payload;
+						$this->response = $http->incoming_payload;
+					} elseif (extension_loaded('curl')) {
+						$response = $http->sendHTTPS($msg,$timeout);
+                    	$this->request = $http->outgoing_payload;
+						$this->response = $http->incoming_payload;
+					} else {
+						$this->setError('CURL Extension is required for HTTPS');
 						return false;
-					}
-					$response = $http->sendHTTPS($msg,$timeout);
-                    $this->request = $http->outgoing_payload;
-					$this->response = $http->incoming_payload;
+					}					
 				}
 				$this->debug("transport debug data...\n".$http->debug_str);
 				if($err = $http->getError()){
