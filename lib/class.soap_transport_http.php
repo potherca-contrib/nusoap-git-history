@@ -12,11 +12,11 @@
 */
 class soap_transport_http extends nusoap_base {
 
-	var $username = '';
-	var $password = '';
+	var $username = '';	// TODO: not used anymore
+	var $password = '';	// TODO: not used anymore
 	var $url = '';
-    var $proxyhost = '';
-    var $proxyport = '';
+    var $proxyhost = '';	// TODO: not used anymore
+    var $proxyport = '';	// TODO: not used anymore
 	var $scheme = '';
 	var $request_method = 'POST';
 	var $protocol_version = '1.0';
@@ -168,6 +168,7 @@ class soap_transport_http extends nusoap_base {
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		}
 		
+		// TODO: use outgoing_headers instead
 		$credentials = '';
 		if($this->username != '') {
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
@@ -181,12 +182,14 @@ class soap_transport_http extends nusoap_base {
 			}
 		}
 		
+		// TODO: don't need this anymore
 		if($this->proxyhost && $this->proxyport){
 			$this->outgoing_payload = "POST $this->url HTTP/$this->protocol_version\r\n";
 		} else {
 			$this->outgoing_payload = "POST $this->path HTTP/$this->protocol_version\r\n";
 		}
 		
+		// TODO: use outgoing_headers instead
 		$this->outgoing_payload .=
 			"User-Agent: $this->title v$this->version\r\n".
 			"Host: ".$this->host.':'.$this->port."\r\n".
@@ -295,7 +298,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setCredentials($username, $password) {
-		$this->outgoing_headers['Authorization'] = ' Basic '.base64_encode($this->username.':'.$this->password);
+		$this->outgoing_headers['Authorization'] = ' Basic '.base64_encode($username.':'.$password);
 	}
 	
 	/**

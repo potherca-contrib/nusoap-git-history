@@ -25,3 +25,4 @@
 - wsdl: apply patch from Sven to workaround single schema limitation
 - wsdl: apply a variant of the patch from Holger to handle empty values for array by serializing an array with 0 elements
 - xmlschema: remove the redundant default namespace attribute on the schema element; everything in xsd is explicitly specified as being from xsd
+- soap_transport_http: fix setCredentials and add TODO comments in sendHTTPS about what to change if this setCredentials stays
