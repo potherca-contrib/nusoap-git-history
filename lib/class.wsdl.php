@@ -2,6 +2,7 @@
 
 
 
+
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
@@ -81,7 +82,7 @@ class wsdl extends XMLSchema {
 				}
             } 
         } 
-    } 
+    }
 
     /**
      * parses the wsdl document
@@ -96,7 +97,6 @@ class wsdl extends XMLSchema {
             $this->setError('no wsdl passed to parseWSDL()!!');
             return false;
         }
-        $this->debug('getting ' . $wsdl);
         
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
@@ -114,10 +114,14 @@ class wsdl extends XMLSchema {
                 $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
             }
 			$wsdl_string = $tr->send('');
+			$this->debug("WSDL request\n" . $tr->outgoing_payload);
+			$this->debug("WSDL response\n" . $tr->incoming_payload);
+			$this->debug("transport debug data...\n" . $tr->debug_str);
 			// catch errors
 			if($err = $tr->getError() ){
 				$this->debug('HTTP ERROR: '.$err);
 	            $this->setError('HTTP ERROR: '.$err);
+				unset($tr);
 	            return false;
 			}
 			unset($tr);
@@ -756,6 +760,7 @@ class wsdl extends XMLSchema {
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
+		
 		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -765,6 +770,14 @@ class wsdl extends XMLSchema {
 			if($ns == $this->XMLSchemaVersion ||
 					   ($this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
 				
+				if (is_null($value)) {
+					if ($use == 'literal') {
+						// TODO: depends on nillable
+						return "<$name/>";
+					} else {
+						return "<$name xsi:nil=\"true\"/>";
+					}
+				}
 		    	if ($uqType == 'boolean' && !$value) {
 					$value = 0;
 				} elseif ($uqType == 'boolean') {
@@ -779,10 +792,13 @@ class wsdl extends XMLSchema {
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?
-				if ($use == 'literal') {
-					return "<$name>$value</$name>";
-				} else {
-					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+				// check type isn't a custom type extending xmlschema namespace
+				if (!$this->getTypeDef($uqType)) {
+					if ($use == 'literal') {
+						return "<$name>$value</$name>";
+					} else {
+						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+					}
 				}
 			} else if ($ns == 'http://xml.apache.org/xml-soap' ||
 						($this->getNamespaceFromPrefix($ns)) == 'http://xml.apache.org/xml-soap') {
@@ -801,7 +817,7 @@ class wsdl extends XMLSchema {
 						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
 					}
 				}
-			} 
+			}
 		} else {
 			$uqType = $type;
 		}
@@ -826,6 +842,14 @@ class wsdl extends XMLSchema {
 				$elementName = $name;
 				$elementNS = '';
 			}
+			if (is_null($value)) {
+				if ($use == 'literal') {
+					// TODO: depends on nillable
+					return "<$elementName$elementNS/>";
+				} else {
+					return "<$elementName$elementNS xsi:nil=\"true\"/>";
+				}
+			}
 			if ($use == 'literal') {
 				$xml = "<$elementName$elementNS>";
 			} else {
@@ -846,8 +870,8 @@ class wsdl extends XMLSchema {
 						// get value
 						if (isset($value[$eName])) {
 						    $v = $value[$eName];
-						} elseif (is_array($value)) {
-						    $v = array_shift($value);
+						} else {
+						    $v = null;
 						}
 						// serialize schema-defined type
 						//if (!isset($attrs['type'])) {
@@ -870,6 +894,14 @@ class wsdl extends XMLSchema {
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
+			if (is_null($value)) {
+				if ($use == 'literal') {
+					// TODO: depends on nillable
+					return "<$name/>";
+				} else {
+					return "<$name xsi:nil=\"true\"/>";
+				}
+			}
 			if (isset($typeDef['multidimensional'])) {
 				$nv = array();
 				foreach($value as $v) {
@@ -986,4 +1018,5 @@ class wsdl extends XMLSchema {
 		return true;
 	} 
 }
+
 ?>

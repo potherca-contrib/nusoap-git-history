@@ -107,3 +107,19 @@
 2003-08-28, version 0.6.5
 - soap_transport_http: disable cURL verification of peer and server (formerly the cURL default)
 - soap_transport_http: mingle cURL code with straight http, so sendHTTP is no longer needed
+
+2003-08-29, version 0.6.6
+- soap_transport_http: add setContentType
+- soapclient: call setContentType using new getHTTPContentType and getHTTPContentTypeCharset
+
+2003-09-05, version 0.6.6
+- wsdl: add some more code to handle null/nil values (but there's still a way to go)
+
+2003-10-21, version 0.6.6
+- soap_transport_http: only include port in Host header if it was specified in the URL
+- soap_transport_http: add some code to use OpenSSL for PHP ssl:// scheme, but comment out since it's not ready
+- soap_server: use $_SERVER['PHP_SELF'] if $GLOBALS['PHP_SELF'] is not set
+- wsdl: add WSDL request and response and transport debug to debug
+- wsdl: handle custom type extending xmlschema namespace (GLUE ... Thanks Matt)
+- soap_parser: add param to docs
+- soapclient: add getHTTPBody, getHTTPContentType, getHTTPContentTypeCharset (anticipating MIME subclass)

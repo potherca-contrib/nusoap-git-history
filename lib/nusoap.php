@@ -1380,7 +1380,7 @@ class soap_transport_http extends nusoap_base {
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-
+		
 		// set default port
 		if(!isset($u['port'])){
 			if($u['scheme'] == 'https'){
@@ -1389,17 +1389,32 @@ class soap_transport_http extends nusoap_base {
 				$this->port = 80;
 			}
 		}
-
+		
 		$this->uri = $this->path;
 		
 		// build headers
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
-		$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
-		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
+		if (!isset($u['port'])) {
+			$this->outgoing_headers['Host'] = $this->host;
+		} else {
+			$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
+		}
 	}
 	
 	function connect($connection_timeout=0,$response_timeout=30){
-	  if ($this->scheme == 'http') {
+	  	// For PHP 4.3 with OpenSSL, change https scheme to ssl, then treat like
+	  	// "regular" socket.
+	  	// TODO: disabled for now because OpenSSL must be *compiled* in (not just
+	  	//       loaded), and until PHP5 stream_get_wrappers is not available.
+//	  	if ($this->scheme == 'https') {
+//		  	if (version_compare(phpversion(), '4.3.0') >= 0) {
+//		  		if (extension_loaded('openssl')) {
+//		  			$this->scheme = 'ssl';
+//		  			$this->debug('Using SSL over OpenSSL');
+//		  		}
+//		  	}
+//		}
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// use persistent connection
 		if($this->persistentConnection && is_resource($this->fp)){
 			if (!feof($this->fp)) {
@@ -1409,24 +1424,32 @@ class soap_transport_http extends nusoap_base {
 			fclose($this->fp);
 			$this->debug('Closed persistent connection at EOF');
 		}
-		
-		// set timeout
-		if($connection_timeout > 0){
-			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+
+		// munge host if using OpenSSL
+		if ($this->scheme == 'ssl') {
+			$host = 'ssl://' . $this->host;
 		} else {
-			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str);
+			$host = $this->host;
+		}
+		$this->debug('calling fsockopen with host ' . $host);
+
+		// open socket
+		if($connection_timeout > 0){
+			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+		} else {
+			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
 		if(!$this->fp) {
-			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
-			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
+			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
+			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
 			return false;
 		}
 		
 		// set response timeout
 		socket_set_timeout( $this->fp, $response_timeout);
-		
+
 		$this->debug('socket connected');
 		return true;
 	  } else if ($this->scheme == 'https') {
@@ -1598,7 +1621,6 @@ class soap_transport_http extends nusoap_base {
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
 			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
-			
 			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
 		  	
 			// Just in case we got a broken connection
@@ -1629,13 +1651,11 @@ class soap_transport_http extends nusoap_base {
 		}
 		return $new;
 	}
-
+	
 	/*
 	 *	Writes payload, including HTTP headers, to $this->outgoing_payload.
 	 */
 	function buildPayload($data) {
-		// update content-type header since we may have changed soap_defencoding
-		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
@@ -1661,17 +1681,20 @@ class soap_transport_http extends nusoap_base {
 		// build payload
 		$this->buildPayload($data);
 
-	  if ($this->scheme == 'http') {
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// send payload
 		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('couldn\'t write message data to socket');
 			return false;
 		}
-		$this->debug('wrote data to socket');
+		$this->debug('wrote data to socket, length = ' . strlen($this->outgoing_payload));
 		return true;
 	  } else if ($this->scheme == 'https') {
 		// set payload
+		// TODO: cURL does say this should only be the verb, and in fact it
+		// turns out that the URI and HTTP version are appended to this, which
+		// some servers refuse to work with
 		curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
 		$this->debug('set cURL payload');
 		return true;
@@ -1680,8 +1703,8 @@ class soap_transport_http extends nusoap_base {
 	
 	function getResponse(){
 		$this->incoming_payload = '';
-
-	  if ($this->scheme == 'http') {
+	    
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 	    // loop until headers have been retrieved
 	    $data = '';
 	    while (!isset($lb)){
@@ -1716,8 +1739,8 @@ class soap_transport_http extends nusoap_base {
 		$data = substr($data,$pos);
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			if(count($arr) >= 2){
+			$arr = explode(':',$header_line, 2);
+			if(count($arr) > 1){
 				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 			}
 		}
@@ -1801,8 +1824,10 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		// clean headers
 		foreach ($header_array as $header_line) {
-			$arr = explode(':',$header_line);
-			$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			$arr = explode(':',$header_line,2);
+			if (count($arr) > 1) {
+				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			}
 		}
 		if (strlen($data) == 0) {
 			$this->debug('no data after headers!');
@@ -1810,7 +1835,7 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 	  }
-
+		
 		// decode transfer-encoding
 		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
 			if(!$data = $this->decodeChunked($data)){
@@ -1851,7 +1876,11 @@ class soap_transport_http extends nusoap_base {
 		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
-	
+
+	function setContentType($type, $charset = false) {
+		$this->outgoing_headers['Content-Type'] = $type . ($charset ? '; charset=' . $charset : '');
+	}
+
 	function usePersistentConnection(){
 		if (isset($this->outgoing_headers['Accept-Encoding'])) {
 			return false;
@@ -2439,7 +2468,7 @@ class soap_server extends nusoap_base {
 			<br><br>
 			<div class=title>'.$this->wsdl->serviceName.'</div>
 			<div class=nav>
-				<p>View the <a href="'.$GLOBALS['PHP_SELF'].'?wsdl">WSDL</a> for the service.
+				<p>View the <a href="'.(isset($GLOBALS['PHP_SELF']) ? $GLOBALS['PHP_SELF'] : $_SERVER['PHP_SELF']).'?wsdl">WSDL</a> for the service.
 				Click on an operation name to view it&apos;s details.</p>
 				<ul>';
 				foreach($this->wsdl->getOperations() as $op => $data){
@@ -2598,7 +2627,7 @@ class wsdl extends XMLSchema {
 				}
             } 
         } 
-    } 
+    }
 
     /**
      * parses the wsdl document
@@ -2613,7 +2642,6 @@ class wsdl extends XMLSchema {
             $this->setError('no wsdl passed to parseWSDL()!!');
             return false;
         }
-        $this->debug('getting ' . $wsdl);
         
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
@@ -2631,10 +2659,14 @@ class wsdl extends XMLSchema {
                 $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
             }
 			$wsdl_string = $tr->send('');
+			$this->debug("WSDL request\n" . $tr->outgoing_payload);
+			$this->debug("WSDL response\n" . $tr->incoming_payload);
+			$this->debug("transport debug data...\n" . $tr->debug_str);
 			// catch errors
 			if($err = $tr->getError() ){
 				$this->debug('HTTP ERROR: '.$err);
 	            $this->setError('HTTP ERROR: '.$err);
+				unset($tr);
 	            return false;
 			}
 			unset($tr);
@@ -3273,6 +3305,7 @@ class wsdl extends XMLSchema {
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
+		
 		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -3282,6 +3315,14 @@ class wsdl extends XMLSchema {
 			if($ns == $this->XMLSchemaVersion ||
 					   ($this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
 				
+				if (is_null($value)) {
+					if ($use == 'literal') {
+						// TODO: depends on nillable
+						return "<$name/>";
+					} else {
+						return "<$name xsi:nil=\"true\"/>";
+					}
+				}
 		    	if ($uqType == 'boolean' && !$value) {
 					$value = 0;
 				} elseif ($uqType == 'boolean') {
@@ -3296,10 +3337,13 @@ class wsdl extends XMLSchema {
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?
-				if ($use == 'literal') {
-					return "<$name>$value</$name>";
-				} else {
-					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+				// check type isn't a custom type extending xmlschema namespace
+				if (!$this->getTypeDef($uqType)) {
+					if ($use == 'literal') {
+						return "<$name>$value</$name>";
+					} else {
+						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+					}
 				}
 			} else if ($ns == 'http://xml.apache.org/xml-soap' ||
 						($this->getNamespaceFromPrefix($ns)) == 'http://xml.apache.org/xml-soap') {
@@ -3318,7 +3362,7 @@ class wsdl extends XMLSchema {
 						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
 					}
 				}
-			} 
+			}
 		} else {
 			$uqType = $type;
 		}
@@ -3343,6 +3387,14 @@ class wsdl extends XMLSchema {
 				$elementName = $name;
 				$elementNS = '';
 			}
+			if (is_null($value)) {
+				if ($use == 'literal') {
+					// TODO: depends on nillable
+					return "<$elementName$elementNS/>";
+				} else {
+					return "<$elementName$elementNS xsi:nil=\"true\"/>";
+				}
+			}
 			if ($use == 'literal') {
 				$xml = "<$elementName$elementNS>";
 			} else {
@@ -3363,8 +3415,8 @@ class wsdl extends XMLSchema {
 						// get value
 						if (isset($value[$eName])) {
 						    $v = $value[$eName];
-						} elseif (is_array($value)) {
-						    $v = array_shift($value);
+						} else {
+						    $v = null;
 						}
 						// serialize schema-defined type
 						//if (!isset($attrs['type'])) {
@@ -3387,6 +3439,14 @@ class wsdl extends XMLSchema {
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
+			if (is_null($value)) {
+				if ($use == 'literal') {
+					// TODO: depends on nillable
+					return "<$name/>";
+				} else {
+					return "<$name xsi:nil=\"true\"/>";
+				}
+			}
 			if (isset($typeDef['multidimensional'])) {
 				$nv = array();
 				foreach($value as $v) {
@@ -3552,6 +3612,7 @@ class soap_parser extends nusoap_base {
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
+	* @param    string $method
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method=''){
@@ -3799,7 +3860,7 @@ class soap_parser extends nusoap_base {
 						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 					}
 				}
-				
+
 				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
 				if($this->message[$parent]['type'] != 'map'){
@@ -3971,7 +4032,7 @@ class soap_parser extends nusoap_base {
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
-            } else {
+		    } else {
 	    		// Apache Vector type: treat as an array
 				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
 					$notstruct = 1;
@@ -4053,7 +4114,7 @@ class soapclient extends nusoap_base  {
 	var $request = '';
 	var $response = '';
 	var $responseData = '';
-
+	
 	/**
 	* fault related variables
 	*
@@ -4218,7 +4279,7 @@ class soapclient extends nusoap_base  {
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");
 		// send
 		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
-		$return = $this->send($soapmsg,$soapAction,$this->timeout);
+		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout);
 		if($errstr = $this->getError()){
 			$this->debug('Error: '.$errstr);
 			return false;
@@ -4290,12 +4351,11 @@ class soapclient extends nusoap_base  {
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
-					// pass encoding into transport layer, so appropriate http headers are sent
-					$http->soap_defencoding = $this->soap_defencoding;
 					if ($this->persistentConnection) {
 						$http->usePersistentConnection();
 					}
 				}
+				$http->setContentType($this->getHTTPContentType(), $this->getHTTPContentTypeCharset());
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
@@ -4530,6 +4590,38 @@ class soapclient extends nusoap_base  {
 		$proxy->operations = $this->operations;
 		$proxy->defaultRpcParams = $this->defaultRpcParams;
 		return $proxy;
+	}
+
+	/**
+	* gets the HTTP body for the current request.
+	*
+	* @param string $soapmsg The SOAP payload
+	* @return string The HTTP body, which includes the SOAP payload
+	* @access protected
+	*/
+	function getHTTPBody($soapmsg) {
+		return $soapmsg;
+	}
+	
+	/**
+	* gets the HTTP content type for the current request.
+	*
+	* @return string the HTTP content type for the current request.
+	* @access protected
+	*/
+	function getHTTPContentType() {
+		return 'text/xml';
+	}
+	
+	/**
+	* gets the HTTP content type charset for the current request.
+	* returns false for non-text content types.
+	*
+	* @return string the HTTP content type charset for the current request.
+	* @access protected
+	*/
+	function getHTTPContentTypeCharset() {
+		return $this->soap_defencoding;
 	}
 }
 

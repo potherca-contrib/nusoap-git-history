@@ -2,6 +2,7 @@
 
 
 
+
 /**
 *
 * soapclient higher level class for easy usage.
@@ -42,7 +43,7 @@ class soapclient extends nusoap_base  {
 	var $request = '';
 	var $response = '';
 	var $responseData = '';
-
+	
 	/**
 	* fault related variables
 	*
@@ -207,7 +208,7 @@ class soapclient extends nusoap_base  {
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");
 		// send
 		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
-		$return = $this->send($soapmsg,$soapAction,$this->timeout);
+		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout);
 		if($errstr = $this->getError()){
 			$this->debug('Error: '.$errstr);
 			return false;
@@ -279,12 +280,11 @@ class soapclient extends nusoap_base  {
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
-					// pass encoding into transport layer, so appropriate http headers are sent
-					$http->soap_defencoding = $this->soap_defencoding;
 					if ($this->persistentConnection) {
 						$http->usePersistentConnection();
 					}
 				}
+				$http->setContentType($this->getHTTPContentType(), $this->getHTTPContentTypeCharset());
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
@@ -519,6 +519,38 @@ class soapclient extends nusoap_base  {
 		$proxy->operations = $this->operations;
 		$proxy->defaultRpcParams = $this->defaultRpcParams;
 		return $proxy;
+	}
+
+	/**
+	* gets the HTTP body for the current request.
+	*
+	* @param string $soapmsg The SOAP payload
+	* @return string The HTTP body, which includes the SOAP payload
+	* @access protected
+	*/
+	function getHTTPBody($soapmsg) {
+		return $soapmsg;
+	}
+	
+	/**
+	* gets the HTTP content type for the current request.
+	*
+	* @return string the HTTP content type for the current request.
+	* @access protected
+	*/
+	function getHTTPContentType() {
+		return 'text/xml';
+	}
+	
+	/**
+	* gets the HTTP content type charset for the current request.
+	* returns false for non-text content types.
+	*
+	* @return string the HTTP content type charset for the current request.
+	* @access protected
+	*/
+	function getHTTPContentTypeCharset() {
+		return $this->soap_defencoding;
 	}
 }
 

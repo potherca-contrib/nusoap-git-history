@@ -2,6 +2,7 @@
 
 
 
+
 /**
 *
 * soap_parser class parses SOAP XML messages into native PHP values
@@ -47,6 +48,7 @@ class soap_parser extends nusoap_base {
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
+	* @param    string $method
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method=''){
@@ -294,7 +296,7 @@ class soap_parser extends nusoap_base {
 						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 					}
 				}
-				
+
 				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
 				if($this->message[$parent]['type'] != 'map'){
@@ -466,7 +468,7 @@ class soap_parser extends nusoap_base {
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
-            } else {
+		    } else {
 	    		// Apache Vector type: treat as an array
 				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
 					$notstruct = 1;
@@ -501,6 +503,7 @@ class soap_parser extends nusoap_base {
 		}
 	}
 }
+
 
 
 

@@ -2,6 +2,7 @@
 
 
 
+
 /**
 * transport class for sending/receiving data via HTTP and HTTPS
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
@@ -45,7 +46,7 @@ class soap_transport_http extends nusoap_base {
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-
+		
 		// set default port
 		if(!isset($u['port'])){
 			if($u['scheme'] == 'https'){
@@ -54,17 +55,32 @@ class soap_transport_http extends nusoap_base {
 				$this->port = 80;
 			}
 		}
-
+		
 		$this->uri = $this->path;
 		
 		// build headers
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
-		$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
-		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
+		if (!isset($u['port'])) {
+			$this->outgoing_headers['Host'] = $this->host;
+		} else {
+			$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
+		}
 	}
 	
 	function connect($connection_timeout=0,$response_timeout=30){
-	  if ($this->scheme == 'http') {
+	  	// For PHP 4.3 with OpenSSL, change https scheme to ssl, then treat like
+	  	// "regular" socket.
+	  	// TODO: disabled for now because OpenSSL must be *compiled* in (not just
+	  	//       loaded), and until PHP5 stream_get_wrappers is not available.
+//	  	if ($this->scheme == 'https') {
+//		  	if (version_compare(phpversion(), '4.3.0') >= 0) {
+//		  		if (extension_loaded('openssl')) {
+//		  			$this->scheme = 'ssl';
+//		  			$this->debug('Using SSL over OpenSSL');
+//		  		}
+//		  	}
+//		}
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// use persistent connection
 		if($this->persistentConnection && is_resource($this->fp)){
 			if (!feof($this->fp)) {
@@ -74,24 +90,32 @@ class soap_transport_http extends nusoap_base {
 			fclose($this->fp);
 			$this->debug('Closed persistent connection at EOF');
 		}
-		
-		// set timeout
-		if($connection_timeout > 0){
-			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+
+		// munge host if using OpenSSL
+		if ($this->scheme == 'ssl') {
+			$host = 'ssl://' . $this->host;
 		} else {
-			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str);
+			$host = $this->host;
+		}
+		$this->debug('calling fsockopen with host ' . $host);
+
+		// open socket
+		if($connection_timeout > 0){
+			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+		} else {
+			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
 		if(!$this->fp) {
-			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
-			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
+			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
+			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
 			return false;
 		}
 		
 		// set response timeout
 		socket_set_timeout( $this->fp, $response_timeout);
-		
+
 		$this->debug('socket connected');
 		return true;
 	  } else if ($this->scheme == 'https') {
@@ -263,7 +287,6 @@ class soap_transport_http extends nusoap_base {
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
 			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
-			
 			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
 		  	
 			// Just in case we got a broken connection
@@ -294,13 +317,11 @@ class soap_transport_http extends nusoap_base {
 		}
 		return $new;
 	}
-
+	
 	/*
 	 *	Writes payload, including HTTP headers, to $this->outgoing_payload.
 	 */
 	function buildPayload($data) {
-		// update content-type header since we may have changed soap_defencoding
-		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
@@ -326,17 +347,20 @@ class soap_transport_http extends nusoap_base {
 		// build payload
 		$this->buildPayload($data);
 
-	  if ($this->scheme == 'http') {
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// send payload
 		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('couldn\'t write message data to socket');
 			return false;
 		}
-		$this->debug('wrote data to socket');
+		$this->debug('wrote data to socket, length = ' . strlen($this->outgoing_payload));
 		return true;
 	  } else if ($this->scheme == 'https') {
 		// set payload
+		// TODO: cURL does say this should only be the verb, and in fact it
+		// turns out that the URI and HTTP version are appended to this, which
+		// some servers refuse to work with
 		curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
 		$this->debug('set cURL payload');
 		return true;
@@ -345,8 +369,8 @@ class soap_transport_http extends nusoap_base {
 	
 	function getResponse(){
 		$this->incoming_payload = '';
-
-	  if ($this->scheme == 'http') {
+	    
+	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 	    // loop until headers have been retrieved
 	    $data = '';
 	    while (!isset($lb)){
@@ -381,8 +405,8 @@ class soap_transport_http extends nusoap_base {
 		$data = substr($data,$pos);
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			if(count($arr) >= 2){
+			$arr = explode(':',$header_line, 2);
+			if(count($arr) > 1){
 				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 			}
 		}
@@ -466,8 +490,10 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		// clean headers
 		foreach ($header_array as $header_line) {
-			$arr = explode(':',$header_line);
-			$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			$arr = explode(':',$header_line,2);
+			if (count($arr) > 1) {
+				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			}
 		}
 		if (strlen($data) == 0) {
 			$this->debug('no data after headers!');
@@ -475,7 +501,7 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 	  }
-
+		
 		// decode transfer-encoding
 		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
 			if(!$data = $this->decodeChunked($data)){
@@ -516,7 +542,11 @@ class soap_transport_http extends nusoap_base {
 		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
-	
+
+	function setContentType($type, $charset = false) {
+		$this->outgoing_headers['Content-Type'] = $type . ($charset ? '; charset=' . $charset : '');
+	}
+
 	function usePersistentConnection(){
 		if (isset($this->outgoing_headers['Accept-Encoding'])) {
 			return false;
@@ -527,5 +557,6 @@ class soap_transport_http extends nusoap_base {
 		return true;
 	}
 }
+
 
 ?>
