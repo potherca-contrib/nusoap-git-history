@@ -74,7 +74,7 @@ class XMLSchema extends nusoap_base  {
 			return true;
 			}
 		}
-	return false;
+		return false;
 	}
 
 	/**
@@ -152,10 +152,9 @@ class XMLSchema extends nusoap_base  {
         	foreach($attrs as $k => $v){
                 // if ns declarations, add to class level array of valid namespaces
 				if(ereg("^xmlns",$k)){
-                	$this->xdebug("$k: $v");
-                	$this->xdebug("ns_prefix: ".$this->getPrefix($k));
+                	//$this->xdebug("$k: $v");
+                	//$this->xdebug('ns_prefix: '.$this->getPrefix($k));
                 	if($ns_prefix = substr(strrchr($k,':'),1)){
-					//if($ns_prefix = $this->getPrefix($k)){
 						$this->namespaces[$ns_prefix] = $v;
 					} else {
 						$this->namespaces['ns'.(count($this->namespaces)+1)] = $v;
@@ -176,9 +175,12 @@ class XMLSchema extends nusoap_base  {
         }
 		// find status, register data
 		switch($name){
-			case 'all':
-				$this->complexTypes[$this->currentComplexType]['compositor'] = 'all';
-				$this->complexTypes[$this->currentComplexType]['phpType'] = 'struct';
+			case ('all'|'choice'|'sequence'):
+				//$this->complexTypes[$this->currentComplexType]['compositor'] = 'all';
+				$this->complexTypes[$this->currentComplexType]['compositor'] = $name;
+				if($name == 'all'){
+					$this->complexTypes[$this->currentComplexType]['phpType'] = 'struct';
+				}
 			break;
 			case 'attribute':
             	$this->xdebug("parsing attribute $attrs[name] $attrs[ref] of value: ".$attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']);
@@ -190,9 +192,9 @@ class XMLSchema extends nusoap_base  {
                     $this->attributes[$attrs['ref']] = $attrs;
 				}
                 
-				if($this->currentComplexType){
+				if(isset($this->currentComplexType)){
 					$this->complexTypes[$this->currentComplexType]['attrs'][$aname] = $attrs;
-				} elseif($this->currentElement){
+				} elseif(isset($this->currentElement)){
 					$this->elements[$this->currentElement]['attrs'][$aname] = $attrs;
 				}
 				// arrayType attribute
@@ -208,12 +210,6 @@ class XMLSchema extends nusoap_base  {
                     }
                     $this->complexTypes[$this->currentComplexType]['arrayType'] = $v;
 				}
-			break;
-			case 'choice':
-				$this->complexTypes[$this->currentComplexType]['compositor'] = 'choice';
-			break;
-			case 'complexContent':
-
 			break;
 			case 'complexType':
 				if($attrs['name']){
@@ -263,9 +259,6 @@ class XMLSchema extends nusoap_base  {
 			case 'schema':
 				$this->schema = $attrs;
 				$this->schema['schemaVersion'] = $this->getNamespaceFromPrefix($prefix);
-			break;
-			case 'sequence':
-				$this->complexTypes[$this->currentComplexType]['compositor'] = 'sequence';
 			break;
 			case 'simpleType':
 				$this->currentElement = $attrs['name'];

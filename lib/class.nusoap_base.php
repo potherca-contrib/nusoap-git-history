@@ -103,6 +103,7 @@ class nusoap_base {
 	/**
 	* load types into typemap array
 	* is this legacy yet?
+	* no, this is used by the xmlschema class to verify type => namespace mappings.
 	* @var      typemap
 	* @access   public
 	*/

@@ -79,59 +79,53 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function send($data, $timeout=0) {
-	    flush();
-		//global $timer;
-		//$timer->setMarker('http::send(): soapaction = '.$this->soapaction);
+	
 		$this->debug('entered send() with data of length: '.strlen($data));
-
+		// proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
-			$this->debug('setting proxy host and port');
 			$host = $this->proxyhost;
 			$port = $this->proxyport;
 		} else {
 			$host = $this->host;
 			$port = $this->port;
 		}
-		
+		// ssl
 		if($this->scheme == 'https'){
 			$host = 'ssl://'.$host;
 			$port = 443;
 		}
-		
+		// timeout
 		if($timeout > 0){
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
 		} else {
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
 		}
-		
+		// test pointer
 		if(!$fp) {
 			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
 			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
 		$this->debug('socket connected');
-		//$timer->setMarker('opened socket connection to server');
-		
+		// http auth
 		$credentials = '';
 		if($this->username != '') {
 			$this->debug('setting http auth credentials');
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
-
-		if($this->proxyhost && $this->proxyport){
+		// swap url for path if going through a proxy
+		if($this->proxyhost != '' && $this->proxyport != ''){
 			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
 			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
-
-		if($this->encoding != ''){
-			if(function_exists('gzdeflate')){
-				$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
-				"Connection: close\r\n";
-				set_magic_quotes_runtime(0);
-			}
+		// set encoding headers
+		if($this->encoding != '' && function_exists('gzdeflate')){
+			$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
+			"Connection: close\r\n";
+			set_magic_quotes_runtime(0);
 		}
-		
+		// make payload
 		$this->outgoing_payload .=
 			"User-Agent: $this->title/$this->version\r\n".
 			//"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
@@ -142,33 +136,20 @@ class soap_transport_http extends nusoap_base {
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 		
-		// send
+		// send payload
 		if(!fputs($fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('Write error');
 		}
-		//$timer->setMarker('wrote data to socket');
 		$this->debug('wrote data to socket');
 		
 		// get response
 	    $this->incoming_payload = '';
-		//$start = time();
-        //$timeout = $timeout + $start;*/
-		//while($data = fread($fp, 32768) && $t < $timeout){
-		//$timer->setMarker('starting fread()');
-		$strlen = 0;
+		//$strlen = 0;
 		while( $data = fread($fp, 32768) ){
 			$this->incoming_payload .= $data;
-			//$t = time();
-			$strlen += strlen($data);
+			//$strlen += strlen($data);
 	    }
-		//$timer->setMarker('finished fread(), bytes read: '.$strlen);
-		/*$end = time();
-		if ($t >= $timeout) {
-			$this->setError('server response timed out');
-			return false;
-		}*/
-
 		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
 		
 		// close filepointer
@@ -284,11 +265,14 @@ class soap_transport_http extends nusoap_base {
 		$hostURL = ($port != '') ? "https://$host:$port" : "https://$host";
 		// add path
 		$hostURL .= $this->path;
-		
 		curl_setopt($ch, CURLOPT_URL, $hostURL);
 		// set other options
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		// encode
+		if(function_exists('gzinflate')){
+			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
+		}
 		// set timeout
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
@@ -298,16 +282,25 @@ class soap_transport_http extends nusoap_base {
 		if($this->username != '') {
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
-
-		if($this->proxyhost && $this->proxyport){
-			$this->outgoing_payload = "POST $this->url HTTP/1.0\r\n";
-		} else {
-			$this->outgoing_payload = "POST $this->path HTTP/1.0\r\n";
+		
+		if($this->encoding != ''){
+			if(function_exists('gzdeflate')){
+				$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
+				"Connection: close\r\n";
+				set_magic_quotes_runtime(0);
+			}
 		}
-
+		
+		if($this->proxyhost && $this->proxyport){
+			$this->outgoing_payload = "POST $this->url HTTP/$this->protocol_version\r\n";
+		} else {
+			$this->outgoing_payload = "POST $this->path HTTP/$this->protocol_version\r\n";
+		}
+		
 		$this->outgoing_payload .=
 			"User-Agent: $this->title v$this->version\r\n".
 			"Host: ".$this->host."\r\n".
+			$encoding_headers.
 			$credentials.
 			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
@@ -332,11 +325,23 @@ class soap_transport_http extends nusoap_base {
 			curl_close($ch);
 	    	return false;
 		} else {
+			echo '<pre>';
 			var_dump(curl_getinfo($ch));
+			echo '</pre>';
 		}
-
+		// close curl
 		curl_close($ch);
 		$t->setMarker('closed curl');
+		
+		// remove 100 header
+		if(ereg('^HTTP/1.1 100',$data)){
+			if($pos = strpos($data,"\r\n\r\n") ){
+				$data = ltrim(substr($data,$pos));
+			} elseif($pos = strpos($data,"\n\n") ){
+				$data = ltrim(substr($data,$pos));
+			}
+		}//
+		
 		// separate content from HTTP headers
 		if( $pos = strpos($data,"\r\n\r\n") ){
 			$lb = "\r\n";
@@ -361,7 +366,39 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('no data present after HTTP headers.');
 			return false;
 		}
-
+		
+		// decode transfer-encoding
+		if($headers['Transfer-Encoding'] == 'chunked'){
+			//$timer->setMarker('starting to decode chunked content');
+			if(!$data = $this->decodeChunked($data)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//$timer->setMarker('finished decoding of chunked content');
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+		}
+		// decode content-encoding
+		if($headers['Content-Encoding'] != ''){
+			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
+    			// if decoding works, use it. else assume data wasn't gzencoded
+    			if(function_exists('gzinflate')){
+					//$timer->setMarker('starting decoding of gzip/deflated content');
+					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    					$data = $degzdata;
+					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+						$data = $degzdata;
+					} else {
+						$this->setError('Errors occurred when trying to decode the data');
+					}
+					//$timer->setMarker('finished decoding of gzip/deflated content');
+					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+    			} else {
+					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
+				}
+			}
+		}
+		// set decoded payload
+		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
 	

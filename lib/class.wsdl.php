@@ -449,14 +449,7 @@ class wsdl extends XMLSchema {
 		if (is_array($this->bindings[$binding])) {
 			return $this->bindings[$binding];
 		} 
-	} 
-	
-	function getMessageData($operation, $portType, $msgType)
-	{
-		$name = $this->opData[$operation][$msgType]['message'];
-		$this->debug("getting msgData for $name, using $operation,$portType,$msgType<br>");
-		return $this->messages[$name];
-	} 
+	}
 	
 	/**
 	 * returns an assoc array of operation names => operation data
@@ -666,7 +659,7 @@ class wsdl extends XMLSchema {
 			$ns = substr($type, 0, strrpos($type, ':'));
 			$this->debug("got a prefixed type: $uqType, $ns");
 			if($ns == $this->XMLSchemaVersion ||
-					   ($ns = $this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
+					   ($ns == $this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
 		    	if ($uqType == 'boolean' && !$value) {
 					$value = 0;
 				} elseif ($uqType == 'boolean') {

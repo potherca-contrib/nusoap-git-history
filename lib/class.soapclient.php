@@ -227,30 +227,35 @@ class soapclient extends nusoap_base  {
 				}
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
+				//if(strpos($this->endpoint,'http:')){
 					$response = $http->send($msg,$timeout);
-                    $this->request = $http->outgoing_payload;
-					$this->response = $http->incoming_payload;
 				} elseif(ereg('^https',$this->endpoint)){
-					if(phpversion() == '4.3.0-dev'){
-						$response = $http->send($msg,$timeout);
-                   		$this->request = $http->outgoing_payload;
-						$this->response = $http->incoming_payload;
-					} elseif (extension_loaded('curl')) {
+				//} elseif(strpos($this->endpoint,'https:')){
+					//if(phpversion() == '4.3.0-dev'){
+						//$response = $http->send($msg,$timeout);
+                   		//$this->request = $http->outgoing_payload;
+						//$this->response = $http->incoming_payload;
+					//} else
+					if (extension_loaded('curl')) {
 						$response = $http->sendHTTPS($msg,$timeout);
-                    	$this->request = $http->outgoing_payload;
-						$this->response = $http->incoming_payload;
 					} else {
-						$this->setError('CURL Extension is required for HTTPS');
-						return false;
-					}					
+						$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
+					}								
+				} else {
+					$this->setError('no http/s in endpoint url');
 				}
+				$this->request = $http->outgoing_payload;
+				$this->response = $http->incoming_payload;
 				$this->debug("transport debug data...\n".$http->debug_str);
 				if($err = $http->getError()){
 					$this->setError('HTTP Error: '.$err);
 					return false;
+				} elseif($this->getError()){
+					return false;
+				} else {
+					$this->debug('got response, length: '.strlen($response));
+					return $this->parseResponse($response);
 				}
-				$this->debug('got response, length: '.strlen($response));
-				return $this->parseResponse($response);
 			break;
 			default:
 				$this->setError('no transport found, or selected transport is not yet supported!');
