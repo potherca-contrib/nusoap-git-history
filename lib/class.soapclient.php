@@ -61,7 +61,7 @@ class soapclient extends nusoap_base  {
 
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl = new wsdl($this->wsdlFile);
+			$this->wsdl = & new wsdl($this->wsdlFile);
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -260,7 +260,7 @@ class soapclient extends nusoap_base  {
 	*/
     function parseResponse($data) {
 		$this->debug('Entering parseResponse(), about to create soap_parser instance');
-		$parser = new soap_parser($data,$this->xml_encoding,$this->operation);
+		$parser = & new soap_parser($data,$this->xml_encoding,$this->operation);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
