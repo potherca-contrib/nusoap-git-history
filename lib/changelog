@@ -160,3 +160,9 @@
 - xmlschema: allow enclosing namespaces to be specified in constructor
 - xmlschema: improve handling of compositors and simple types
 
+2004-01-08, version 0.6.6
+- soap_server: when requested WSDL is in a file, return to client using passthru (thanks Ingo Fischer)
+- soapclient: have proxy inherit more client state
+- soapclient: allow timeout and response timeout to be specified in the constructor
+- wsdl: allow timeout and response timeout to be specified in the constructor
+- soap_transport_http: allow response timeout to be specified in send and sendHTTPS

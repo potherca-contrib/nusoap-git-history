@@ -91,10 +91,16 @@ class soap_server extends nusoap_base {
 		// gen wsdl
 		if(isset($qs) && ereg('wsdl', $qs) ){
 			if($this->externalWSDLURL){
+              if (strpos($this->externalWSDLURL,"://")!==false) { // assume URL
 				header('Location: '.$this->externalWSDLURL);
 				exit();
+              } else { // assume file
+                header("Content-Type: text/xml\r\n");
+                $fp = fopen($this->externalWSDLURL, 'r');
+                fpassthru($fp);
+              }
 			} else {
-				header("Content-Type: text/xml\r\n");
+				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize();
 				exit();
 			}
@@ -118,15 +124,20 @@ class soap_server extends nusoap_base {
             }
 			// print headers
 			if($this->fault){
-				$header[] = "HTTP/1.0 500 Internal Server Error\r\n";
-				$header[] = "Status: 500 Internal Server Error\r\n";
+				$header[] = "HTTP/1.0 500 Internal Server Error";
+				$header[] = "Status: 500 Internal Server Error";
 			} else {
-				$header[] = "Status: 200 OK\r\n";
+				// Some combinations of PHP+Web server allow the Status
+				// to come through as a header.  Since OK is the default
+				// just do nothing.
+				// $header[] = "HTTP/1.0 200 OK";
+				// $header[] = "Status: 200 OK";
 			}
-			$header[] = "Server: $this->title Server v$this->version\r\n";
+			$header[] = "Server: $this->title Server v$this->version";
+			$header[] = "X-SOAPed-By: $this->title Server v$this->version";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
-			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
+			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
 			//begin code to compress payload - by John
 			if (isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
 			   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
@@ -156,12 +167,12 @@ class soap_server extends nusoap_base {
 				}
 			}
 			//end code
-			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
+			$header[] = "Content-Length: ".strlen($payload);
 			reset($header);
 			foreach($header as $hdr){
-				header($hdr);
+				header($hdr, false);
 			}
-			$this->response = join("\r\n",$header).$payload;
+			$this->response = join("\r\n",$header)."\r\n".$payload;
 			print $payload;
 		}
 	}

@@ -37,6 +37,7 @@ class soapclient extends nusoap_base  {
     var $xml_encoding = '';
 	var $http_encoding = false;
 	var $timeout = 0;
+	var $response_timeout = 30;
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
@@ -67,14 +68,18 @@ class soapclient extends nusoap_base  {
 	* @param    string $proxyport
 	* @param	string $proxyusername
 	* @param	string $proxypassword
+	* @param	integer $timeout set the connection timeout
+	* @param	integer $response_timeout set the response timeout
 	* @access   public
 	*/
-	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false){
+	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false, $timeout = 0, $response_timeout = 30){
 		$this->endpoint = $endpoint;
 		$this->proxyhost = $proxyhost;
 		$this->proxyport = $proxyport;
 		$this->proxyusername = $proxyusername;
 		$this->proxypassword = $proxypassword;
+		$this->timeout = $timeout;
+		$this->response_timeout = $response_timeout;
 
 		// make values
 		if($wsdl){
@@ -83,7 +88,7 @@ class soapclient extends nusoap_base  {
 			
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
+			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword,$this->timeout,$this->response_timeout);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			// catch errors
@@ -222,7 +227,7 @@ class soapclient extends nusoap_base  {
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style");
 		// send
 		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
-		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout);
+		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout,$this->response_timeout);
 		if($errstr = $this->getError()){
 			$this->debug('Error: '.$errstr);
 			return false;
@@ -280,11 +285,12 @@ class soapclient extends nusoap_base  {
     *
 	* @param    string $msg a SOAPx4 soapmsg object
 	* @param    string $soapaction SOAPAction value
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	mixed native PHP types.
 	* @access   private
 	*/
-	function send($msg, $soapaction = '', $timeout=0) {
+	function send($msg, $soapaction = '', $timeout=0, $response_timeout=30) {
 		// detect transport
 		switch(true){
 			// http(s)
@@ -312,16 +318,16 @@ class soapclient extends nusoap_base  {
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
-					$this->responseData = $http->send($msg,$timeout);
+					$this->responseData = $http->send($msg,$timeout,$response_timeout);
 				} elseif(ereg('^https',$this->endpoint)){
 				//} elseif(strpos($this->endpoint,'https:')){
 					//if(phpversion() == '4.3.0-dev'){
-						//$response = $http->send($msg,$timeout);
+						//$response = $http->send($msg,$timeout,$response_timeout);
                    		//$this->request = $http->outgoing_payload;
 						//$this->response = $http->incoming_payload;
 					//} else
 					if (extension_loaded('curl')) {
-						$this->responseData = $http->sendHTTPS($msg,$timeout);
+						$this->responseData = $http->sendHTTPS($msg,$timeout,$response_timeout);
 					} else {
 						$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 					}								
@@ -538,6 +544,17 @@ class soapclient extends nusoap_base  {
 		$proxy->wsdl = $this->wsdl;
 		$proxy->operations = $this->operations;
 		$proxy->defaultRpcParams = $this->defaultRpcParams;
+		// transfer other state
+		$proxy->username = $this->username;
+		$proxy->password = $this->password;
+		$proxy->proxyhost = $this->proxyhost;
+		$proxy->proxyport = $this->proxyport;
+		$proxy->proxyusername = $this->proxyusername;
+		$proxy->proxypassword = $this->proxypassword;
+		$proxy->timeout = $this->timeout;
+		$proxy->response_timeout = $this->response_timeout;
+		$proxy->http_encoding = $this->http_encoding;
+		$proxy->persistentConnection = $this->persistentConnection;
 		return $proxy;
 	}
 

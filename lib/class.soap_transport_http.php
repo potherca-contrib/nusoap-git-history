@@ -127,7 +127,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 			return false;
 		}
-		$this->debug('connect using http');
+		$this->debug('connect using https');
 		// init CURL
 		$this->ch = curl_init();
 		// set url
@@ -135,8 +135,9 @@ class soap_transport_http extends nusoap_base {
 		// add path
 		$hostURL .= $this->path;
 		curl_setopt($this->ch, CURLOPT_URL, $hostURL);
-		// set other options
+		// ask for headers in the response output
 		curl_setopt($this->ch, CURLOPT_HEADER, 1);
+		// ask for the response output as the return value
 		curl_setopt($this->ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
 		// We manage this ourselves through headers and encoding
@@ -151,10 +152,11 @@ class soap_transport_http extends nusoap_base {
 			$this->persistentConnection = false;
 			$this->outgoing_headers['Connection'] = 'close';
 		}
-		// set timeout
+		// set timeout (NOTE: cURL does not have separate connection and response timeouts)
 		if ($connection_timeout != 0) {
 			curl_setopt($this->ch, CURLOPT_TIMEOUT, $connection_timeout);
 		}
+
 		// recent versions of cURL turn on peer/host checking by default,
 		// while PHP binaries are not compiled with a default location for the
 		// CA cert bundle, so disable peer/host checking.
@@ -174,16 +176,17 @@ class soap_transport_http extends nusoap_base {
 	* send the SOAP message via HTTP
 	*
 	* @param    string $data message data
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	string data
 	* @access   public
 	*/
-	function send($data, $timeout=0) {
+	function send($data, $timeout=0, $response_timeout=30) {
 		
 		$this->debug('entered send() with data of length: '.strlen($data));
 		
 		// make connnection
-		if(!$this->connect($timeout)){
+		if(!$this->connect($timeout, $response_timeout)){
 			return false;
 		}
 		
@@ -206,12 +209,13 @@ class soap_transport_http extends nusoap_base {
 	* send the SOAP message via HTTPS 1.0 using CURL
 	*
 	* @param    string $msg message data
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	string data
 	* @access   public
 	*/
-	function sendHTTPS($data, $timeout=0) {
-		return $this->send($data, $timeout);
+	function sendHTTPS($data, $timeout=0, $response_timeout=30) {
+		return $this->send($data, $timeout, $response_timeout);
 	}
 	
 	/**
@@ -232,7 +236,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setSOAPAction($soapaction) {
-		$this->outgoing_headers['SOAPAction'] = $soapaction;
+		$this->outgoing_headers['SOAPAction'] = '"' . $soapaction . '"';
 	}
 	
 	/**
@@ -334,9 +338,6 @@ class soap_transport_http extends nusoap_base {
 
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
-			if($k == 'SOAPAction'){
-				$v = '"'.$v.'"';
-			}
 			$this->outgoing_payload .= $k.': '.$v."\r\n";
 		}
 		
@@ -365,7 +366,16 @@ class soap_transport_http extends nusoap_base {
 		// TODO: cURL does say this should only be the verb, and in fact it
 		// turns out that the URI and HTTP version are appended to this, which
 		// some servers refuse to work with
-		curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
+		//curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
+		foreach($this->outgoing_headers as $k => $v){
+			$curl_headers[] = "$k: $v";
+		}
+		curl_setopt($this->ch, CURLOPT_HTTPHEADER, $curl_headers);
+		if ($this->request_method == "POST") {
+	  		curl_setopt($this->ch, CURLOPT_POST, 1);
+	  		curl_setopt($this->ch, CURLOPT_POSTFIELDS, $data);
+	  	} else {
+	  	}
 		$this->debug('set cURL payload');
 		return true;
 	  }

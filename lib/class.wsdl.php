@@ -43,6 +43,8 @@ class wsdl extends nusoap_base {
     var $proxyport = '';
 	var $proxyusername = '';
 	var $proxypassword = '';
+	var $timeout = 0;
+	var $response_timeout = 30;
 
     /**
      * constructor
@@ -52,14 +54,18 @@ class wsdl extends nusoap_base {
 	 * @param string $proxyport
 	 * @param string $proxyusername
 	 * @param string $proxypassword
+	 * @param integer $timeout set the connection timeout
+	 * @param integer $response_timeout set the response timeout
      * @access public 
      */
-    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false){
+    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false,$timeout=0,$response_timeout=30){
         $this->wsdl = $wsdl;
         $this->proxyhost = $proxyhost;
         $this->proxyport = $proxyport;
 		$this->proxyusername = $proxyusername;
 		$this->proxypassword = $proxypassword;
+		$this->timeout = $timeout;
+		$this->response_timeout = $response_timeout;
         
         // parse wsdl file
         if ($wsdl != "") {
@@ -178,7 +184,7 @@ class wsdl extends nusoap_base {
 			if (isset($wsdl_props['user'])) {
                 $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
             }
-			$wsdl_string = $tr->send('');
+			$wsdl_string = $tr->send('', $this->timeout, $this->response_timeout);
 			//$this->debug("WSDL request\n" . $tr->outgoing_payload);
 			//$this->debug("WSDL response\n" . $tr->incoming_payload);
 			$this->debug("transport debug data...\n" . $tr->debug_str);
@@ -602,7 +608,7 @@ class wsdl extends nusoap_base {
 	*/
 	function serialize()
 	{
-		$xml = '<?xml version="1.0"?><definitions';
+		$xml = '<?xml version="1.0" encoding="ISO-8859-1"?><definitions';
 		foreach($this->namespaces as $k => $v) {
 			$xml .= " xmlns:$k=\"$v\"";
 		} 
@@ -1106,7 +1112,8 @@ class wsdl extends nusoap_base {
 		$restrictionBase = strpos($restrictionBase,':') ? $this->expandQname($restrictionBase) : $restrictionBase;
 		$arrayType = strpos($arrayType,':') ? $this->expandQname($arrayType) : $arrayType;
 
-		$this->schemas[$this->namespaces['tns']][0]->addComplexType($name,$typeClass,$phpType,$compositor,$restrictionBase,$elements,$attrs,$arrayType);
+		$typens = isset($this->namespaces['types']) ? $this->namespaces['types'] : $this->namespaces['tns'];
+		$this->schemas[$typens][0]->addComplexType($name,$typeClass,$phpType,$compositor,$restrictionBase,$elements,$attrs,$arrayType);
 	}
 
 	/**

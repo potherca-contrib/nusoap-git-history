@@ -1612,7 +1612,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 			return false;
 		}
-		$this->debug('connect using http');
+		$this->debug('connect using https');
 		// init CURL
 		$this->ch = curl_init();
 		// set url
@@ -1620,8 +1620,9 @@ class soap_transport_http extends nusoap_base {
 		// add path
 		$hostURL .= $this->path;
 		curl_setopt($this->ch, CURLOPT_URL, $hostURL);
-		// set other options
+		// ask for headers in the response output
 		curl_setopt($this->ch, CURLOPT_HEADER, 1);
+		// ask for the response output as the return value
 		curl_setopt($this->ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
 		// We manage this ourselves through headers and encoding
@@ -1636,10 +1637,11 @@ class soap_transport_http extends nusoap_base {
 			$this->persistentConnection = false;
 			$this->outgoing_headers['Connection'] = 'close';
 		}
-		// set timeout
+		// set timeout (NOTE: cURL does not have separate connection and response timeouts)
 		if ($connection_timeout != 0) {
 			curl_setopt($this->ch, CURLOPT_TIMEOUT, $connection_timeout);
 		}
+
 		// recent versions of cURL turn on peer/host checking by default,
 		// while PHP binaries are not compiled with a default location for the
 		// CA cert bundle, so disable peer/host checking.
@@ -1659,16 +1661,17 @@ class soap_transport_http extends nusoap_base {
 	* send the SOAP message via HTTP
 	*
 	* @param    string $data message data
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	string data
 	* @access   public
 	*/
-	function send($data, $timeout=0) {
+	function send($data, $timeout=0, $response_timeout=30) {
 		
 		$this->debug('entered send() with data of length: '.strlen($data));
 		
 		// make connnection
-		if(!$this->connect($timeout)){
+		if(!$this->connect($timeout, $response_timeout)){
 			return false;
 		}
 		
@@ -1691,12 +1694,13 @@ class soap_transport_http extends nusoap_base {
 	* send the SOAP message via HTTPS 1.0 using CURL
 	*
 	* @param    string $msg message data
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	string data
 	* @access   public
 	*/
-	function sendHTTPS($data, $timeout=0) {
-		return $this->send($data, $timeout);
+	function sendHTTPS($data, $timeout=0, $response_timeout=30) {
+		return $this->send($data, $timeout, $response_timeout);
 	}
 	
 	/**
@@ -1717,7 +1721,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setSOAPAction($soapaction) {
-		$this->outgoing_headers['SOAPAction'] = $soapaction;
+		$this->outgoing_headers['SOAPAction'] = '"' . $soapaction . '"';
 	}
 	
 	/**
@@ -1819,9 +1823,6 @@ class soap_transport_http extends nusoap_base {
 
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
-			if($k == 'SOAPAction'){
-				$v = '"'.$v.'"';
-			}
 			$this->outgoing_payload .= $k.': '.$v."\r\n";
 		}
 		
@@ -1850,7 +1851,16 @@ class soap_transport_http extends nusoap_base {
 		// TODO: cURL does say this should only be the verb, and in fact it
 		// turns out that the URI and HTTP version are appended to this, which
 		// some servers refuse to work with
-		curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
+		//curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
+		foreach($this->outgoing_headers as $k => $v){
+			$curl_headers[] = "$k: $v";
+		}
+		curl_setopt($this->ch, CURLOPT_HTTPHEADER, $curl_headers);
+		if ($this->request_method == "POST") {
+	  		curl_setopt($this->ch, CURLOPT_POST, 1);
+	  		curl_setopt($this->ch, CURLOPT_POSTFIELDS, $data);
+	  	} else {
+	  	}
 		$this->debug('set cURL payload');
 		return true;
 	  }
@@ -2142,10 +2152,16 @@ class soap_server extends nusoap_base {
 		// gen wsdl
 		if(isset($qs) && ereg('wsdl', $qs) ){
 			if($this->externalWSDLURL){
+              if (strpos($this->externalWSDLURL,"://")!==false) { // assume URL
 				header('Location: '.$this->externalWSDLURL);
 				exit();
+              } else { // assume file
+                header("Content-Type: text/xml\r\n");
+                $fp = fopen($this->externalWSDLURL, 'r');
+                fpassthru($fp);
+              }
 			} else {
-				header("Content-Type: text/xml\r\n");
+				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize();
 				exit();
 			}
@@ -2169,15 +2185,20 @@ class soap_server extends nusoap_base {
             }
 			// print headers
 			if($this->fault){
-				$header[] = "HTTP/1.0 500 Internal Server Error\r\n";
-				$header[] = "Status: 500 Internal Server Error\r\n";
+				$header[] = "HTTP/1.0 500 Internal Server Error";
+				$header[] = "Status: 500 Internal Server Error";
 			} else {
-				$header[] = "Status: 200 OK\r\n";
+				// Some combinations of PHP+Web server allow the Status
+				// to come through as a header.  Since OK is the default
+				// just do nothing.
+				// $header[] = "HTTP/1.0 200 OK";
+				// $header[] = "Status: 200 OK";
 			}
-			$header[] = "Server: $this->title Server v$this->version\r\n";
+			$header[] = "Server: $this->title Server v$this->version";
+			$header[] = "X-SOAPed-By: $this->title Server v$this->version";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
-			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
+			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
 			//begin code to compress payload - by John
 			if (isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
 			   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
@@ -2207,12 +2228,12 @@ class soap_server extends nusoap_base {
 				}
 			}
 			//end code
-			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
+			$header[] = "Content-Length: ".strlen($payload);
 			reset($header);
 			foreach($header as $hdr){
-				header($hdr);
+				header($hdr, false);
 			}
-			$this->response = join("\r\n",$header).$payload;
+			$this->response = join("\r\n",$header)."\r\n".$payload;
 			print $payload;
 		}
 	}
@@ -2776,6 +2797,8 @@ class wsdl extends nusoap_base {
     var $proxyport = '';
 	var $proxyusername = '';
 	var $proxypassword = '';
+	var $timeout = 0;
+	var $response_timeout = 30;
 
     /**
      * constructor
@@ -2785,14 +2808,18 @@ class wsdl extends nusoap_base {
 	 * @param string $proxyport
 	 * @param string $proxyusername
 	 * @param string $proxypassword
+	 * @param integer $timeout set the connection timeout
+	 * @param integer $response_timeout set the response timeout
      * @access public 
      */
-    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false){
+    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false,$timeout=0,$response_timeout=30){
         $this->wsdl = $wsdl;
         $this->proxyhost = $proxyhost;
         $this->proxyport = $proxyport;
 		$this->proxyusername = $proxyusername;
 		$this->proxypassword = $proxypassword;
+		$this->timeout = $timeout;
+		$this->response_timeout = $response_timeout;
         
         // parse wsdl file
         if ($wsdl != "") {
@@ -2911,7 +2938,7 @@ class wsdl extends nusoap_base {
 			if (isset($wsdl_props['user'])) {
                 $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
             }
-			$wsdl_string = $tr->send('');
+			$wsdl_string = $tr->send('', $this->timeout, $this->response_timeout);
 			//$this->debug("WSDL request\n" . $tr->outgoing_payload);
 			//$this->debug("WSDL response\n" . $tr->incoming_payload);
 			$this->debug("transport debug data...\n" . $tr->debug_str);
@@ -3335,7 +3362,7 @@ class wsdl extends nusoap_base {
 	*/
 	function serialize()
 	{
-		$xml = '<?xml version="1.0"?><definitions';
+		$xml = '<?xml version="1.0" encoding="ISO-8859-1"?><definitions';
 		foreach($this->namespaces as $k => $v) {
 			$xml .= " xmlns:$k=\"$v\"";
 		} 
@@ -3839,7 +3866,8 @@ class wsdl extends nusoap_base {
 		$restrictionBase = strpos($restrictionBase,':') ? $this->expandQname($restrictionBase) : $restrictionBase;
 		$arrayType = strpos($arrayType,':') ? $this->expandQname($arrayType) : $arrayType;
 
-		$this->schemas[$this->namespaces['tns']][0]->addComplexType($name,$typeClass,$phpType,$compositor,$restrictionBase,$elements,$attrs,$arrayType);
+		$typens = isset($this->namespaces['types']) ? $this->namespaces['types'] : $this->namespaces['tns'];
+		$this->schemas[$typens][0]->addComplexType($name,$typeClass,$phpType,$compositor,$restrictionBase,$elements,$attrs,$arrayType);
 	}
 
 	/**
@@ -4464,6 +4492,7 @@ class soapclient extends nusoap_base  {
     var $xml_encoding = '';
 	var $http_encoding = false;
 	var $timeout = 0;
+	var $response_timeout = 30;
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
@@ -4494,14 +4523,18 @@ class soapclient extends nusoap_base  {
 	* @param    string $proxyport
 	* @param	string $proxyusername
 	* @param	string $proxypassword
+	* @param	integer $timeout set the connection timeout
+	* @param	integer $response_timeout set the response timeout
 	* @access   public
 	*/
-	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false){
+	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false, $timeout = 0, $response_timeout = 30){
 		$this->endpoint = $endpoint;
 		$this->proxyhost = $proxyhost;
 		$this->proxyport = $proxyport;
 		$this->proxyusername = $proxyusername;
 		$this->proxypassword = $proxypassword;
+		$this->timeout = $timeout;
+		$this->response_timeout = $response_timeout;
 
 		// make values
 		if($wsdl){
@@ -4510,7 +4543,7 @@ class soapclient extends nusoap_base  {
 			
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
+			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword,$this->timeout,$this->response_timeout);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			// catch errors
@@ -4649,7 +4682,7 @@ class soapclient extends nusoap_base  {
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style");
 		// send
 		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
-		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout);
+		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout,$this->response_timeout);
 		if($errstr = $this->getError()){
 			$this->debug('Error: '.$errstr);
 			return false;
@@ -4707,11 +4740,12 @@ class soapclient extends nusoap_base  {
     *
 	* @param    string $msg a SOAPx4 soapmsg object
 	* @param    string $soapaction SOAPAction value
-	* @param    integer $timeout set timeout in seconds
+	* @param    integer $timeout set connection timeout in seconds
+	* @param	integer $response_timeout set response timeout in seconds
 	* @return	mixed native PHP types.
 	* @access   private
 	*/
-	function send($msg, $soapaction = '', $timeout=0) {
+	function send($msg, $soapaction = '', $timeout=0, $response_timeout=30) {
 		// detect transport
 		switch(true){
 			// http(s)
@@ -4739,16 +4773,16 @@ class soapclient extends nusoap_base  {
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
-					$this->responseData = $http->send($msg,$timeout);
+					$this->responseData = $http->send($msg,$timeout,$response_timeout);
 				} elseif(ereg('^https',$this->endpoint)){
 				//} elseif(strpos($this->endpoint,'https:')){
 					//if(phpversion() == '4.3.0-dev'){
-						//$response = $http->send($msg,$timeout);
+						//$response = $http->send($msg,$timeout,$response_timeout);
                    		//$this->request = $http->outgoing_payload;
 						//$this->response = $http->incoming_payload;
 					//} else
 					if (extension_loaded('curl')) {
-						$this->responseData = $http->sendHTTPS($msg,$timeout);
+						$this->responseData = $http->sendHTTPS($msg,$timeout,$response_timeout);
 					} else {
 						$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 					}								
@@ -4965,6 +4999,17 @@ class soapclient extends nusoap_base  {
 		$proxy->wsdl = $this->wsdl;
 		$proxy->operations = $this->operations;
 		$proxy->defaultRpcParams = $this->defaultRpcParams;
+		// transfer other state
+		$proxy->username = $this->username;
+		$proxy->password = $this->password;
+		$proxy->proxyhost = $this->proxyhost;
+		$proxy->proxyport = $this->proxyport;
+		$proxy->proxyusername = $this->proxyusername;
+		$proxy->proxypassword = $this->proxypassword;
+		$proxy->timeout = $this->timeout;
+		$proxy->response_timeout = $this->response_timeout;
+		$proxy->http_encoding = $this->http_encoding;
+		$proxy->persistentConnection = $this->persistentConnection;
 		return $proxy;
 	}
 
