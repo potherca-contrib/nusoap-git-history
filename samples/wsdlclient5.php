@@ -10,11 +10,23 @@
  *	Authentication: none
  */
 require_once('../lib/nusoap.php');
+require_once('../lib/class.wsdlcache.php');
 $proxyhost = isset($_POST['proxyhost']) ? $_POST['proxyhost'] : '';
 $proxyport = isset($_POST['proxyport']) ? $_POST['proxyport'] : '';
 $proxyusername = isset($_POST['proxyusername']) ? $_POST['proxyusername'] : '';
 $proxypassword = isset($_POST['proxypassword']) ? $_POST['proxypassword'] : '';
-$client = new soapclient('http://www.xmethods.net/sd/2001/BNQuoteService.wsdl', true,
+
+$cache = new wsdlcache();
+$wsdl = $cache->get('http://www.xmethods.net/sd/2001/BNQuoteService.wsdl');
+if (is_null($wsdl)) {
+	$wsdl = new wsdl('http://www.xmethods.net/sd/2001/BNQuoteService.wsdl',
+					$proxyhost, $proxyport, $proxyusername, $proxypassword);
+	$cache->put($wsdl);
+} else {
+	$wsdl->debug_str = '';
+	$wsdl->debug('Retrieved from cache');
+}
+$client = new soapclient($wsdl, true,
 						$proxyhost, $proxyport, $proxyusername, $proxypassword);
 $err = $client->getError();
 if ($err) {
