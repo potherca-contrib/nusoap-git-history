@@ -277,10 +277,15 @@
 - xmlschema: force unprefixed type into default namespace
 - xmlschema: fix serialization of definition of simple types
 
-2004-10-xx, version 0.6.8
+2004-10-01, version 0.6.8
 - soap_parser: handle default namespace attributes
 - soap_server: add default_utf8 field
 - soap_server: support literal encoding (with RPC style)
 - soap_transport_http: parse HTTP status and generate error for 300, 302-307, 400, 401-417, 501-505 (thanks for the idea Ghislain)
 - soap_transport_http: follow HTTP redirection (HTTP status 301 and Location header) (thanks for the idea Ghislain)
-- xmlschema: allow any attributes to be specified in an element of a complexType, e.g., abstract, default, form, minOccurs, maxOccurs, nillable
+- xmlschema: allow any attributes to be specified in an element of a complexType, e.g., abstract, default, form, minOccurs, maxOccurs, nillable (thanks Jirka Pech for the original patch)
+
+2004-10-02, version 0.6.8
+- soapclient: read/write cookies (thanks Ingo)
+- soap_server: change faultcode on non-resendable faults to Client
+- soap_transport_http: read/write cookies (thanks Ingo)

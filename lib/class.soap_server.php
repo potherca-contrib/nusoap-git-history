@@ -285,11 +285,11 @@ class soap_server extends nusoap_base {
 					} elseif ($this->headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))) {
 						$data = $degzdata;
 					} else {
-						$this->fault('Server', 'Errors occurred when trying to decode the data');
+						$this->fault('Client', 'Errors occurred when trying to decode the data');
 						return;
 					}
 				} else {
-					$this->fault('Server', 'This Server does not support compressed data');
+					$this->fault('Client', 'This Server does not support compressed data');
 					return;
 				}
 			}
@@ -303,7 +303,7 @@ class soap_server extends nusoap_base {
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
 			$this->result = 'fault: error in msg parsing: '.$err;
-			$this->fault('Server',"error in msg parsing:\n".$err);
+			$this->fault('Client',"error in msg parsing:\n".$err);
 		// else successfully parsed request into soapval object
 		} else {
 			// get/set methodname
@@ -364,20 +364,20 @@ class soap_server extends nusoap_base {
 		if ($class == '' && !function_exists($this->methodname)) {
 			$this->debug("function '$this->methodname' not found!");
 			$this->result = 'fault: method not found';
-			$this->fault('Server',"method '$this->methodname' not defined in service");
+			$this->fault('Client',"method '$this->methodname' not defined in service");
 			return;
 		}
 		if ($class != '' && !in_array($method, get_class_methods($class))) {
 			$this->debug("method '$this->methodname' not found in class '$class'!");
 			$this->result = 'fault: method not found';
-			$this->fault('Server',"method '$this->methodname' not defined in service");
+			$this->fault('Client',"method '$this->methodname' not defined in service");
 			return;
 		}
 
 		if($this->wsdl){
 			if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
 			//if(
-				$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
+				$this->fault('Client',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
 			}
 			$this->debug('opData:');
@@ -391,7 +391,7 @@ class soap_server extends nusoap_base {
 			$this->debug('ERROR: request not verified against method signature');
 			$this->result = 'fault: request failed validation against method signature';
 			// return fault
-			$this->fault('Server',"Operation '$this->methodname' not defined in service.");
+			$this->fault('Client',"Operation '$this->methodname' not defined in service.");
 			return;
 		}
 
@@ -418,7 +418,7 @@ class soap_server extends nusoap_base {
 			if ($this->methodparams) {
 				foreach ($this->methodparams as $param) {
 					if (is_array($param)) {
-						$this->fault('Server', 'NuSOAP does not handle complexType parameters correctly when using eval; call_user_func_array must be available');
+						$this->fault('Client', 'NuSOAP does not handle complexType parameters correctly when using eval; call_user_func_array must be available');
 						return;
 					}
 					$funcCall .= "\"$param\",";
@@ -486,7 +486,7 @@ class soap_server extends nusoap_base {
 				    $this->wsdl->clearDebug();
 					if($errstr = $this->wsdl->getError()){
 						$this->debug('got wsdl error: '.$errstr);
-						$this->fault('Server', 'got wsdl error: '.$errstr);
+						$this->fault('Server', 'unable to serialize result');
 						return;
 					}
 				} else {

@@ -1650,6 +1650,7 @@ class soap_transport_http extends nusoap_base {
 	var $encoding = '';
 	var $outgoing_headers = array();
 	var $incoming_headers = array();
+	var $incoming_cookies = array();
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
@@ -1776,6 +1777,8 @@ class soap_transport_http extends nusoap_base {
 		// add path
 		$hostURL .= $this->path;
 		curl_setopt($this->ch, CURLOPT_URL, $hostURL);
+		// follow location headers (re-directs)
+		curl_setopt($this->ch, CURLOPT_FOLLOWLOCATION, 1);
 		// ask for headers in the response output
 		curl_setopt($this->ch, CURLOPT_HEADER, 1);
 		// ask for the response output as the return value
@@ -1829,10 +1832,11 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $data message data
 	* @param    integer $timeout set connection timeout in seconds
 	* @param	integer $response_timeout set response timeout in seconds
+	* @param	array $cookies cookies to send
 	* @return	string data
 	* @access   public
 	*/
-	function send($data, $timeout=0, $response_timeout=30) {
+	function send($data, $timeout=0, $response_timeout=30, $cookies=NULL) {
 		
 		$this->debug('entered send() with data of length: '.strlen($data));
 
@@ -1847,7 +1851,7 @@ class soap_transport_http extends nusoap_base {
 				}
 				
 				// send request
-				if (!$this->sendRequest($data)){
+				if (!$this->sendRequest($data, $cookies)){
 					return false;
 				}
 				
@@ -1868,11 +1872,12 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $msg message data
 	* @param    integer $timeout set connection timeout in seconds
 	* @param	integer $response_timeout set response timeout in seconds
+	* @param	array $cookies cookies to send
 	* @return	string data
 	* @access   public
 	*/
-	function sendHTTPS($data, $timeout=0, $response_timeout=30) {
-		return $this->send($data, $timeout, $response_timeout);
+	function sendHTTPS($data, $timeout=0, $response_timeout=30, $cookies) {
+		return $this->send($data, $timeout, $response_timeout, $cookies);
 	}
 	
 	/**
@@ -2054,7 +2059,7 @@ class soap_transport_http extends nusoap_base {
 	/*
 	 *	Writes payload, including HTTP headers, to $this->outgoing_payload.
 	 */
-	function buildPayload($data) {
+	function buildPayload($data, $cookie_str = '') {
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
@@ -2070,6 +2075,13 @@ class soap_transport_http extends nusoap_base {
 			$this->outgoing_payload .= "$hdr\r\n";
 		}
 
+		// add any cookies
+		if ($cookie_str != '') {
+			$hdr = 'Cookie: '.$cookie_str;
+			$this->debug("HTTP header: $hdr");
+			$this->outgoing_payload .= "$hdr\r\n";
+		}
+
 		// header/body separator
 		$this->outgoing_payload .= "\r\n";
 		
@@ -2077,9 +2089,12 @@ class soap_transport_http extends nusoap_base {
 		$this->outgoing_payload .= $data;
 	}
 
-	function sendRequest($data){
+	function sendRequest($data, $cookies = NULL) {
+		// build cookie string
+		$cookie_str = $this->getCookiesForRequest($cookies, (($this->scheme == 'ssl') || ($this->scheme == 'https')));
+
 		// build payload
-		$this->buildPayload($data);
+		$this->buildPayload($data, $cookie_str);
 
 	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// send payload
@@ -2098,6 +2113,9 @@ class soap_transport_http extends nusoap_base {
 		//curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
 		foreach($this->outgoing_headers as $k => $v){
 			$curl_headers[] = "$k: $v";
+		}
+		if ($cookie_str != '') {
+			$curl_headers[] = 'Cookie: ' . $cookie_str;
 		}
 		curl_setopt($this->ch, CURLOPT_HTTPHEADER, $curl_headers);
 		if ($this->request_method == "POST") {
@@ -2162,12 +2180,24 @@ class soap_transport_http extends nusoap_base {
 		$header_data = trim(substr($data,0,$pos));
 		$header_array = explode($lb,$header_data);
 		$this->incoming_headers = array();
+		$this->incoming_cookies = array();
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line, 2);
 			if(count($arr) > 1){
 				$header_name = strtolower(trim($arr[0]));
 				$this->incoming_headers[$header_name] = trim($arr[1]);
+				if ($header_name == 'set-cookie') {
+					// TODO: allow multiple cookies from parseCookie
+					$cookie = $this->parseCookie(trim($arr[1]));
+					if ($cookie) {
+						$this->incoming_cookies[] = $cookie;
+						$this->debug('found cookie: ' . $cookie['name'] . ' = ' . $cookie['value']);
+					} else {
+						$this->debug('did not find cookie in ' . trim($arr[1]));
+					}
+    			}
 			} else if (isset($header_name)) {
+				// append continuation line to previous header
 				$this->incoming_headers[$header_name] .= $lb . ' ' . $header_line;
 			}
 		}
@@ -2316,8 +2346,22 @@ class soap_transport_http extends nusoap_base {
 		// clean headers
 		foreach ($header_array as $header_line) {
 			$arr = explode(':',$header_line,2);
-			if (count($arr) > 1) {
-				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			if(count($arr) > 1){
+				$header_name = strtolower(trim($arr[0]));
+				$this->incoming_headers[$header_name] = trim($arr[1]);
+				if ($header_name == 'set-cookie') {
+					// TODO: allow multiple cookies from parseCookie
+					$cookie = $this->parseCookie(trim($arr[1]));
+					if ($cookie) {
+						$this->incoming_cookies[] = $cookie;
+						$this->debug('found cookie: ' . $cookie['name'] . ' = ' . $cookie['value']);
+					} else {
+						$this->debug('did not find cookie in ' . trim($arr[1]));
+					}
+    			}
+			} else if (isset($header_name)) {
+				// append continuation line to previous header
+				$this->incoming_headers[$header_name] .= $lb . ' ' . $header_line;
 			}
 		}
 	  }
@@ -2452,6 +2496,118 @@ class soap_transport_http extends nusoap_base {
 		$this->outgoing_headers['Connection'] = 'Keep-Alive';
 		return true;
 	}
+
+	/**
+	 * parse an incoming Cookie into it's parts
+	 *
+	 * @param	string $cookie_str content of cookie
+	 * @return	array with data of that cookie
+	 * @access	private
+	 *
+	 * TODO: allow a Set-Cookie string to be parsed into multiple cookies
+	 */
+	function parseCookie($cookie_str) {
+		$cookie_str = str_replace('; ', ';', $cookie_str) . ';';
+		$data = split(';', $cookie_str);
+		$value_str = $data[0];
+
+		$cookie_param = 'domain=';
+		$start = strpos($cookie_str, $cookie_param);
+		if ($start > 0) {
+			$domain = substr($cookie_str, $start + strlen($cookie_param));
+			$domain = substr($domain, 0, strpos($domain, ';'));
+		} else {
+			$domain = '';
+		}
+
+		$cookie_param = 'expires=';
+		$start = strpos($cookie_str, $cookie_param);
+		if ($start > 0) {
+			$expires = substr($cookie_str, $start + strlen($cookie_param));
+			$expires = substr($expires, 0, strpos($expires, ';'));
+		} else {
+			$expires = '';
+		}
+
+		$cookie_param = 'path=';
+		$start = strpos($cookie_str, $cookie_param);
+		if ( $start > 0 ) {
+			$path = substr($cookie_str, $start + strlen($cookie_param));
+			$path = substr($path, 0, strpos($path, ';'));
+		} else {
+			$path = '/';
+		}
+						
+		$cookie_param = ';secure;';
+		if (strpos($cookie_str, $cookie_param) !== FALSE) {
+			$secure = true;
+		} else {
+			$secure = false;
+		}
+
+		$sep_pos = strpos($value_str, '=');
+
+		if ($sep_pos) {
+			$name = substr($value_str, 0, $sep_pos);
+			$value = substr($value_str, $sep_pos + 1);
+			$cookie= array(	'name' => $name,
+			                'value' => $value,
+							'domain' => $domain,
+							'path' => $path,
+							'expires' => $expires,
+							'secure' => $secure
+							);		
+			return $cookie;
+		}
+		return false;
+	}
+  
+	/**
+	 * sort out cookies for the current request
+	 *
+	 * @param	array $cookies array with all cookies
+	 * @param	boolean $secure is the send-content secure or not?
+	 * @return	string for Cookie-HTTP-Header
+	 * @access	private
+	 */
+	function getCookiesForRequest($cookies, $secure=false) {
+		$cookie_str = '';
+		if ((! is_null($cookies)) && (is_array($cookies))) {
+			foreach ($cookies as $cookie) {
+				if (! is_array($cookie)) {
+					continue;
+				}
+	    		$this->debug("check cookie for validity: ".$cookie['name'].'='.$cookie['value']);
+				if ((isset($cookie['expires'])) && (! empty($cookie['expires']))) {
+					if (strtotime($cookie['expires']) <= time()) {
+						$this->debug('cookie has expired');
+						continue;
+					}
+				}
+				if ((isset($cookie['domain'])) && (! empty($cookie['domain']))) {
+					$domain = preg_quote($cookie['domain']);
+					if (! preg_match("'.*$domain$'i", $this->host)) {
+						$this->debug('cookie has different domain');
+						continue;
+					}
+				}
+				if ((isset($cookie['path'])) && (! empty($cookie['path']))) {
+					$path = preg_quote($cookie['path']);
+					if (! preg_match("'^$path.*'i", $this->path)) {
+						$this->debug('cookie is for a different path');
+						continue;
+					}
+				}
+				if ((! $secure) && (isset($cookie['secure'])) && ($cookie['secure'])) {
+					$this->debug('cookie is secure, transport is not');
+					continue;
+				}
+				$cookie_str .= $cookie['name'] . '=' . $cookie['value'] . '; ';
+	    		$this->debug('add cookie to Cookie-String: ' . $cookie['name'] . '=' . $cookie['value']);
+			}
+		}
+		return $cookie_str;
+  }
 }
 
 ?><?php
@@ -2740,11 +2896,11 @@ class soap_server extends nusoap_base {
 					} elseif ($this->headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))) {
 						$data = $degzdata;
 					} else {
-						$this->fault('Server', 'Errors occurred when trying to decode the data');
+						$this->fault('Client', 'Errors occurred when trying to decode the data');
 						return;
 					}
 				} else {
-					$this->fault('Server', 'This Server does not support compressed data');
+					$this->fault('Client', 'This Server does not support compressed data');
 					return;
 				}
 			}
@@ -2758,7 +2914,7 @@ class soap_server extends nusoap_base {
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
 			$this->result = 'fault: error in msg parsing: '.$err;
-			$this->fault('Server',"error in msg parsing:\n".$err);
+			$this->fault('Client',"error in msg parsing:\n".$err);
 		// else successfully parsed request into soapval object
 		} else {
 			// get/set methodname
@@ -2819,20 +2975,20 @@ class soap_server extends nusoap_base {
 		if ($class == '' && !function_exists($this->methodname)) {
 			$this->debug("function '$this->methodname' not found!");
 			$this->result = 'fault: method not found';
-			$this->fault('Server',"method '$this->methodname' not defined in service");
+			$this->fault('Client',"method '$this->methodname' not defined in service");
 			return;
 		}
 		if ($class != '' && !in_array($method, get_class_methods($class))) {
 			$this->debug("method '$this->methodname' not found in class '$class'!");
 			$this->result = 'fault: method not found';
-			$this->fault('Server',"method '$this->methodname' not defined in service");
+			$this->fault('Client',"method '$this->methodname' not defined in service");
 			return;
 		}
 
 		if($this->wsdl){
 			if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
 			//if(
-				$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
+				$this->fault('Client',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
 			}
 			$this->debug('opData:');
@@ -2846,7 +3002,7 @@ class soap_server extends nusoap_base {
 			$this->debug('ERROR: request not verified against method signature');
 			$this->result = 'fault: request failed validation against method signature';
 			// return fault
-			$this->fault('Server',"Operation '$this->methodname' not defined in service.");
+			$this->fault('Client',"Operation '$this->methodname' not defined in service.");
 			return;
 		}
 
@@ -2873,7 +3029,7 @@ class soap_server extends nusoap_base {
 			if ($this->methodparams) {
 				foreach ($this->methodparams as $param) {
 					if (is_array($param)) {
-						$this->fault('Server', 'NuSOAP does not handle complexType parameters correctly when using eval; call_user_func_array must be available');
+						$this->fault('Client', 'NuSOAP does not handle complexType parameters correctly when using eval; call_user_func_array must be available');
 						return;
 					}
 					$funcCall .= "\"$param\",";
@@ -2941,7 +3097,7 @@ class soap_server extends nusoap_base {
 				    $this->wsdl->clearDebug();
 					if($errstr = $this->wsdl->getError()){
 						$this->debug('got wsdl error: '.$errstr);
-						$this->fault('Server', 'got wsdl error: '.$errstr);
+						$this->fault('Server', 'unable to serialize result');
 						return;
 					}
 				} else {
@@ -5256,8 +5412,8 @@ class soapclient extends nusoap_base  {
 	var $request = '';				// HTTP request
 	var $response = '';				// HTTP response
 	var $responseData = '';			// SOAP payload of response
-	// toggles whether the parser decodes element content w/ utf8_decode()
-    var $decode_utf8 = true;
+	var $cookies = array();			// Cookies from response or for request
+    var $decode_utf8 = true;		// toggles whether the parser decodes element content w/ utf8_decode()
 	var $operations = array();		// WSDL operations, empty for WSDL initialization error
 	
 	/**
@@ -5532,6 +5688,7 @@ class soapclient extends nusoap_base  {
 	* @access   private
 	*/
 	function send($msg, $soapaction = '', $timeout=0, $response_timeout=30) {
+		$this->checkCookies();
 		// detect transport
 		switch(true){
 			// http(s)
@@ -5559,7 +5716,7 @@ class soapclient extends nusoap_base  {
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
-					$this->responseData = $http->send($msg,$timeout,$response_timeout);
+					$this->responseData = $http->send($msg,$timeout,$response_timeout,$this->cookies);
 				} elseif(ereg('^https',$this->endpoint)){
 				//} elseif(strpos($this->endpoint,'https:')){
 					//if(phpversion() == '4.3.0-dev'){
@@ -5567,13 +5724,14 @@ class soapclient extends nusoap_base  {
                    		//$this->request = $http->outgoing_payload;
 						//$this->response = $http->incoming_payload;
 					//} else
-					$this->responseData = $http->sendHTTPS($msg,$timeout,$response_timeout);
+					$this->responseData = $http->sendHTTPS($msg,$timeout,$response_timeout,$this->cookies);
 				} else {
 					$this->setError('no http/s in endpoint url');
 				}
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
 				$this->appendDebug($http->getDebug());
+				$this->UpdateCookies($http->incoming_cookies);
 
 				// save transport object if using persistent connections
 				if ($this->persistentConnection) {
@@ -5857,5 +6015,128 @@ class soapclient extends nusoap_base  {
 		$this->decode_utf8 = $bool;
 		return true;
     }
+
+	/**
+	 * adds a new Cookie into $this->cookies array
+	 *
+	 * @param	string $name Cookie Name
+	 * @param	string $value Cookie Value
+	 * @return	if cookie-set was successful returns true, else false
+	 * @access	public
+	 */
+	function setCookie($name, $value) {
+		if (strlen($name) == 0) {
+			return false;
+		}
+		$this->cookies[] = array('name' => $name, 'value' => $value);
+		return true;
+	}
+
+	/**
+	 * gets all Cookies
+	 *
+	 * @return   array with all internal cookies
+	 * @access   public
+	 */
+	function getCookies() {
+		return $this->cookies;
+	}
+
+	/**
+	 * checks all Cookies and delete those which are expired
+	 *
+	 * @return   always return true
+	 * @access   public
+	 */
+	function checkCookies() {
+		if (sizeof($this->cookies) == 0) {
+			return true;
+		}
+		$this->debug('checkCookie: check ' . sizeof($this->cookies) . ' cookies');
+		$curr_cookies = $this->cookies;
+		$this->cookies = array();
+		foreach ($curr_cookies as $cookie) {
+			if (! is_array($cookie)) {
+				$this->debug('Remove cookie that is not an array');
+				continue;
+			}
+			if ((isset($cookie['expires'])) && (! empty($cookie['expires']))) {
+				if (strtotime($cookie['expires']) > time()) {
+					$this->cookies[] = $cookie;
+				} else {
+					$this->debug('Remove expired cookie ' . $cookie['name']);
+				}
+			} else {
+				$this->cookies[] = $cookie;
+			}
+		}
+		$this->debug('checkCookie: '.sizeof($this->cookies).' cookies left in array');
+		return true;
+	}
+
+	/**
+	 * updates the current cookies with a new set
+	 *
+	 * @param	array $cookies new cookies with which to update current ones
+	 * @return	always return true
+	 * @access	public
+	 */
+	function UpdateCookies($cookies) {
+		if (sizeof($this->cookies) == 0) {
+			// no existing cookies: take whatever is new
+			if (sizeof($cookies) > 0) {
+				$this->debug('Setting new cookie(s)');
+				$this->cookies = $cookies;
+			}
+			return true;
+		}
+		if (sizeof($cookies) == 0) {
+			// no new cookies: keep what we've got
+			return true;
+		}
+		// merge
+		foreach ($cookies as $newCookie) {
+			if (!is_array($newCookie)) {
+				continue;
+			}
+			if ((!isset($newCookie['name'])) || (!isset($newCookie['value']))) {
+				continue;
+			}
+			$newName = $newCookie['name'];
+
+			$found = false;
+			for ($i = 0; $i < count($this->cookies); $i++) {
+				$cookie = $this->cookies[$i];
+				if (!is_array($cookie)) {
+					continue;
+				}
+				if (!isset($cookie['name'])) {
+					continue;
+				}
+				if ($newName != $cookie['name']) {
+					continue;
+				}
+				$newDomain = isset($newCookie['domain']) ? $newCookie['domain'] : 'NODOMAIN';
+				$domain = isset($cookie['domain']) ? $cookie['domain'] : 'NODOMAIN';
+				if ($newDomain != $domain) {
+					continue;
+				}
+				$newPath = isset($newCookie['path']) ? $newCookie['path'] : 'NOPATH';
+				$path = isset($cookie['path']) ? $cookie['path'] : 'NOPATH';
+				if ($newPath != $path) {
+					continue;
+				}
+				$this->cookies[$i] = $newCookie;
+				$found = true;
+				$this->debug('Update cookie ' . $newName . '=' . $newCookie['value']);
+				break;
+			}
+			if (! $found) {
+				$this->debug('Add cookie ' . $newName . '=' . $newCookie['value']);
+				$this->cookies[] = $newCookie;
+			}
+		}
+		return true;
+	}
 }
 ?>
