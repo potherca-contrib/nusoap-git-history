@@ -262,18 +262,34 @@ class soap_parser extends nusoap_base {
 				// get id
 				$id = substr($this->message[$pos]['attrs']['href'],1);
 				// add placeholder to href array
-				$this->multirefs[$id][$pos] = "placeholder";
+				$this->multirefs[$id][$pos] = 'placeholder';
 				// add set a reference to it as the result value
 				$this->message[$pos]['result'] =& $this->multirefs[$id][$pos];
             // build complex values
-			} elseif($this->message[$pos]['children'] != ""){
-				$this->message[$pos]['result'] = $this->buildVal($pos);
+			} elseif($this->message[$pos]['children'] != ''){
+			
+				// if result has already been generated (struct/array
+				if(!isset($this->message[$pos]['result'])){
+					$this->message[$pos]['result'] = $this->buildVal($pos);
+				}
+				
+			// set value of simple type
 			} else {
-            	$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
+            	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
 				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
+				
+				// add value to parent's result, if parent is struct/array
+				$parent = $this->message[$pos]['parent'];
+				if($this->message[$parent]['type'] != 'map'){
+					if(strtolower($this->message[$parent]['type']) == 'array'){
+						$this->message[$parent]['result'][] = $this->message[$pos]['result'];
+					} else {
+						$this->message[$parent]['result'][$this->message[$pos]['name']] = $this->message[$pos]['result'];
+					}
+				}
 			}
 		}
-
+		
 		// switch status
 		if($pos == $this->root_struct){
 			$this->status = 'body';

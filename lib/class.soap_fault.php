@@ -43,7 +43,7 @@ class soap_fault extends nusoap_base {
 			$ns_string .= "\n  xmlns:$k=\"$v\"";
 		}
 		$return_msg =
-			'<?xml version="1.0"?'.">\n".
+			'<?xml version="1.0" encoding="'.$this->soap_defencoding.'"?>'.
 			'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">\n".
 				'<SOAP-ENV:Body>'.
 				'<SOAP-ENV:Fault>'.

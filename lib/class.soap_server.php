@@ -156,14 +156,14 @@ class soap_server extends nusoap_base {
 					$this->xml_encoding = 'us-ascii';
 				}
 			}
-			$this->debug('got encoding: '.$this->charset_encoding);
+			$this->debug('got encoding: '.$this->xml_encoding);
 		} elseif(is_array($_SERVER)){
 			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
 			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? $_SERVER['SOAPAction'] : '';
 		}
 		$this->request = $dump."\r\n\r\n".$data;
 		// parse response, get soap parser obj
-		$parser = new soap_parser($data,$this->charset_encoding);
+		$parser = new soap_parser($data,$this->xml_encoding);
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
 			// parser debug

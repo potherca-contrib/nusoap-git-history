@@ -4,3 +4,8 @@
 - fixed null value serialization
 - applied patch from "BZC ToOn'S" - fixes wsdl serialization when no parameters
 - applied John's patch, implementing compression for the server
+
+2003-07-22, version 0.6.5
+- soap_server: fixed bug causing charset encoding not to be passed to the parser
+- soap_fault: added default encoding to the fault serialization
+- soap_parser: changed the parser to pre-load the parent's result array when processing scalar values. This increases parsing speed.

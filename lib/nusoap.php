@@ -561,7 +561,7 @@ class soap_fault extends nusoap_base {
 			$ns_string .= "\n  xmlns:$k=\"$v\"";
 		}
 		$return_msg =
-			'<?xml version="1.0"?'.">\n".
+			'<?xml version="1.0" encoding="'.$this->soap_defencoding.'"?>'.
 			'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">\n".
 				'<SOAP-ENV:Body>'.
 				'<SOAP-ENV:Fault>'.
@@ -2002,14 +2002,14 @@ class soap_server extends nusoap_base {
 					$this->xml_encoding = 'us-ascii';
 				}
 			}
-			$this->debug('got encoding: '.$this->charset_encoding);
+			$this->debug('got encoding: '.$this->xml_encoding);
 		} elseif(is_array($_SERVER)){
 			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
 			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? $_SERVER['SOAPAction'] : '';
 		}
 		$this->request = $dump."\r\n\r\n".$data;
 		// parse response, get soap parser obj
-		$parser = new soap_parser($data,$this->charset_encoding);
+		$parser = new soap_parser($data,$this->xml_encoding);
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
 			// parser debug
@@ -3538,18 +3538,34 @@ class soap_parser extends nusoap_base {
 				// get id
 				$id = substr($this->message[$pos]['attrs']['href'],1);
 				// add placeholder to href array
-				$this->multirefs[$id][$pos] = "placeholder";
+				$this->multirefs[$id][$pos] = 'placeholder';
 				// add set a reference to it as the result value
 				$this->message[$pos]['result'] =& $this->multirefs[$id][$pos];
             // build complex values
-			} elseif($this->message[$pos]['children'] != ""){
-				$this->message[$pos]['result'] = $this->buildVal($pos);
+			} elseif($this->message[$pos]['children'] != ''){
+			
+				// if result has already been generated (struct/array
+				if(!isset($this->message[$pos]['result'])){
+					$this->message[$pos]['result'] = $this->buildVal($pos);
+				}
+				
+			// set value of simple type
 			} else {
-            	$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
+            	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
 				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
+				
+				// add value to parent's result, if parent is struct/array
+				$parent = $this->message[$pos]['parent'];
+				if($this->message[$parent]['type'] != 'map'){
+					if(strtolower($this->message[$parent]['type']) == 'array'){
+						$this->message[$parent]['result'][] = $this->message[$pos]['result'];
+					} else {
+						$this->message[$parent]['result'][$this->message[$pos]['name']] = $this->message[$pos]['result'];
+					}
+				}
 			}
 		}
-
+		
 		// switch status
 		if($pos == $this->root_struct){
 			$this->status = 'body';
