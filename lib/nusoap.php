@@ -1438,6 +1438,7 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->simpleTypes[$type]['type'], 0, strrpos($this->simpleTypes[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
+					$this->xdebug("in getTypeDef, found type $etype for simpleType $type");
 					if (isset($etype['phpType'])) {
 						$this->simpleTypes[$type]['phpType'] = $etype['phpType'];
 					}
@@ -1455,6 +1456,7 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->elements[$type]['type'], 0, strrpos($this->elements[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
+					$this->xdebug("in getTypeDef, found type $etype for element $type");
 					if (isset($etype['phpType'])) {
 						$this->elements[$type]['phpType'] = $etype['phpType'];
 					}
@@ -1462,6 +1464,7 @@ class XMLSchema extends nusoap_base  {
 						$this->elements[$type]['elements'] = $etype['elements'];
 					}
 				} elseif ($ns == 'http://www.w3.org/2001/XMLSchema') {
+					$this->xdebug("in getTypeDef, element $type is an XSD type");
 					$this->elements[$type]['phpType'] = 'scalar';
 				}
 			}
@@ -4091,6 +4094,21 @@ class wsdl extends nusoap_base {
 				$this->appendDebug($xs->getDebug());
 				$xs->clearDebug();
 				if ($t) {
+					if (!isset($t['phpType'])) {
+						// get info for type to tack onto the element
+						$uqType = substr($t['type'], strrpos($t['type'], ':') + 1);
+						$ns = substr($t['type'], 0, strrpos($t['type'], ':'));
+						$etype = $this->getTypeDef($uqType, $ns);
+						if ($etype) {
+							$this->debug("found type $etype for [element] $type");
+							if (isset($etype['phpType'])) {
+								$t['phpType'] = $etype['phpType'];
+							}
+							if (isset($etype['elements'])) {
+								$t['elements'] = $etype['elements'];
+							}
+						}
+					}
 					return $t;
 				}
 			}
@@ -5822,9 +5840,8 @@ class soapclient extends nusoap_base  {
 		$this->opData = array();
 		
 		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $style, $use; endpointType: $this->endpointType");
-		if ($headers) {
-			$this->requestHeaders = $headers;
-		}
+		$this->requestHeaders = $headers;
+
 		// serialize parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 			// use WSDL for operation

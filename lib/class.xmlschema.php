@@ -646,6 +646,7 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->simpleTypes[$type]['type'], 0, strrpos($this->simpleTypes[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
+					$this->xdebug("in getTypeDef, found type $etype for simpleType $type");
 					if (isset($etype['phpType'])) {
 						$this->simpleTypes[$type]['phpType'] = $etype['phpType'];
 					}
@@ -663,6 +664,7 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->elements[$type]['type'], 0, strrpos($this->elements[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
+					$this->xdebug("in getTypeDef, found type $etype for element $type");
 					if (isset($etype['phpType'])) {
 						$this->elements[$type]['phpType'] = $etype['phpType'];
 					}
@@ -670,6 +672,7 @@ class XMLSchema extends nusoap_base  {
 						$this->elements[$type]['elements'] = $etype['elements'];
 					}
 				} elseif ($ns == 'http://www.w3.org/2001/XMLSchema') {
+					$this->xdebug("in getTypeDef, element $type is an XSD type");
 					$this->elements[$type]['phpType'] = 'scalar';
 				}
 			}

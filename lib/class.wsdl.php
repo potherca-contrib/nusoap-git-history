@@ -612,6 +612,21 @@ class wsdl extends nusoap_base {
 				$this->appendDebug($xs->getDebug());
 				$xs->clearDebug();
 				if ($t) {
+					if (!isset($t['phpType'])) {
+						// get info for type to tack onto the element
+						$uqType = substr($t['type'], strrpos($t['type'], ':') + 1);
+						$ns = substr($t['type'], 0, strrpos($t['type'], ':'));
+						$etype = $this->getTypeDef($uqType, $ns);
+						if ($etype) {
+							$this->debug("found type $etype for [element] $type");
+							if (isset($etype['phpType'])) {
+								$t['phpType'] = $etype['phpType'];
+							}
+							if (isset($etype['elements'])) {
+								$t['elements'] = $etype['elements'];
+							}
+						}
+					}
 					return $t;
 				}
 			}
