@@ -123,3 +123,12 @@
 - wsdl: handle custom type extending xmlschema namespace (GLUE ... Thanks Matt)
 - soap_parser: add param to docs
 - soapclient: add getHTTPBody, getHTTPContentType, getHTTPContentTypeCharset (anticipating MIME subclass)
+
+2003-10-28, version 0.6.6
+- nusoap_base: add expandEntities method
+- wsdl: use expandEntities
+- soap_fault: use expandEntities
+- soap_transport_http: Allow credentials to be included in URL, rather than requiring setCredentials
+- soap_transport_http: Merge HTTP headers that span multiple lines
+- soap_parser: Properly set errors in ctor
+- soapclient: Pass headers to parseResponse and parse them in that method

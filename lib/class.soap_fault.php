@@ -2,6 +2,7 @@
 
 
 
+
 /**
 * soap_fault class, allows for creation of faults
 * mainly used for returning faults from deployed functions
@@ -47,9 +48,9 @@ class soap_fault extends nusoap_base {
 			'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">\n".
 				'<SOAP-ENV:Body>'.
 				'<SOAP-ENV:Fault>'.
-					'<faultcode>'.$this->faultcode.'</faultcode>'.
-					'<faultactor>'.$this->faultactor.'</faultactor>'.
-					'<faultstring>'.$this->faultstring.'</faultstring>'.
+					'<faultcode>'.$this->expandEntities($this->faultcode).'</faultcode>'.
+					'<faultactor>'.$this->expandEntities($this->faultactor).'</faultactor>'.
+					'<faultstring>'.$this->expandEntities($this->faultstring).'</faultstring>'.
 					'<detail>'.$this->serialize_val($this->faultdetail).'</detail>'.
 				'</SOAP-ENV:Fault>'.
 				'</SOAP-ENV:Body>'.
@@ -57,6 +58,7 @@ class soap_fault extends nusoap_base {
 		return $return_msg;
 	}
 }
+
 
 
 

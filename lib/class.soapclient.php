@@ -26,8 +26,8 @@ class soapclient extends nusoap_base  {
 
 	var $username = '';
 	var $password = '';
-	var $requestHeaders = false;
-	var $responseHeaders;
+	var $requestHeaders = false;	// SOAP headers
+	var $responseHeaders;			// SOAP headers
 	var $endpoint;
 	var $error_str = false;
     var $proxyhost = '';
@@ -331,20 +331,8 @@ class soapclient extends nusoap_base  {
 				} elseif($this->getError()){
 					return false;
 				} else {
-					if(strpos($http->incoming_headers['content-type'],'=')){
-						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
-						$this->debug('got response encoding: '.$enc);
-						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-							$this->xml_encoding = strtoupper($enc);
-						} else {
-							$this->xml_encoding = 'US-ASCII';
-						}
-					} else {
-						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-						$this->xml_encoding = 'UTF-8';
-					}
-					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
-					return $this->parseResponse($this->responseData);
+					$this->debug('got response, length: '. strlen($this->responseData).' type: '.$http->incoming_headers['content-type']);
+					return $this->parseResponse($http->incoming_headers, $this->responseData);
 				}
 			break;
 			default:
@@ -357,12 +345,30 @@ class soapclient extends nusoap_base  {
 	/**
 	* processes SOAP message returned from server
 	*
-	* @param	string unprocessed response data from server
-	* @return	mixed value of the message, decoded into a PHP type
-	* @access   private
+	* @param	array	$headers	The HTTP headers
+	* @param	string	$data		unprocessed response data from server
+	* @return	mixed	value of the message, decoded into a PHP type
+	* @access   protected
 	*/
-    function parseResponse($data) {
-		$this->debug('Entering parseResponse(), about to create soap_parser instance');
+    function parseResponse($headers, $data) {
+		$this->debug('Entering parseResponse() for data of length ' . strlen($data) . ' and type ' . $headers['content-type']);
+		if (!strstr($headers['content-type'], 'text/xml')) {
+			$this->setError('Response not of type text/xml');
+			return false;
+		}
+		if (strpos($headers['content-type'], '=')) {
+			$enc = str_replace('"', '', substr(strstr($headers["content-type"], '='), 1));
+			$this->debug('Got response encoding: ' . $enc);
+			if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+				$this->xml_encoding = strtoupper($enc);
+			} else {
+				$this->xml_encoding = 'US-ASCII';
+			}
+		} else {
+			// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+			$this->xml_encoding = 'UTF-8';
+		}
+		$this->debug('Use encoding: ' . $this->xml_encoding . ' when creating soap_parser');
 		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
 		// if parse errors
 		if($errstr = $parser->getError()){
@@ -537,6 +543,8 @@ class soapclient extends nusoap_base  {
 	/**
 	* gets the HTTP content type for the current request.
 	*
+	* Note: getHTTPBody must be called before this.
+	*
 	* @return string the HTTP content type for the current request.
 	* @access protected
 	*/
@@ -548,13 +556,15 @@ class soapclient extends nusoap_base  {
 	* gets the HTTP content type charset for the current request.
 	* returns false for non-text content types.
 	*
+	* Note: getHTTPBody must be called before this.
+	*
 	* @return string the HTTP content type charset for the current request.
 	* @access protected
 	*/
 	function getHTTPContentTypeCharset() {
 		return $this->soap_defencoding;
 	}
-	
+
 	/*
 	* whether or not parser should decode utf8 element content
     *
@@ -566,5 +576,4 @@ class soapclient extends nusoap_base  {
 		return true;
     }
 }
-
 ?>

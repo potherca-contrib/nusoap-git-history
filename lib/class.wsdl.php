@@ -783,12 +783,8 @@ class wsdl extends XMLSchema {
 				} elseif ($uqType == 'boolean') {
 					$value = 1;
 				} 
-				if ($this->charencoding && $uqType == 'string' && gettype($value) == 'string') {
-			    	$value = str_replace('&', '&amp;', $value);
-			    	$value = str_replace("'", '&apos;', $value);
-			    	$value = str_replace('"', '&quot;', $value);
-			    	$value = str_replace('<', '&lt;', $value);
-			    	$value = str_replace('>', '&gt;', $value);
+				if ($uqType == 'string' && gettype($value) == 'string') {
+					$value = $this->expandEntities($value);
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?

@@ -32,7 +32,7 @@ http://www.nusphere.com
 
 */
 
-// load classes
+/* load classes
 
 // necessary classes
 require_once('class.soapclient.php');
@@ -48,7 +48,7 @@ require_once('class.xmlschema.php');
 require_once('class.wsdl.php');
 
 // server class
-require_once('class.soap_server.php');//
+require_once('class.soap_server.php');*/
 
 /**
 *
@@ -143,6 +143,23 @@ class nusoap_base {
 	}
 
 	/**
+	* expands entities, e.g. changes '<' to '&lt;'.
+	*
+	* @param	string	$val	The string in which to expand entities.
+	* @access	private
+	*/
+	function expandEntities($val) {
+		if ($this->charencoding) {
+	    	$val = str_replace('&', '&amp;', $val);
+	    	$val = str_replace("'", '&apos;', $val);
+	    	$val = str_replace('"', '&quot;', $val);
+	    	$val = str_replace('<', '&lt;', $val);
+	    	$val = str_replace('>', '&gt;', $val);
+	    }
+	    return $val;
+	}
+
+	/**
 	* returns error string if present
 	*
 	* @return   boolean $string error string
@@ -207,13 +224,7 @@ class nusoap_base {
         	if(is_bool($val) && !$val){
         		$val = 0;
 			} else if (is_string($val)) {
-				if($this->charencoding){
-			    	$val = str_replace('&', '&amp;', $val);
-			    	$val = str_replace("'", '&apos;', $val);
-			    	$val = str_replace('"', '&quot;', $val);
-			    	$val = str_replace('<', '&lt;', $val);
-			    	$val = str_replace('>', '&gt;', $val);
-			    }
+				$val = $this->expandEntities($val);
 			}
 			if ($use == 'literal') {
 	        	return "<$name$xmlns>$val</$name>";
@@ -257,13 +268,7 @@ class nusoap_base {
 				}
 				break;
 			case (is_string($val) || $type == 'string'):
-				if($this->charencoding){
-			    	$val = str_replace('&', '&amp;', $val);
-			    	$val = str_replace("'", '&apos;', $val);
-			    	$val = str_replace('"', '&quot;', $val);
-			    	$val = str_replace('<', '&lt;', $val);
-			    	$val = str_replace('>', '&gt;', $val);
-			    }
+				$val = $this->expandEntities($val);
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";
 				} else {
@@ -538,5 +543,6 @@ function usleepWindows($usec)
 	}
 	while ($timePassed < $usec);
 }
+
 
 ?>

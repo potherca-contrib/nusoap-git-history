@@ -65,6 +65,10 @@ class soap_transport_http extends nusoap_base {
 		} else {
 			$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
 		}
+		
+		if (isset($u['user']) && $u['user'] != '') {
+			$this->setCredentials($u['user'], isset($u['pass']) ? $u['pass'] : '');
+		}
 	}
 	
 	function connect($connection_timeout=0,$response_timeout=30){
@@ -407,7 +411,10 @@ class soap_transport_http extends nusoap_base {
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line, 2);
 			if(count($arr) > 1){
-				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+				$header_name = strtolower(trim($arr[0]));
+				$this->incoming_headers[$header_name] = trim($arr[1]);
+			} else if (isset($header_name)) {
+				$this->incoming_headers[$header_name] .= $lb . ' ' . $header_line;
 			}
 		}
 		

@@ -143,6 +143,23 @@ class nusoap_base {
 	}
 
 	/**
+	* expands entities, e.g. changes '<' to '&lt;'.
+	*
+	* @param	string	$val	The string in which to expand entities.
+	* @access	private
+	*/
+	function expandEntities($val) {
+		if ($this->charencoding) {
+	    	$val = str_replace('&', '&amp;', $val);
+	    	$val = str_replace("'", '&apos;', $val);
+	    	$val = str_replace('"', '&quot;', $val);
+	    	$val = str_replace('<', '&lt;', $val);
+	    	$val = str_replace('>', '&gt;', $val);
+	    }
+	    return $val;
+	}
+
+	/**
 	* returns error string if present
 	*
 	* @return   boolean $string error string
@@ -207,13 +224,7 @@ class nusoap_base {
         	if(is_bool($val) && !$val){
         		$val = 0;
 			} else if (is_string($val)) {
-				if($this->charencoding){
-			    	$val = str_replace('&', '&amp;', $val);
-			    	$val = str_replace("'", '&apos;', $val);
-			    	$val = str_replace('"', '&quot;', $val);
-			    	$val = str_replace('<', '&lt;', $val);
-			    	$val = str_replace('>', '&gt;', $val);
-			    }
+				$val = $this->expandEntities($val);
 			}
 			if ($use == 'literal') {
 	        	return "<$name$xmlns>$val</$name>";
@@ -257,13 +268,7 @@ class nusoap_base {
 				}
 				break;
 			case (is_string($val) || $type == 'string'):
-				if($this->charencoding){
-			    	$val = str_replace('&', '&amp;', $val);
-			    	$val = str_replace("'", '&apos;', $val);
-			    	$val = str_replace('"', '&quot;', $val);
-			    	$val = str_replace('<', '&lt;', $val);
-			    	$val = str_replace('>', '&gt;', $val);
-			    }
+				$val = $this->expandEntities($val);
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";
 				} else {
@@ -588,9 +593,9 @@ class soap_fault extends nusoap_base {
 			'<SOAP-ENV:Envelope SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"'.$ns_string.">\n".
 				'<SOAP-ENV:Body>'.
 				'<SOAP-ENV:Fault>'.
-					'<faultcode>'.$this->faultcode.'</faultcode>'.
-					'<faultactor>'.$this->faultactor.'</faultactor>'.
-					'<faultstring>'.$this->faultstring.'</faultstring>'.
+					'<faultcode>'.$this->expandEntities($this->faultcode).'</faultcode>'.
+					'<faultactor>'.$this->expandEntities($this->faultactor).'</faultactor>'.
+					'<faultstring>'.$this->expandEntities($this->faultstring).'</faultstring>'.
 					'<detail>'.$this->serialize_val($this->faultdetail).'</detail>'.
 				'</SOAP-ENV:Fault>'.
 				'</SOAP-ENV:Body>'.
@@ -1337,7 +1342,6 @@ class soapval extends nusoap_base {
 
 
 
-
 /**
 * transport class for sending/receiving data via HTTP and HTTPS
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
@@ -1399,6 +1403,10 @@ class soap_transport_http extends nusoap_base {
 			$this->outgoing_headers['Host'] = $this->host;
 		} else {
 			$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
+		}
+		
+		if (isset($u['user']) && $u['user'] != '') {
+			$this->setCredentials($u['user'], isset($u['pass']) ? $u['pass'] : '');
 		}
 	}
 	
@@ -1742,7 +1750,10 @@ class soap_transport_http extends nusoap_base {
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line, 2);
 			if(count($arr) > 1){
-				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+				$header_name = strtolower(trim($arr[0]));
+				$this->incoming_headers[$header_name] = trim($arr[1]);
+			} else if (isset($header_name)) {
+				$this->incoming_headers[$header_name] .= $lb . ' ' . $header_line;
 			}
 		}
 		
@@ -1893,9 +1904,7 @@ class soap_transport_http extends nusoap_base {
 	}
 }
 
-
 ?><?php
-
 
 
 
@@ -2547,9 +2556,7 @@ class soap_server extends nusoap_base {
 
 
 
-
 ?><?php
-
 
 
 
@@ -3333,12 +3340,8 @@ class wsdl extends XMLSchema {
 				} elseif ($uqType == 'boolean') {
 					$value = 1;
 				} 
-				if ($this->charencoding && $uqType == 'string' && gettype($value) == 'string') {
-			    	$value = str_replace('&', '&amp;', $value);
-			    	$value = str_replace("'", '&apos;', $value);
-			    	$value = str_replace('"', '&quot;', $value);
-			    	$value = str_replace('<', '&lt;', $value);
-			    	$value = str_replace('>', '&gt;', $value);
+				if ($uqType == 'string' && gettype($value) == 'string') {
+					$value = $this->expandEntities($value);
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?
@@ -3568,9 +3571,7 @@ class wsdl extends XMLSchema {
 		return true;
 	} 
 }
-
 ?><?php
-
 
 
 
@@ -3615,13 +3616,14 @@ class soap_parser extends nusoap_base {
 	var $multirefs = array();
 	// toggle for auto-decoding element content
 	var $decode_utf8 = true;
-	
+
 	/**
 	* constructor
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
 	* @param    string $method
+	* @param    string $decode_utf8 whether to decode UTF-8 to ISO-8859-1
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
@@ -3629,7 +3631,7 @@ class soap_parser extends nusoap_base {
 		$this->xml_encoding = $encoding;
 		$this->method = $method;
 		$this->decode_utf8 = $decode_utf8;
-		
+
 		// Check whether content has been read.
 		if(!empty($xml)){
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
@@ -3652,7 +3654,7 @@ class soap_parser extends nusoap_base {
 			    xml_get_current_line_number($this->parser),
 			    xml_error_string(xml_get_error_code($this->parser)));
 				$this->debug('parse error: '.$err);
-				$this->errstr = $err;
+				$this->setError($err);
 			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
@@ -3676,7 +3678,7 @@ class soap_parser extends nusoap_base {
 			xml_parser_free($this->parser);
 		} else {
 			$this->debug('xml was empty, didn\'t parse!');
-			$this->errstr = 'xml was empty, didn\'t parse!';
+			$this->setError('xml was empty, didn\'t parse!');
 		}
 	}
 
@@ -4082,9 +4084,7 @@ class soap_parser extends nusoap_base {
 
 
 
-
 ?><?php
-
 
 
 
@@ -4111,8 +4111,8 @@ class soapclient extends nusoap_base  {
 
 	var $username = '';
 	var $password = '';
-	var $requestHeaders = false;
-	var $responseHeaders;
+	var $requestHeaders = false;	// SOAP headers
+	var $responseHeaders;			// SOAP headers
 	var $endpoint;
 	var $error_str = false;
     var $proxyhost = '';
@@ -4416,20 +4416,8 @@ class soapclient extends nusoap_base  {
 				} elseif($this->getError()){
 					return false;
 				} else {
-					if(strpos($http->incoming_headers['content-type'],'=')){
-						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
-						$this->debug('got response encoding: '.$enc);
-						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-							$this->xml_encoding = strtoupper($enc);
-						} else {
-							$this->xml_encoding = 'US-ASCII';
-						}
-					} else {
-						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-						$this->xml_encoding = 'UTF-8';
-					}
-					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
-					return $this->parseResponse($this->responseData);
+					$this->debug('got response, length: '. strlen($this->responseData).' type: '.$http->incoming_headers['content-type']);
+					return $this->parseResponse($http->incoming_headers, $this->responseData);
 				}
 			break;
 			default:
@@ -4442,12 +4430,30 @@ class soapclient extends nusoap_base  {
 	/**
 	* processes SOAP message returned from server
 	*
-	* @param	string unprocessed response data from server
-	* @return	mixed value of the message, decoded into a PHP type
-	* @access   private
+	* @param	array	$headers	The HTTP headers
+	* @param	string	$data		unprocessed response data from server
+	* @return	mixed	value of the message, decoded into a PHP type
+	* @access   protected
 	*/
-    function parseResponse($data) {
-		$this->debug('Entering parseResponse(), about to create soap_parser instance');
+    function parseResponse($headers, $data) {
+		$this->debug('Entering parseResponse() for data of length ' . strlen($data) . ' and type ' . $headers['content-type']);
+		if (!strstr($headers['content-type'], 'text/xml')) {
+			$this->setError('Response not of type text/xml');
+			return false;
+		}
+		if (strpos($headers['content-type'], '=')) {
+			$enc = str_replace('"', '', substr(strstr($headers["content-type"], '='), 1));
+			$this->debug('Got response encoding: ' . $enc);
+			if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+				$this->xml_encoding = strtoupper($enc);
+			} else {
+				$this->xml_encoding = 'US-ASCII';
+			}
+		} else {
+			// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+			$this->xml_encoding = 'UTF-8';
+		}
+		$this->debug('Use encoding: ' . $this->xml_encoding . ' when creating soap_parser');
 		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
 		// if parse errors
 		if($errstr = $parser->getError()){
@@ -4622,6 +4628,8 @@ class soapclient extends nusoap_base  {
 	/**
 	* gets the HTTP content type for the current request.
 	*
+	* Note: getHTTPBody must be called before this.
+	*
 	* @return string the HTTP content type for the current request.
 	* @access protected
 	*/
@@ -4633,13 +4641,15 @@ class soapclient extends nusoap_base  {
 	* gets the HTTP content type charset for the current request.
 	* returns false for non-text content types.
 	*
+	* Note: getHTTPBody must be called before this.
+	*
 	* @return string the HTTP content type charset for the current request.
 	* @access protected
 	*/
 	function getHTTPContentTypeCharset() {
 		return $this->soap_defencoding;
 	}
-	
+
 	/*
 	* whether or not parser should decode utf8 element content
     *
@@ -4651,5 +4661,4 @@ class soapclient extends nusoap_base  {
 		return true;
     }
 }
-
 ?>

@@ -44,13 +44,14 @@ class soap_parser extends nusoap_base {
 	var $multirefs = array();
 	// toggle for auto-decoding element content
 	var $decode_utf8 = true;
-	
+
 	/**
 	* constructor
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
 	* @param    string $method
+	* @param    string $decode_utf8 whether to decode UTF-8 to ISO-8859-1
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
@@ -58,7 +59,7 @@ class soap_parser extends nusoap_base {
 		$this->xml_encoding = $encoding;
 		$this->method = $method;
 		$this->decode_utf8 = $decode_utf8;
-		
+
 		// Check whether content has been read.
 		if(!empty($xml)){
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
@@ -81,7 +82,7 @@ class soap_parser extends nusoap_base {
 			    xml_get_current_line_number($this->parser),
 			    xml_error_string(xml_get_error_code($this->parser)));
 				$this->debug('parse error: '.$err);
-				$this->errstr = $err;
+				$this->setError($err);
 			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
@@ -105,7 +106,7 @@ class soap_parser extends nusoap_base {
 			xml_parser_free($this->parser);
 		} else {
 			$this->debug('xml was empty, didn\'t parse!');
-			$this->errstr = 'xml was empty, didn\'t parse!';
+			$this->setError('xml was empty, didn\'t parse!');
 		}
 	}
 
