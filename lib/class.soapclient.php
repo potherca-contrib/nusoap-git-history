@@ -161,7 +161,7 @@ class soapclient extends nusoap_base  {
 				// Partial fix for multiple encoding styles in the same function call
 				$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
 				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation";
-				if($encodingStyle != $opData['output']['encodingStyle']) {
+				if(isset($opData['output']['encodingStyle']) && $encodingStyle != $opData['output']['encodingStyle']) {
 					$payload .= (' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"');
 				}										
 				$payload .= ('>' . $this->wsdl->serializeRPCParameters($operation,'input',$params).

@@ -1,6 +1,7 @@
 <?php
 
 /*
+$Id$
 
 NuSOAP - Web Services Toolkit for PHP
 
@@ -3116,7 +3117,7 @@ class wsdl extends XMLSchema {
 
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+		if(($direction == 'input') && isset($opData['output']['encodingStyle']) && ($opData['output']['encodingStyle'] != $encodingStyle)) {
 			$encodingStyle = $opData['output']['encodingStyle'];
 			$enc_style = $encodingStyle;
 		}
@@ -3131,7 +3132,7 @@ class wsdl extends XMLSchema {
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// Track encoding style
-				if ($encodingStyle != $opData[$direction]['encodingStyle']) {
+				if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
 					$encodingStyle = $opData[$direction]['encodingStyle'];			
 					$enc_style = $encodingStyle;
 				} else {
@@ -3182,7 +3183,7 @@ class wsdl extends XMLSchema {
 		
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+		if(($direction == 'input') && isset($opData['output']['encodingStyle']) && ($opData['output']['encodingStyle'] != $encodingStyle)) {
 			$encodingStyle = $opData['output']['encodingStyle'];
 			$enc_style = $encodingStyle;
 		}
@@ -3197,7 +3198,7 @@ class wsdl extends XMLSchema {
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// Track encoding style
-				if($encodingStyle != $opData[$direction]['encodingStyle']) {
+				if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
 					$encodingStyle = $opData[$direction]['encodingStyle'];			
 					$enc_style = $encodingStyle;
 				} else {
@@ -4110,7 +4111,7 @@ class soapclient extends nusoap_base  {
 				// Partial fix for multiple encoding styles in the same function call
 				$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
 				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation";
-				if($encodingStyle != $opData['output']['encodingStyle']) {
+				if(isset($opData['output']['encodingStyle']) && $encodingStyle != $opData['output']['encodingStyle']) {
 					$payload .= (' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"');
 				}										
 				$payload .= ('>' . $this->wsdl->serializeRPCParameters($operation,'input',$params).

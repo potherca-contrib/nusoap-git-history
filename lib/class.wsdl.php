@@ -637,7 +637,7 @@ class wsdl extends XMLSchema {
 
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+		if(($direction == 'input') && isset($opData['output']['encodingStyle']) && ($opData['output']['encodingStyle'] != $encodingStyle)) {
 			$encodingStyle = $opData['output']['encodingStyle'];
 			$enc_style = $encodingStyle;
 		}
@@ -652,7 +652,7 @@ class wsdl extends XMLSchema {
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// Track encoding style
-				if($encodingStyle != $opData[$direction]['encodingStyle']) {
+				if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
 					$encodingStyle = $opData[$direction]['encodingStyle'];			
 					$enc_style = $encodingStyle;
 				} else {
@@ -703,7 +703,7 @@ class wsdl extends XMLSchema {
 		
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+		if(($direction == 'input') && isset($opData['output']['encodingStyle']) && ($opData['output']['encodingStyle'] != $encodingStyle)) {
 			$encodingStyle = $opData['output']['encodingStyle'];
 			$enc_style = $encodingStyle;
 		}
@@ -718,7 +718,7 @@ class wsdl extends XMLSchema {
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 				// Track encoding style
-				if($encodingStyle != $opData[$direction]['encodingStyle']) {
+				if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
 					$encodingStyle = $opData[$direction]['encodingStyle'];			
 					$enc_style = $encodingStyle;
 				} else {

@@ -1,6 +1,7 @@
 <?php
 
 /*
+$Id$
 
 NuSOAP - Web Services Toolkit for PHP
 

@@ -86,3 +86,6 @@
 > instead of your local disk. Local wsdl files should still work (untested).
 >
 > Changes for multiple encoding sytles as previously posted
+
+2003-08-24, version 0.6.5
+- wsdl, soapclient: fix some PHP notices from previous update
