@@ -13,3 +13,4 @@
 2003-07-23, version 0.6.5
 - soap_base: fix code that overwrites user-supplied attributes in serialize_val
 - soap_base: use arrays-of-arrays rather than attempting multi-dimensional in serialize_val
+- xmlschema: emit import statements and qualify all elements with prefix in serializeSchema (better interop with validation tools)

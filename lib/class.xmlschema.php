@@ -337,16 +337,16 @@ class XMLSchema extends nusoap_base  {
 			if(count($attrs['elements']) > 0){
 				foreach($attrs['elements'] as $element => $eParts){
 					if(isset($eParts['ref'])){
-						$contentStr .= "<element ref=\"$element\"/>";
+						$contentStr .= "<$schemaPrefix:element ref=\"$element\"/>";
 					} else {
-						$contentStr .= "<element name=\"$element\" type=\"$eParts[type]\"/>";
+						$contentStr .= "<$schemaPrefix:element name=\"$element\" type=\"$eParts[type]\"/>";
 					}
 				}
 			}
 			// attributes
 			if(count($attrs['attrs']) >= 1){
 				foreach($attrs['attrs'] as $attr => $aParts){
-					$contentStr .= '<attribute ref="'.$aParts['ref'].'"';
+					$contentStr .= '<$schemaPrefix:attribute ref="'.$aParts['ref'].'"';
 					if(isset($aParts['wsdl:arrayType'])){
 						$contentStr .= ' wsdl:arrayType="'.$aParts['wsdl:arrayType'].'"';
 					}
@@ -390,7 +390,7 @@ class XMLSchema extends nusoap_base  {
 			}
 		}
 		// finish 'er up
-		$xml = "<$schemaPrefix:schema xmlns=\"$this->XMLSchemaVersion\" targetNamespace=\"$this->schemaTargetNamespace\">".$xml."</$schemaPrefix:schema>";
+		$xml = "<$schemaPrefix:schema xmlns=\"$this->XMLSchemaVersion\" targetNamespace=\"$this->schemaTargetNamespace\"><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/soap/encoding/\" /><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/wsdl/\" />".$xml."</$schemaPrefix:schema>";
 		return $xml;
 	}
 
