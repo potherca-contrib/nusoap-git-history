@@ -69,3 +69,6 @@
 2003-08-15, version 0.6.5
 - soap_parser: fix parsing of elements with no XSD type specified
 - soap_parser: use PHP string type for XSD long and unsignedLong types
+
+2003-08-16, version 0.6.5
+- soap_parser: fix code generating warning (thanks Torsten)

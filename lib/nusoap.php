@@ -3691,7 +3691,7 @@ class soap_parser extends nusoap_base {
 				} else {
 					$parent = $this->message[$pos]['parent'];
 					if ($this->message[$parent]['type'] == 'array' && isset($this->message[$parent]['arrayType'])) {
-						$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], $this->message[$parent]['arrayTypeNamespace']);
+						$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], isset($this->message[$parent]['arrayTypeNamespace']) ? $this->message[$parent]['arrayTypeNamespace'] : '');
 					} else {
 						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 					}
