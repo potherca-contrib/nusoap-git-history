@@ -119,6 +119,34 @@ class wsdl extends nusoap_base {
 	            } 
 			}
         } 
+        // add new data to operation data
+        foreach($this->bindings as $binding => $bindingData) {
+            if (isset($bindingData['operations']) && is_array($bindingData['operations'])) {
+                foreach($bindingData['operations'] as $operation => $data) {
+                    $this->debug('post-parse data gathering for ' . $operation);
+                    $this->bindings[$binding]['operations'][$operation]['input'] = 
+						isset($this->bindings[$binding]['operations'][$operation]['input']) ? 
+						array_merge($this->bindings[$binding]['operations'][$operation]['input'], $this->portTypes[ $bindingData['portType'] ][$operation]['input']) :
+						$this->portTypes[ $bindingData['portType'] ][$operation]['input'];
+                    $this->bindings[$binding]['operations'][$operation]['output'] = 
+						isset($this->bindings[$binding]['operations'][$operation]['output']) ?
+						array_merge($this->bindings[$binding]['operations'][$operation]['output'], $this->portTypes[ $bindingData['portType'] ][$operation]['output']) :
+						$this->portTypes[ $bindingData['portType'] ][$operation]['output'];
+                    if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ])){
+						$this->bindings[$binding]['operations'][$operation]['input']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ];
+					}
+					if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ])){
+                   		$this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
+                    }
+					if (isset($bindingData['style'])) {
+                        $this->bindings[$binding]['operations'][$operation]['style'] = $bindingData['style'];
+                    }
+                    $this->bindings[$binding]['operations'][$operation]['transport'] = isset($bindingData['transport']) ? $bindingData['transport'] : '';
+                    $this->bindings[$binding]['operations'][$operation]['documentation'] = isset($this->portTypes[ $bindingData['portType'] ][$operation]['documentation']) ? $this->portTypes[ $bindingData['portType'] ][$operation]['documentation'] : '';
+                    $this->bindings[$binding]['operations'][$operation]['endpoint'] = isset($bindingData['endpoint']) ? $bindingData['endpoint'] : '';
+                } 
+            } 
+        }
     }
 
     /**
@@ -156,8 +184,9 @@ class wsdl extends nusoap_base {
 			$this->debug("transport debug data...\n" . $tr->debug_str);
 			// catch errors
 			if($err = $tr->getError() ){
-				$this->debug('HTTP ERROR: '.$err);
-	            $this->setError('HTTP ERROR: '.$err);
+				$errstr = 'HTTP ERROR: '.$err;
+				$this->debug($errstr);
+	            $this->setError($errstr);
 				unset($tr);
 	            return false;
 			}
@@ -172,7 +201,9 @@ class wsdl extends nusoap_base {
                 } 
                 fclose($fp);
             } else {
-                $this->setError('bad path to WSDL file.');
+            	$errstr = "Bad path to WSDL file $wsdl";
+            	$this->debug($errstr);
+                $this->setError($errstr);
                 return false;
             } 
         }
@@ -191,7 +222,8 @@ class wsdl extends nusoap_base {
         if (!xml_parse($this->parser, $wsdl_string, true)) {
             // Display an error message.
             $errstr = sprintf(
-				'XML error on line %d: %s',
+				'XML error in %s on line %d: %s',
+				$wsdl,
                 xml_get_current_line_number($this->parser),
                 xml_error_string(xml_get_error_code($this->parser))
                 );
@@ -205,34 +237,6 @@ class wsdl extends nusoap_base {
 		if($this->getError()){
 			return false;
 		}
-        // add new data to operation data
-        foreach($this->bindings as $binding => $bindingData) {
-            if (isset($bindingData['operations']) && is_array($bindingData['operations'])) {
-                foreach($bindingData['operations'] as $operation => $data) {
-                    $this->debug('post-parse data gathering for ' . $operation);
-                    $this->bindings[$binding]['operations'][$operation]['input'] = 
-						isset($this->bindings[$binding]['operations'][$operation]['input']) ? 
-						array_merge($this->bindings[$binding]['operations'][$operation]['input'], $this->portTypes[ $bindingData['portType'] ][$operation]['input']) :
-						$this->portTypes[ $bindingData['portType'] ][$operation]['input'];
-                    $this->bindings[$binding]['operations'][$operation]['output'] = 
-						isset($this->bindings[$binding]['operations'][$operation]['output']) ?
-						array_merge($this->bindings[$binding]['operations'][$operation]['output'], $this->portTypes[ $bindingData['portType'] ][$operation]['output']) :
-						$this->portTypes[ $bindingData['portType'] ][$operation]['output'];
-                    if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ])){
-						$this->bindings[$binding]['operations'][$operation]['input']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ];
-					}
-					if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ])){
-                   		$this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
-                    }
-					if (isset($bindingData['style'])) {
-                        $this->bindings[$binding]['operations'][$operation]['style'] = $bindingData['style'];
-                    }
-                    $this->bindings[$binding]['operations'][$operation]['transport'] = isset($bindingData['transport']) ? $bindingData['transport'] : '';
-                    $this->bindings[$binding]['operations'][$operation]['documentation'] = isset($this->portTypes[ $bindingData['portType'] ][$operation]['documentation']) ? $this->portTypes[ $bindingData['portType'] ][$operation]['documentation'] : '';
-                    $this->bindings[$binding]['operations'][$operation]['endpoint'] = isset($bindingData['endpoint']) ? $bindingData['endpoint'] : '';
-                } 
-            } 
-        }
         return true;
     } 
 
@@ -248,15 +252,15 @@ class wsdl extends nusoap_base {
     {
         if ($this->status == 'schema') {
             $this->currentSchema->schemaStartElement($parser, $name, $attrs);
-            $this->debug_str .= $this->currentSchema->debug_str;
-            $this->currentSchema->debug_str = '';
+            //$this->debug_str .= $this->currentSchema->debug_str;
+            //$this->currentSchema->debug_str = '';
         } elseif (ereg('schema$', $name)) {
             // $this->debug("startElement for $name ($attrs[name]). status = $this->status (".$this->getLocalPart($name).")");
             $this->status = 'schema';
-            $this->currentSchema = new xmlschema;
+            $this->currentSchema = new xmlschema('', '', $this->namespaces);
             $this->currentSchema->schemaStartElement($parser, $name, $attrs);
-            $this->debug_str .= $this->currentSchema->debug_str;
-            $this->currentSchema->debug_str = '';
+            //$this->debug_str .= $this->currentSchema->debug_str;
+            //$this->currentSchema->debug_str = '';
         } else {
             // position in the total number of elements, starting from 0
             $pos = $this->position++;
@@ -466,7 +470,8 @@ class wsdl extends nusoap_base {
 		} 
 		// end documentation
 		if ($this->documentation) {
-			$this->portTypes[$this->currentPortType][$this->currentPortOperation]['documentation'] = $this->documentation;
+			//TODO: track the node to which documentation should be assigned; it can be a part, message, etc.
+			//$this->portTypes[$this->currentPortType][$this->currentPortOperation]['documentation'] = $this->documentation;
 			$this->documentation = false;
 		} 
 	} 
@@ -513,8 +518,13 @@ class wsdl extends nusoap_base {
 		foreach($this->ports as $port => $portData) {
 			// binding type of port matches parameter
 			if ($portData['bindingType'] == $bindingType) {
+				//$this->debug("getOperations for port $port");
+				//$this->debug("port data: " . $this->varDump($portData));
+				//$this->debug("bindings: " . $this->varDump($this->bindings[ $portData['binding'] ]));
 				// merge bindings
-				$ops = array_merge ($ops, $this->bindings[ $portData['binding'] ]['operations']);
+				if (isset($this->bindings[ $portData['binding'] ]['operations'])) {
+					$ops = array_merge ($ops, $this->bindings[ $portData['binding'] ]['operations']);
+				}
 			}
 		} 
 		return $ops;
@@ -574,8 +584,8 @@ class wsdl extends nusoap_base {
 		if (isset($this->schemas[$ns])) {
 			foreach ($this->schemas[$ns] as $xs) {
 				$t = $xs->getTypeDef($type);
-				$this->debug_str .= $xs->debug_str;
-				$xs->debug_str = '';
+				//$this->debug_str .= $xs->debug_str;
+				//$xs->debug_str = '';
 				if ($t) {
 					return $t;
 				}

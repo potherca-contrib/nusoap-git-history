@@ -152,3 +152,11 @@
 - soap_client: Remove a var_dump
 - soap_client: Add style and use parameters to call method to support doc/lit without WSDL
 - soap_transport_http: Check that $this->fp exists when doing persistent connections
+
+2003-12-17, version 0.6.6
+- soap_server: pass namespaces to xmlschema constructor
+- wsdl: post-process after all imports
+- wsdl: remove some debug, add some error handling
+- xmlschema: allow enclosing namespaces to be specified in constructor
+- xmlschema: improve handling of compositors and simple types
+

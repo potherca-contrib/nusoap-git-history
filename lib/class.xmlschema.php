@@ -19,6 +19,8 @@ class XMLSchema extends nusoap_base  {
 	// files
 	var $schema = '';
 	var $xml = '';
+	// namespaces
+	var $enclosingNamespaces;
 	// schema info
 	var $schemaInfo = array();
 	var $schemaTargetNamespace = '';
@@ -45,14 +47,19 @@ class XMLSchema extends nusoap_base  {
 	*
 	* @param    string $schema schema document URI
 	* @param    string $xml xml document URI
+	* @param	string $namespaces namespaces defined in enclosing XML
 	* @access   public
 	*/
-	function XMLSchema($schema='',$xml=''){
+	function XMLSchema($schema='',$xml='',$namespaces=array()){
 
 		$this->debug('xmlschema class instantiated, inside constructor');
 		// files
 		$this->schema = $schema;
 		$this->xml = $xml;
+
+		// namespaces
+		$this->enclosingNamespaces = $namespaces;
+		$this->namespaces = array_merge($this->namespaces, $namespaces);
 
 		// parse schema file
 		if($schema != ''){
@@ -216,6 +223,7 @@ class XMLSchema extends nusoap_base  {
 			break;
 			case 'attribute':
             	//$this->xdebug("parsing attribute $attrs[name] $attrs[ref] of value: ".$attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']);
+            	$this->xdebug("parsing attribute " . $this->varDump($attrs));
             	if (isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])) {
 					$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
 					if (!strpos($v, ':')) {
@@ -457,7 +465,7 @@ class XMLSchema extends nusoap_base  {
 				$contentStr = "   <$schemaPrefix:restriction base=\"".$this->contractQName($attrs['restrictionBase'])."\">\n".$contentStr."   </$schemaPrefix:restriction>\n";
 			}
 			// compositor obviates complex/simple content
-			if(isset($attrs['compositor'])){
+			if(isset($attrs['compositor']) && ($attrs['compositor'] != '')){
 				$contentStr = "  <$schemaPrefix:$attrs[compositor]>\n".$contentStr."  </$schemaPrefix:$attrs[compositor]>\n";
 			}
 			// complex or simple content
@@ -492,7 +500,7 @@ class XMLSchema extends nusoap_base  {
 		}
 		// finish 'er up
 		$el = "<$schemaPrefix:schema targetNamespace=\"$this->schemaTargetNamespace\"\n";
-		foreach ($this->usedNamespaces as $nsp => $ns) {
+		foreach (array_diff($this->usedNamespaces, $this->enclosingNamespaces) as $nsp => $ns) {
 			$el .= " xmlns:$nsp=\"$ns\"\n";
 		}
 		$xml = $el . ">\n".$xml."</$schemaPrefix:schema>\n";
@@ -554,14 +562,19 @@ class XMLSchema extends nusoap_base  {
 			return $this->complexTypes[$type];
 		} elseif(isset($this->simpleTypes[$type])){
 			$this->xdebug("in getTypeDef, found simpleType $type");
-			if (!isset($this->elements[$type]['phpType'])) {
-				// get info for type to tack onto the element
+			if (!isset($this->simpleTypes[$type]['phpType'])) {
+				// get info for type to tack onto the simple type
+				// TODO: can this ever really apply (i.e. what is a simpleType really?)
 				$uqType = substr($this->simpleTypes[$type]['type'], strrpos($this->simpleTypes[$type]['type'], ':') + 1);
 				$ns = substr($this->simpleTypes[$type]['type'], 0, strrpos($this->simpleTypes[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
-					$this->simpleTypes[$type]['phpType'] = $etype['phpType'];
-					$this->simpleTypes[$type]['elements'] = $etype['elements'];
+					if (isset($etype['phpType'])) {
+						$this->simpleTypes[$type]['phpType'] = $etype['phpType'];
+					}
+					if (isset($etype['elements'])) {
+						$this->simpleTypes[$type]['elements'] = $etype['elements'];
+					}
 				}
 			}
 			return $this->simpleTypes[$type];
@@ -573,8 +586,12 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->elements[$type]['type'], 0, strrpos($this->elements[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
-					$this->elements[$type]['phpType'] = $etype['phpType'];
-					$this->elements[$type]['elements'] = $etype['elements'];
+					if (isset($etype['phpType'])) {
+						$this->elements[$type]['phpType'] = $etype['phpType'];
+					}
+					if (isset($etype['elements'])) {
+						$this->elements[$type]['elements'] = $etype['elements'];
+					}
 				}
 			}
 			return $this->elements[$type];
