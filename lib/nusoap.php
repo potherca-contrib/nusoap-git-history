@@ -1342,6 +1342,9 @@ class soap_transport_http extends nusoap_base {
 	var $url = '';
 	var $uri = '';
 	var $scheme = '';
+	var $host = '';
+	var $port = '';
+	var $path = '';
 	var $request_method = 'POST';
 	var $protocol_version = '1.0';
 	var $encoding = '';
@@ -1367,11 +1370,6 @@ class soap_transport_http extends nusoap_base {
 		// add any GET params to path
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
-		}
-		
-		// alter host if ssl
-		if($u['scheme'] == 'https'){
-			$this->host = 'ssl://'.$this->host;
 		}
 		
 		// set default port
@@ -1472,7 +1470,7 @@ class soap_transport_http extends nusoap_base {
 		$ch = curl_init();
 		//$t->setMarker('got curl handle');
 		// set url
-		$hostURL = ($port != '') ? "https://$host:$port" : "https://$host";
+		$hostURL = ($this->port != '') ? "https://$this->host:$this->port" : "https://$this->host";
 		// add path
 		$hostURL .= $this->path;
 		curl_setopt($ch, CURLOPT_URL, $hostURL);
@@ -1480,9 +1478,9 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
-		if(function_exists('gzuncompress')){
-			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
-		}
+//		if(function_exists('gzuncompress')){
+//			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
+//		}
 		// persistent connection
 		//curl_setopt($ch, CURL_HTTP_VERSION_1_1, true);
 		
@@ -1490,7 +1488,10 @@ class soap_transport_http extends nusoap_base {
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		}
-		
+// some cURL testing
+//curl_setopt($ch, CURLOPT_CAINFO, 'f:\php-4.3.2-win32\extensions\curl-ca-bundle.crt');		
+//curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+//curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
 		// build payload
 		$this->buildPayload($data);
 
@@ -1501,7 +1502,6 @@ class soap_transport_http extends nusoap_base {
 		$this->incoming_payload = curl_exec($ch);
 		//$t->setMarker('executed transfer');
 		$data = $this->incoming_payload;
-
         $cErr = curl_error($ch);
 
 		if($cErr != ''){
@@ -2052,6 +2052,9 @@ class soap_server extends nusoap_base {
 				} else {
 					$this->xml_encoding = 'US-ASCII';
 				}
+			} else {
+				// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+				$this->xml_encoding = 'UTF-8';
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
 			foreach ($_SERVER as $k => $v) {
@@ -2073,6 +2076,9 @@ class soap_server extends nusoap_base {
 							} else {
 								$this->xml_encoding = 'US-ASCII';
 							}
+						} else {
+							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+							$this->xml_encoding = 'UTF-8';
 						}
 					}
 					$this->headers[$k] = $v;
@@ -2100,6 +2106,9 @@ class soap_server extends nusoap_base {
 							} else {
 								$this->xml_encoding = 'US-ASCII';
 							}
+						} else {
+							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+							$this->xml_encoding = 'UTF-8';
 						}
 					}
 					$this->headers[$k] = $v;
@@ -2922,8 +2931,6 @@ class wsdl extends XMLSchema {
 	
 	/**
 	 * returns an assoc array of operation names => operation data
-	 * NOTE: currently only supports multiple services of differing binding types
-	 * This method needs some work
 	 * 
 	 * @param string $bindingType eg: soap, smtp, dime (only soap is currently supported)
 	 * @return array 
@@ -2931,6 +2938,7 @@ class wsdl extends XMLSchema {
 	 */
 	function getOperations($bindingType = 'soap')
 	{
+		$ops = array();
 		if ($bindingType == 'soap') {
 			$bindingType = 'http://schemas.xmlsoap.org/wsdl/soap/';
 		}
@@ -2938,11 +2946,11 @@ class wsdl extends XMLSchema {
 		foreach($this->ports as $port => $portData) {
 			// binding type of port matches parameter
 			if ($portData['bindingType'] == $bindingType) {
-				// get binding
-				return $this->bindings[ $portData['binding'] ]['operations'];
+				// merge bindings
+				$ops = array_merge ($ops, $this->bindings[ $portData['binding'] ]['operations']);
 			}
 		} 
-		return array();
+		return $ops;
 	} 
 	
 	/**
@@ -3507,7 +3515,7 @@ class soap_parser extends nusoap_base {
 		// Check whether content has been read.
 		if(!empty($xml)){
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
-			// Create an XML parser.
+			// Create an XML parser - why not xml_parser_create_ns?
 			$this->parser = xml_parser_create($this->xml_encoding);
 			// Set the options for parsing the XML data.
 			//xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
@@ -4275,8 +4283,12 @@ class soapclient extends nusoap_base  {
 						$this->debug('got response encoding: '.$enc);
 						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
 							$this->xml_encoding = strtoupper($enc);
+						} else {
+							$this->xml_encoding = 'US-ASCII';
 						}
-						// TODO: should we set a default encoding?
+					} else {
+						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+						$this->xml_encoding = 'UTF-8';
 					}
 					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
 					return $this->parseResponse($this->responseData);

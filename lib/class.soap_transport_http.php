@@ -15,6 +15,9 @@ class soap_transport_http extends nusoap_base {
 	var $url = '';
 	var $uri = '';
 	var $scheme = '';
+	var $host = '';
+	var $port = '';
+	var $path = '';
 	var $request_method = 'POST';
 	var $protocol_version = '1.0';
 	var $encoding = '';
@@ -41,12 +44,7 @@ class soap_transport_http extends nusoap_base {
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-		
-		// alter host if ssl
-		if($u['scheme'] == 'https'){
-			$this->host = 'ssl://'.$this->host;
-		}
-		
+
 		// set default port
 		if(!isset($u['port'])){
 			if($u['scheme'] == 'https'){
@@ -153,9 +151,9 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
-		if(function_exists('gzuncompress')){
-			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
-		}
+//		if(function_exists('gzuncompress')){
+//			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
+//		}
 		// persistent connection
 		//curl_setopt($ch, CURL_HTTP_VERSION_1_1, true);
 		
@@ -164,6 +162,10 @@ class soap_transport_http extends nusoap_base {
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		}
 
+// some cURL testing
+//curl_setopt($ch, CURLOPT_CAINFO, 'f:\php-4.3.2-win32\extensions\curl-ca-bundle.crt');		
+//curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+//curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
 		// build payload
 		$this->buildPayload($data);
 

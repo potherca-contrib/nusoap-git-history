@@ -442,8 +442,6 @@ class wsdl extends XMLSchema {
 	
 	/**
 	 * returns an assoc array of operation names => operation data
-	 * NOTE: currently only supports multiple services of differing binding types
-	 * This method needs some work
 	 * 
 	 * @param string $bindingType eg: soap, smtp, dime (only soap is currently supported)
 	 * @return array 
@@ -451,6 +449,7 @@ class wsdl extends XMLSchema {
 	 */
 	function getOperations($bindingType = 'soap')
 	{
+		$ops = array();
 		if ($bindingType == 'soap') {
 			$bindingType = 'http://schemas.xmlsoap.org/wsdl/soap/';
 		}
@@ -458,11 +457,11 @@ class wsdl extends XMLSchema {
 		foreach($this->ports as $port => $portData) {
 			// binding type of port matches parameter
 			if ($portData['bindingType'] == $bindingType) {
-				// get binding
-				return $this->bindings[ $portData['binding'] ]['operations'];
+				// merge bindings
+				$ops = array_merge ($ops, $this->bindings[ $portData['binding'] ]['operations']);
 			}
 		} 
-		return array();
+		return $ops;
 	} 
 	
 	/**

@@ -325,8 +325,12 @@ class soapclient extends nusoap_base  {
 						$this->debug('got response encoding: '.$enc);
 						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
 							$this->xml_encoding = strtoupper($enc);
+						} else {
+							$this->xml_encoding = 'US-ASCII';
 						}
-						// TODO: should we set a default encoding?
+					} else {
+						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+						$this->xml_encoding = 'UTF-8';
 					}
 					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
 					return $this->parseResponse($this->responseData);

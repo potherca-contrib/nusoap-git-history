@@ -195,6 +195,9 @@ class soap_server extends nusoap_base {
 				} else {
 					$this->xml_encoding = 'US-ASCII';
 				}
+			} else {
+				// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+				$this->xml_encoding = 'UTF-8';
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
 			foreach ($_SERVER as $k => $v) {
@@ -216,6 +219,9 @@ class soap_server extends nusoap_base {
 							} else {
 								$this->xml_encoding = 'US-ASCII';
 							}
+						} else {
+							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+							$this->xml_encoding = 'UTF-8';
 						}
 					}
 					$this->headers[$k] = $v;
@@ -243,6 +249,9 @@ class soap_server extends nusoap_base {
 							} else {
 								$this->xml_encoding = 'US-ASCII';
 							}
+						} else {
+							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+							$this->xml_encoding = 'UTF-8';
 						}
 					}
 					$this->headers[$k] = $v;
