@@ -334,3 +334,6 @@
 - soap_server: correctly check for null value returned from method when WSDL is used (without WSDL, cannot distinguish whether NULL or void return is desired)
 - soapclient: for document style, call should always return an array rooted at the response part (all bets are off when there are multiple parts)
 - xmlschema: save enumeration values parsed from WSDL
+
+2005-02-10, version 0.6.9
+- soapclient: only set SOAP headers when they are specified in call params (so setHeaders still works)

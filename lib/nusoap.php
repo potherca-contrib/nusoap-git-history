@@ -61,7 +61,7 @@ require_once('class.soap_server.php');*/
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.8';
+	var $version = '0.6.9';
 	var $revision = '$Revision$';
 	var $error_str = '';
     var $debug_str = '';
@@ -5867,8 +5867,9 @@ class soapclient extends nusoap_base  {
 		$this->opData = array();
 		
 		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $style, $use; endpointType: $this->endpointType");
-		$this->requestHeaders = $headers;
-
+		if ($headers) {
+			$this->requestHeaders = $headers;
+		}
 		// serialize parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 			// use WSDL for operation

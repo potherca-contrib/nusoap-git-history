@@ -61,7 +61,7 @@ require_once('class.soap_server.php');*/
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.8';
+	var $version = '0.6.9';
 	var $revision = '$Revision$';
 	var $error_str = '';
     var $debug_str = '';

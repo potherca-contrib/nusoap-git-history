@@ -153,8 +153,9 @@ class soapclient extends nusoap_base  {
 		$this->opData = array();
 		
 		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $style, $use; endpointType: $this->endpointType");
-		$this->requestHeaders = $headers;
-
+		if ($headers) {
+			$this->requestHeaders = $headers;
+		}
 		// serialize parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 			// use WSDL for operation
