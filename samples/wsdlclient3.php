@@ -21,7 +21,17 @@ if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
 $person = array('firstname' => 'Willi', 'age' => 22, 'gender' => 'male');
-$result = $client->call('hello', array('person' => $person));
+$method = isset($_GET['method']) ? $_GET['method'] : 'function';
+if ($method == 'function') {
+	$call = 'hello';
+} elseif ($method == 'instance') {
+	$call = 'hellowsdl2.hello';
+} elseif ($method == 'class') {
+	$call = 'hellowsdl2..hello';
+} else {
+	$call = 'hello';
+}
+$result = $client->call($call, array('person' => $person));
 // Check for a fault
 if ($client->fault) {
 	echo '<h2>Fault</h2><pre>';
