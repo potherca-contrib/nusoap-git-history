@@ -353,6 +353,9 @@ class soap_parser extends nusoap_base {
 	* @access   private
 	*/
 	function buildVal($pos){
+		if(!isset($this->message[$pos]['type'])){
+			$this->message[$pos]['type'] = '';
+		}
 		$this->debug('inside buildVal() for '.$this->message[$pos]['name']."(pos $pos) of type ".$this->message[$pos]['type']);
 		// if there are children...
 		if($this->message[$pos]['children'] != ''){

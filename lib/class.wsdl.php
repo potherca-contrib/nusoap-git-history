@@ -239,7 +239,7 @@ class wsdl extends XMLSchema {
                 // get ns prefix
                 $prefix = substr($name, 0, strpos($name, ':')); 
                 // get ns
-                $namespace = isset($this->namespaces[$prefix]) ? $this->namespaces[$prefix] : $this->namespaces['tns']; 
+                $namespace = isset($this->namespaces[$prefix]) ? $this->namespaces[$prefix] : ''; 
                 // get unqualified name
                 $name = substr(strstr($name, ':'), 1);
             } 
@@ -670,8 +670,10 @@ class wsdl extends XMLSchema {
 			$uqType = substr($type, strrpos($type, ':') + 1);
 			$ns = substr($type, 0, strrpos($type, ':'));
 			$this->debug("got a prefixed type: $uqType, $ns");
+			
 			if($ns == $this->XMLSchemaVersion ||
-					   ($ns == $this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
+					   ($this->getNamespaceFromPrefix($ns)) == $this->XMLSchemaVersion){
+				
 		    	if ($uqType == 'boolean' && !$value) {
 					$value = 0;
 				} elseif ($uqType == 'boolean') {
@@ -695,7 +697,7 @@ class wsdl extends XMLSchema {
 			//}
 		}
 		$phpType = $typeDef['phpType'];
-		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . $typeDef['arrayType']); 
+		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . (isset($typeDef['arrayType']) ? $typeDef['arrayType'] : '') ); 
 		// if php type == struct, map value to the <all> element names
 		if ($phpType == 'struct') {
 			$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">\n";
@@ -731,12 +733,14 @@ class wsdl extends XMLSchema {
 			if (is_array($value) && sizeof($value) >= 1) {
 				$contents = '';
 				foreach($value as $k => $v) {
+					$this->debug("serializing array element: $k, $v of type: $typeDef[arrayType]");
 					if (strpos($typeDef['arrayType'], ':')) {
 					    $contents .= $this->serializeType('item', $typeDef['arrayType'], $v);
 					} else {
 					    $contents .= $this->serialize_val($v, 'item', $typeDef['arrayType'], null, $this->XMLSchemaVersion);
 					} 
-				} 
+				}
+				$this->debug('contents: '.$this->varDump($contents));
 			}
 			$xml = "<$name xsi:type=\"".$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/').':Array" '.
 				$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/')

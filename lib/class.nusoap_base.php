@@ -61,7 +61,6 @@ require_once('class.soap_server.php');//
 * @version  v 0.6.3
 * @access   public
 */
-
 class nusoap_base {
 
 	var $title = 'NuSOAP';
@@ -275,8 +274,10 @@ class nusoap_base {
 					$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
 				} else {
 					// got a struct
-					if($type && $type_prefix){
+					if(isset($type) && isset($type_prefix)){
 						$type_str = " xsi:type=\"$type_prefix:$type\"";
+					} else {
+						$type_str = '';
 					}
 					$xml .= "<$name$xmlns$type_str$atts>";
 					foreach($val as $k => $v){

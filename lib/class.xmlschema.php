@@ -201,7 +201,11 @@ class XMLSchema extends nusoap_base  {
 				// arrayType attribute
 				if($this->getLocalPart($aname) == 'arrayType'){
                 	$this->complexTypes[$this->currentComplexType]['phpType'] = 'array';
-					$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+					if(isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])){
+						$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+					} else {
+						$v = '';
+					}
                     if(strpos($v,'[,]')){
                         $this->complexTypes[$this->currentComplexType]['multidimensional'] = true;
                     }
@@ -470,7 +474,7 @@ class XMLSchema extends nusoap_base  {
 
 	/**
     * pass it a prefix, it returns a namespace
-    * or false if no prefixes registered for the given namespace
+	* returns false if no namespace registered with the given prefix
     *
     * @param string
     * @return mixed
@@ -485,8 +489,8 @@ class XMLSchema extends nusoap_base  {
 	}
 
 	/**
-    * returns the prefix for a given namespace
-    * returns false if no namespace registered with the given prefix
+    * returns the prefix for a given namespace (or prefix)
+    * or false if no prefixes registered for the given namespace
     *
     * @param string
     * @return mixed
@@ -494,7 +498,7 @@ class XMLSchema extends nusoap_base  {
     */
 	function getPrefixFromNamespace($ns){
 		foreach($this->namespaces as $p => $n){
-			if($ns == $n){
+			if($ns == $n || $ns == $p){
 			    $this->usedNamespaces[$p] = $ns;
 				return $p;
 			}
