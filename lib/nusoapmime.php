@@ -41,26 +41,12 @@ require_once('Mail/mimePart.php');
 * soapclientmime client supporting 
 * <a href="http://www.w3.org/TR/SOAP-attachments">MIME attachments</a>.
 *
-* usage:
-*
-* // instantiate client with server info
-* $soapclient = new soapclientmime( string path [ ,boolean wsdl] );
-*
-* // optionally add attachment(s)
-* $soapclient->addAttachment( string data [ ,string mimetype] );
-*
-* // call method, get results
-* echo $soapclient->call( string methodname [ ,array parameters] );
-*
-* // bye bye client
-* unset($soapclient);
-*
 * @author   Scott Nichol <snichol@sourceforge.net>
 * @author	Thanks to Guillaume and Henning Reich for posting great attachment code to the mail list
 * @version  $Id$
 * @access   public
 */
-class soapclientmime extends soapclient  {
+class soapclientmime extends soapclient {
 	var $requestAttachments = array();
 	var $responseAttachments;
 	var $mimeContentType;

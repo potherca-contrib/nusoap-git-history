@@ -34,7 +34,7 @@ class soapclient extends nusoap_base  {
     var $proxyport = '';
 	var $proxyusername = '';
 	var $proxypassword = '';
-    var $xml_encoding = '';
+    var $xml_encoding = '';			// character set encoding of incoming (response) messages
 	var $http_encoding = false;
 	var $timeout = 0;
 	var $response_timeout = 30;
@@ -61,7 +61,7 @@ class soapclient extends nusoap_base  {
 	/**
 	* constructor
 	*
-	* @param    string $endpoint SOAP server or WSDL URL
+	* @param    mixed $endpoint SOAP server or WSDL URL (string), or wsdl instance (object)
 	* @param    bool $wsdl optional, set to true if using WSDL
 	* @param	int $portName optional portName in WSDL document
 	* @param    string $proxyhost
@@ -84,12 +84,19 @@ class soapclient extends nusoap_base  {
 		// make values
 		if($wsdl){
 			$this->endpointType = 'wsdl';
-			$this->wsdlFile = $this->endpoint;
-			
-			// instantiate wsdl object and parse wsdl file
-			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword,$this->timeout,$this->response_timeout);
-			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			if (is_object($endpoint) && is_a($endpoint, 'wsdl')) {
+				$this->wsdl = $endpoint;
+				$this->endpoint = $this->wsdl->wsdl;
+				$this->wsdlFile = $this->endpoint;
+				$this->debug('existing wsdl instance created from ' . $this->endpoint);
+			} else {
+				$this->wsdlFile = $this->endpoint;
+				
+				// instantiate wsdl object and parse wsdl file
+				$this->debug('instantiating wsdl class with doc: '.$endpoint);
+				$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword,$this->timeout,$this->response_timeout);
+			}
+			$this->debug("wsdl debug...\n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
@@ -174,6 +181,7 @@ class soapclient extends nusoap_base  {
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
 					//$this->debug($this->varDump($params));
 				} else {
+					// TODO: what?  We want to treat $params as a scalar....
 					$this->debug("serializing literal document for operation $operation");
 					//$payload = is_array($params) ? array_shift($params) : $params;
 					$payload = $this->wsdl->serializeParameters($operation,'input',$params);

@@ -298,7 +298,7 @@ class XMLSchema extends nusoap_base  {
 				// not really be added to $this->elements, but for some
 				// reason, they are
 				if(isset($attrs['type'])){
-					$this->xdebug("processing typed element ".$attrs['name']);
+					$this->xdebug("processing typed element ".$attrs['name']." of type ".$attrs['type']);
 					$this->currentElement = $attrs['name'];
 					$this->elements[ $attrs['name'] ] = $attrs;
 					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
@@ -592,6 +592,8 @@ class XMLSchema extends nusoap_base  {
 					if (isset($etype['elements'])) {
 						$this->elements[$type]['elements'] = $etype['elements'];
 					}
+				} elseif ($ns == 'http://www.w3.org/2001/XMLSchema') {
+					$this->elements[$type]['phpType'] = 'scalar';
 				}
 			}
 			return $this->elements[$type];
@@ -677,7 +679,7 @@ class XMLSchema extends nusoap_base  {
 	}
 	
 	/**
-	* adds an XML Schema complex type to the WSDL types
+	* adds a complex type to the schema
 	* 
 	* example: array
 	* 
@@ -729,6 +731,27 @@ class XMLSchema extends nusoap_base  {
 		);
 		
 		$this->xdebug("addComplexType $name: " . $this->varDump($this->complexTypes[$name]));
+	}
+	
+	/**
+	* adds a simple type to the schema
+	*
+	* @param name
+	* @param restrictionBase namespace:name (http://schemas.xmlsoap.org/soap/encoding/:Array)
+	* @param typeClass (simpleType)
+	* @param phpType: (scalar)
+	* @see xmlschema
+	* 
+	*/
+	function addSimpleType($name, $restrictionBase='', $typeClass='simpleType', $phpType='scalar') {
+		$this->simpleTypes[$name] = array(
+	    'name'		=> $name,
+	    'typeClass'	=> $typeClass,
+	    'phpType'	=> $phpType,
+	    'type' => $restrictionBase
+		);
+		
+		$this->xdebug("addSimpleType $name: " . $this->varDump($this->simpleTypes[$name]));
 	}
 }
 

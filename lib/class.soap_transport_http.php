@@ -163,6 +163,15 @@ class soap_transport_http extends nusoap_base {
 //curl_setopt($this->ch, CURLOPT_CAINFO, 'f:\php-4.3.2-win32\extensions\curl-ca-bundle.crt');		
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 0);
+
+		/*
+			TODO: support client certificates (thanks Tobias Boes)
+        curl_setopt($this->ch, CURLOPT_CAINFO, '$pathToPemFiles/rootca.pem');
+        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
+        curl_setopt($this->ch, CURLOPT_SSLCERT, '$pathToPemFiles/mycert.pem');
+        curl_setopt($this->ch, CURLOPT_SSLKEY, '$pathToPemFiles/mykey.pem');
+		*/
 		$this->debug('cURL connection set up');
 		return true;
 	  } else {
@@ -278,24 +287,29 @@ class soap_transport_http extends nusoap_base {
  	* as defined in RFC2068 19.4.6
 	*
 	* @param    string $buffer
+	* @param    string $lb
 	* @returns	string
 	* @access   public
 	*/
-	function decodeChunked($buffer){
+	function decodeChunked($buffer, $lb){
 		// length := 0
 		$length = 0;
 		$new = '';
 		
 		// read chunk-size, chunk-extension (if any) and CRLF
 		// get the position of the linebreak
-		$chunkend = strpos($buffer,"\r\n") + 2;
+		$chunkend = strpos($buffer, $lb);
+		if ($chunkend == FALSE) {
+			$this->debug('no linebreak found in decodeChunked');
+			return $new;
+		}
 		$temp = substr($buffer,0,$chunkend);
 		$chunk_size = hexdec( trim($temp) );
-		$chunkstart = $chunkend;
+		$chunkstart = $chunkend + strlen($lb);
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
 			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
-			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
+			$chunkend = strpos( $buffer, $lb, $chunkstart + $chunk_size);
 		  	
 			// Just in case we got a broken connection
 		  	if ($chunkend == FALSE) {
@@ -313,9 +327,9 @@ class soap_transport_http extends nusoap_base {
 		  	// length := length + chunk-size
 		  	$length += strlen($chunk);
 		  	// read chunk-size and CRLF
-		  	$chunkstart = $chunkend + 2;
+		  	$chunkstart = $chunkend + strlen($lb);
 			
-		  	$chunkend = strpos($buffer,"\r\n",$chunkstart)+2;
+		  	$chunkend = strpos($buffer, $lb, $chunkstart) + strlen($lb);
 			if ($chunkend == FALSE) {
 				break; //Just in case we got a broken connection
 			}
@@ -413,11 +427,10 @@ class soap_transport_http extends nusoap_base {
 		}
 		// store header data
 		$this->incoming_payload .= $data;
+		$this->debug('found end of headers after length ' . strlen($data));
 		// process headers
 		$header_data = trim(substr($data,0,$pos));
 		$header_array = explode($lb,$header_data);
-		$data = substr($data,$pos);
-		$this->debug('cleaned data, stringlen: '.strlen($data));
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line, 2);
 			if(count($arr) > 1){
@@ -429,16 +442,16 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
+		$data = '';
 		$strlen = 0;
 	    while ((isset($this->incoming_headers['content-length'])&&$strlen < $this->incoming_headers['content-length']) || !feof($this->fp)){
 			$tmp = fread($this->fp, 8192);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
 		}
-		
-		$data = trim($data);
+		$this->debug('read body of length ' . strlen($data));
 		$this->incoming_payload .= $data;
-		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
+		$this->debug('received a total of '.strlen($this->incoming_payload).' bytes of data from server');
 		
 		// close filepointer
 		if(
@@ -455,7 +468,6 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		
-		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 	  } else if ($this->scheme == 'https') {
 		// send and receive
 		$this->debug('send and receive with cURL');
@@ -521,7 +533,7 @@ class soap_transport_http extends nusoap_base {
 		
 		// decode transfer-encoding
 		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
-			if(!$data = $this->decodeChunked($data)){
+			if(!$data = $this->decodeChunked($data, $lb)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
 			}

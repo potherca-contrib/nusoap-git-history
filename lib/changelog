@@ -166,3 +166,17 @@
 - soapclient: allow timeout and response timeout to be specified in the constructor
 - wsdl: allow timeout and response timeout to be specified in the constructor
 - soap_transport_http: allow response timeout to be specified in send and sendHTTPS
+
+2004-01-28, version 0.6.6
+- wsdl: add namespace for array and scalar when form is qualified
+- wsdl: fix a bug in which data type of complexType elements were ignored in serialization
+- wsdl: enhance handling of URLs with file scheme
+- wsdl: add addSimpleType
+- xmlschema: add addSimpleType
+- xmlschema: always set phpType elements
+- soapclient: allow a wsdl instance to be specified in constructor
+- soap_server: allow a wsdl instance to be specified in constructor (not tested!)
+- soap_server: fix default SOAPAction created in register method
+- soap_transport_http: accept chunking with LF separators in addition to CRLF.
+- wsdlcache: added class
+- nusoapmime: fix comments

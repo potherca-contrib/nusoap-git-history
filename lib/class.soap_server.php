@@ -16,8 +16,8 @@
 */
 class soap_server extends nusoap_base {
 
-	var $service = ''; // service name
-    var $operations = array(); // assoc array of operations => opData
+	var $service = '';				// service name
+    var $operations = array();		// assoc array of operations => opData
     var $responseHeaders = false;
 	var $headers = '';
 	var $request = '';
@@ -26,12 +26,13 @@ class soap_server extends nusoap_base {
 	var $wsdl = false;
 	var $externalWSDLURL = false;
     var $debug_flag = false;
+    var $xml_encoding = '';			// character set encoding of incoming (request) messages
 	
 	/**
 	* constructor
     * the optional parameter is a path to a WSDL file that you'd like to bind the server instance to.
 	*
-    * @param string $wsdl path or URL to a WSDL file
+    * @param mixed $wsdl file path or URL (string), or wsdl instance (object)
 	* @access   public
 	*/
 	function soap_server($wsdl=false){
@@ -64,8 +65,17 @@ class soap_server extends nusoap_base {
 
 		// wsdl
 		if($wsdl){
-			$this->wsdl = new wsdl($wsdl);
-			$this->externalWSDLURL = $wsdl;
+			if (is_object($wsdl) && is_a($wsdl, 'wsdl')) {
+				$this->wsdl = $wsdl;
+				$this->externalWSDLURL = $this->wsdl->wsdl;
+				$this->debug('Use existing wsdl instance from ' . $this->externalWSDLURL);
+			} else {
+				$this->debug('Create wsdl from ' . $wsdl);
+				$this->wsdl = new wsdl($wsdl);
+				$this->externalWSDLURL = $wsdl;
+			}
+			$this->debug("wsdl...\n" . $this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 			if($err = $this->wsdl->getError()){
 				die('WSDL ERROR: '.$err);
 			}
@@ -474,8 +484,9 @@ class soap_server extends nusoap_base {
 		if(false == $namespace) {
 		}
 		if(false == $soapaction) {
-			global $SERVER_NAME, $SCRIPT_NAME;
-			$soapaction = "http://$SERVER_NAME$SCRIPT_NAME";
+			$SERVER_NAME = isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : $GLOBALS['SERVER_NAME'];
+			$SCRIPT_NAME = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : $GLOBALS['SCRIPT_NAME'];
+			$soapaction = "http://$SERVER_NAME$SCRIPT_NAME/$name";
 		}
 		if(false == $style) {
 			$style = "rpc";
