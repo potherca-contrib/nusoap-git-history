@@ -903,7 +903,22 @@ class wsdl extends nusoap_base {
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
-		
+
+		// if a soap_val has been supplied, let its type override the WSDL
+    	if (is_object($value) && get_class($value) == 'soapval') {
+    		// TODO: get attributes from soapval?
+    		if ($value->type_ns) {
+    			$type = $value->type_ns . ':' . $value->type;
+    		} else {
+	    		$type = $value->type;
+	    	}
+	    	$value = $value->value;
+	    	$forceType = true;
+	    	$this->debug("in serializeType: soapval overrides type to $type, value to $value");
+        } else {
+        	$forceType = false;
+        }
+
 		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -937,7 +952,11 @@ class wsdl extends nusoap_base {
 				// check type isn't a custom type extending xmlschema namespace
 				if (!$this->getTypeDef($uqType, $ns)) {
 					if ($use == 'literal') {
-						return "<$name>$value</$name>";
+						if ($forceType) {
+							return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+						} else {
+							return "<$name>$value</$name>";
+						}
 					} else {
 						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
 					}
@@ -953,7 +972,11 @@ class wsdl extends nusoap_base {
 						$contents .= '</item>';
 					}
 					if ($use == 'literal') {
-						return "<$name>$contents</$name>";
+						if ($forceType) {
+						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\">$contents</$name>";
+						} else {
+							return "<$name>$contents</$name>";
+						}
 					} else {
 						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
 					}
@@ -995,7 +1018,11 @@ class wsdl extends nusoap_base {
 				}
 			}
 			if ($use == 'literal') {
-				$xml = "<$elementName$elementNS>";
+				if ($forceType) {
+					$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
+				} else {
+					$xml = "<$elementName$elementNS>";
+				}
 			} else {
 				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
 			}
@@ -1011,19 +1038,34 @@ class wsdl extends nusoap_base {
 					if(isset($optionals) && !isset($value[$eName])){
 						// do nothing
 					} else {
+						// TODO: if maxOccurs > 1, then allow serialization of an array
 						// get value
 						if (isset($value[$eName])) {
 						    $v = $value[$eName];
 						} else {
 						    $v = null;
 						}
-						// serialize schema-defined type
-						if (isset($attrs['type'])) {
-						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
-						// serialize generic type
+						if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
+							$vv = $v;
+							foreach ($vv as $k => $v) {
+								if (isset($attrs['type'])) {
+									// serialize schema-defined type
+								    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+								} else {
+									// serialize generic type
+								    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+								    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+								}
+							}
 						} else {
-						    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
-						    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+							if (isset($attrs['type'])) {
+								// serialize schema-defined type
+							    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+							} else {
+								// serialize generic type
+							    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+							    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+							}
 						}
 					}
 				} 
@@ -1094,7 +1136,11 @@ class wsdl extends nusoap_base {
 				$elementNS = '';
 			}
 			if ($use == 'literal') {
-				return "<$name$elementNS>$value</$name>";
+				if ($forceType) {
+					return "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">$value</$name>";
+				} else {
+					return "<$name$elementNS>$value</$name>";
+				}
 			} else {
 				return "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>$value</$name>";
 			}

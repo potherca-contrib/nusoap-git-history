@@ -192,7 +192,7 @@
 - wsdlcache: synchronize using a per-WSDL lock file (Thanks Ingo)
 - wsdlcache: add cache lifetime, after which cache contents are invalidated (Thanks Ingo)
 
-2003-03-15, version 0.6.6
+2004-03-15, version 0.6.6
 - nusoap_base: add isArraySimpleOrStruct method
 - soap_server: improve WSDL URL scheme determination
 - soap_server: only deflate/gzip payloads > 1024 bytes
@@ -210,7 +210,12 @@
 - wsdl: standardize parsing error message
 - xmlschema: standardize parsing error message
 
-2003-03-24, version 0.6.7
+2004-03-24, version 0.6.7
 - soap_transport_http: add digest authentication (based on code by Kevin A. Miller)
 - xmlschema: improve parsing of import elements
 - wsdl: do schema imports even if there are no wsdl imports
+
+2004-04-12, version 0.6.7
+- wsdl: serialize multiple elements when maxOccurs="unbounded" and value is an array
+- wsdl: serialize soapval values (used to force an XML type, e.g. when WSDL uses an abstract type)
+- nusoapmime: do not require nusoap.php (it is now the programmer's responsibility)
