@@ -231,6 +231,11 @@ class nusoap_base {
 				$xml .= "<$name$xmlns xsi:type=\"xsd:string\"$atts>$val</$name>";
 				break;
 			case is_object($val):
+				$name = get_class($val);
+				foreach(get_object_vars($val) as $k => $v){
+					$pXml = isset($pXml) ? $pXml.$this->serialize_val($v,$k) : $this->serialize_val($v,$k);
+				}
+				$xml .= '<'.$name.'>'.$pXml.'</'.$name.'>';
 				break;
 			break;
 			case (is_array($val) || $type):
