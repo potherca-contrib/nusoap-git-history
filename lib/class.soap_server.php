@@ -465,45 +465,45 @@ class soap_server extends nusoap_base {
 	*/
 	function serialize_return() {
 		$this->debug('Entering serialize_return methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
-		// if we got nothing back. this might be ok (echoVoid)
-		if(isset($this->methodreturn) && ($this->methodreturn != '' || is_bool($this->methodreturn))) {
-			// if fault
-			if(get_class($this->methodreturn) == 'soap_fault'){
-				$this->debug('got a fault object from method');
-				$this->fault = $this->methodreturn;
-				return;
-			} elseif ($this->methodreturnisliteralxml) {
-				$return_val = $this->methodreturn;
-			// returned value(s)
+		// if fault
+		if (isset($this->methodreturn) && (get_class($this->methodreturn) == 'soap_fault')) {
+			$this->debug('got a fault object from method');
+			$this->fault = $this->methodreturn;
+			return;
+		} elseif ($this->methodreturnisliteralxml) {
+			$return_val = $this->methodreturn;
+		// returned value(s)
+		} else {
+			$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
+			$this->debug('serializing return value');
+			if($this->wsdl){
+				// weak attempt at supporting multiple output params
+				if(sizeof($this->opData['output']['parts']) > 1){
+			    	$opParams = $this->methodreturn;
+			    } else {
+			    	// TODO: is this really necessary?
+			    	$opParams = array($this->methodreturn);
+			    }
+			    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
+			    $this->appendDebug($this->wsdl->getDebug());
+			    $this->wsdl->clearDebug();
+				if($errstr = $this->wsdl->getError()){
+					$this->debug('got wsdl error: '.$errstr);
+					$this->fault('Server', 'unable to serialize result');
+					return;
+				}
 			} else {
-				$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
-				$this->debug('serializing return value');
-				if($this->wsdl){
-					// weak attempt at supporting multiple output params
-					if(sizeof($this->opData['output']['parts']) > 1){
-				    	$opParams = $this->methodreturn;
-				    } else {
-				    	// TODO: is this really necessary?
-				    	$opParams = array($this->methodreturn);
-				    }
-				    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
-				    $this->appendDebug($this->wsdl->getDebug());
-				    $this->wsdl->clearDebug();
-					if($errstr = $this->wsdl->getError()){
-						$this->debug('got wsdl error: '.$errstr);
-						$this->fault('Server', 'unable to serialize result');
-						return;
-					}
+				if (isset($this->methodreturn)) {
+					$return_val = $this->serialize_val($this->methodreturn, 'return');
 				} else {
-				    $return_val = $this->serialize_val($this->methodreturn, 'return');
+					$return_val = '';
+					$this->debug('in absence of WSDL, assume void return for backward compatibility');
 				}
 			}
-			$this->debug('return value:');
-			$this->appendDebug($this->varDump($return_val));
-		} else {
-			$return_val = '';
-			$this->debug('got no response from method');
 		}
+		$this->debug('return value:');
+		$this->appendDebug($this->varDump($return_val));
+
 		$this->debug('serializing response');
 		if ($this->wsdl) {
 			$this->debug('have WSDL for serialization: style is ' . $this->opData['style']);
@@ -698,6 +698,7 @@ class soap_server extends nusoap_base {
 	*/
 	function fault($faultcode,$faultstring,$faultactor='',$faultdetail=''){
 		$this->fault = new soap_fault($faultcode,$faultactor,$faultstring,$faultdetail);
+		$this->fault->soap_defencoding = $this->soap_defencoding;
 	}
 
     /**

@@ -296,6 +296,15 @@ class nusoap_base {
 				$atts .= " $k=\"$v\"";
 			}
 		}
+		// serialize null value
+		if (is_null($val)) {
+			if ($use == 'literal') {
+				// TODO: depends on nillable
+	        	return "<$name$xmlns $atts/>";
+        	} else {
+	        	return "<$name$xmlns $atts xsi:nil=\"true\"/>";
+        	}
+		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
         	if (is_bool($val)) {
@@ -308,22 +317,14 @@ class nusoap_base {
 				$val = $this->expandEntities($val);
 			}
 			if ($use == 'literal') {
-	        	return "<$name$xmlns>$val</$name>";
+	        	return "<$name$xmlns $atts>$val</$name>";
         	} else {
-	        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
+	        	return "<$name$xmlns $atts xsi:type=\"xsd:$type\">$val</$name>";
         	}
         }
 		// detect type and serialize
 		$xml = '';
 		switch(true) {
-			case ($type == '' && is_null($val)):
-				if ($use == 'literal') {
-					// TODO: depends on nillable
-					$xml .= "<$name$xmlns/>";
-				} else {
-					$xml .= "<$name$xmlns xsi:nil=\"true\"/>";
-				}
-				break;
 			case (is_bool($val) || $type == 'boolean'):
         		if ($type == 'boolean') {
 	        		$val = $val ? 'true' : 'false';
@@ -1164,6 +1165,12 @@ class XMLSchema extends nusoap_base  {
 				}
 			break;
 			case 'enumeration':	//	restriction value list member
+				$this->xdebug('enumeration ' . $attrs['value']);
+				if ($this->currentSimpleType) {
+					$this->simpleTypes[$this->currentSimpleType]['enumeration'][] = $attrs['value'];
+				} elseif ($this->currentComplexType) {
+					$this->complexTypes[$this->currentComplexType]['enumeration'][] = $attrs['value'];
+				}
 			break;
 			case 'extension':	// simpleContent or complexContent type extension
 				$this->xdebug('extension ' . $attrs['base']);
@@ -1357,8 +1364,14 @@ class XMLSchema extends nusoap_base  {
 		}
 		// simple types
 		if(isset($this->simpleTypes) && count($this->simpleTypes) > 0){
-			foreach($this->simpleTypes as $typeName => $attr){
-				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <$schemaPrefix:restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n </$schemaPrefix:simpleType>";
+			foreach($this->simpleTypes as $typeName => $eParts){
+				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <$schemaPrefix:restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n";
+				if (isset($eParts['enumeration'])) {
+					foreach ($eParts['enumeration'] as $e) {
+						$xml .= "  <$schemaPrefix:enumeration value=\"$e\"/>\n";
+					}
+				}
+				$xml .= " </$schemaPrefix:simpleType>";
 			}
 		}
 		// elements
@@ -3180,45 +3193,45 @@ class soap_server extends nusoap_base {
 	*/
 	function serialize_return() {
 		$this->debug('Entering serialize_return methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
-		// if we got nothing back. this might be ok (echoVoid)
-		if(isset($this->methodreturn) && ($this->methodreturn != '' || is_bool($this->methodreturn))) {
-			// if fault
-			if(get_class($this->methodreturn) == 'soap_fault'){
-				$this->debug('got a fault object from method');
-				$this->fault = $this->methodreturn;
-				return;
-			} elseif ($this->methodreturnisliteralxml) {
-				$return_val = $this->methodreturn;
-			// returned value(s)
+		// if fault
+		if (isset($this->methodreturn) && (get_class($this->methodreturn) == 'soap_fault')) {
+			$this->debug('got a fault object from method');
+			$this->fault = $this->methodreturn;
+			return;
+		} elseif ($this->methodreturnisliteralxml) {
+			$return_val = $this->methodreturn;
+		// returned value(s)
+		} else {
+			$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
+			$this->debug('serializing return value');
+			if($this->wsdl){
+				// weak attempt at supporting multiple output params
+				if(sizeof($this->opData['output']['parts']) > 1){
+			    	$opParams = $this->methodreturn;
+			    } else {
+			    	// TODO: is this really necessary?
+			    	$opParams = array($this->methodreturn);
+			    }
+			    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
+			    $this->appendDebug($this->wsdl->getDebug());
+			    $this->wsdl->clearDebug();
+				if($errstr = $this->wsdl->getError()){
+					$this->debug('got wsdl error: '.$errstr);
+					$this->fault('Server', 'unable to serialize result');
+					return;
+				}
 			} else {
-				$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
-				$this->debug('serializing return value');
-				if($this->wsdl){
-					// weak attempt at supporting multiple output params
-					if(sizeof($this->opData['output']['parts']) > 1){
-				    	$opParams = $this->methodreturn;
-				    } else {
-				    	// TODO: is this really necessary?
-				    	$opParams = array($this->methodreturn);
-				    }
-				    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
-				    $this->appendDebug($this->wsdl->getDebug());
-				    $this->wsdl->clearDebug();
-					if($errstr = $this->wsdl->getError()){
-						$this->debug('got wsdl error: '.$errstr);
-						$this->fault('Server', 'unable to serialize result');
-						return;
-					}
+				if (isset($this->methodreturn)) {
+					$return_val = $this->serialize_val($this->methodreturn, 'return');
 				} else {
-				    $return_val = $this->serialize_val($this->methodreturn, 'return');
+					$return_val = '';
+					$this->debug('in absence of WSDL, assume void return for backward compatibility');
 				}
 			}
-			$this->debug('return value:');
-			$this->appendDebug($this->varDump($return_val));
-		} else {
-			$return_val = '';
-			$this->debug('got no response from method');
 		}
+		$this->debug('return value:');
+		$this->appendDebug($this->varDump($return_val));
+
 		$this->debug('serializing response');
 		if ($this->wsdl) {
 			$this->debug('have WSDL for serialization: style is ' . $this->opData['style']);
@@ -3413,6 +3426,7 @@ class soap_server extends nusoap_base {
 	*/
 	function fault($faultcode,$faultstring,$faultactor='',$faultdetail=''){
 		$this->fault = new soap_fault($faultcode,$faultactor,$faultstring,$faultdetail);
+		$this->fault->soap_defencoding = $this->soap_defencoding;
 	}
 
     /**
@@ -5371,6 +5385,10 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
+			// specifies nil value (or not)
+			} elseif ($key_localpart == 'nil'){
+				$this->message[$pos]['nil'] = ($value == 'true' || $value == '1');
+			// some other attribute
 			} elseif ($key != 'href' && $key != 'xmlns' && $key_localpart != 'encodingStyle' && $key_localpart != 'root') {
 				$this->message[$pos]['xattrs']['!' . $key] = $value;
 			}
@@ -5437,16 +5455,17 @@ class soap_parser extends nusoap_base {
 				$this->multirefs[$id][$pos] = 'placeholder';
 				// add set a reference to it as the result value
 				$this->message[$pos]['result'] =& $this->multirefs[$id][$pos];
-            // build complex values
+            // build complexType values
 			} elseif($this->message[$pos]['children'] != ''){
-			
 				// if result has already been generated (struct/array)
 				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
 				}
-			// build complex values of attributes and possibly simpleContent
+			// build complexType values of attributes and possibly simpleContent
 			} elseif (isset($this->message[$pos]['xattrs'])) {
-				if (isset($this->message[$pos]['cdata']) && $this->message[$pos]['cdata'] != '') {
+				if (isset($this->message[$pos]['nil']) && $this->message[$pos]['nil']) {
+					$this->message[$pos]['xattrs']['!'] = null;
+				} elseif (isset($this->message[$pos]['cdata']) && $this->message[$pos]['cdata'] != '') {
 	            	if (isset($this->message[$pos]['type'])) {
 						$this->message[$pos]['xattrs']['!'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 					} else {
@@ -5459,10 +5478,12 @@ class soap_parser extends nusoap_base {
 					}
 				}
 				$this->message[$pos]['result'] = $this->message[$pos]['xattrs'];
-			// set value of simple type
+			// set value of simpleType (or nil complexType)
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-            	if (isset($this->message[$pos]['type'])) {
+				if (isset($this->message[$pos]['nil']) && $this->message[$pos]['nil']) {
+					$this->message[$pos]['xattrs']['!'] = null;
+				} elseif (isset($this->message[$pos]['type'])) {
 					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 				} else {
 					$parent = $this->message[$pos]['parent'];
@@ -5956,7 +5977,8 @@ class soapclient extends nusoap_base  {
 			return false;
 		} else {
 			$this->return = $return;
-			$this->debug('sent message successfully and got a(n) '.gettype($return).' back');
+			$this->debug('sent message successfully and got a(n) '.gettype($return).' back: ');
+           	$this->appendDebug($this->varDump($return));
 			
 			// fault?
 			if(is_array($return) && isset($return['faultcode'])){
@@ -5968,15 +5990,23 @@ class soapclient extends nusoap_base  {
 					$this->debug("$k = $v<br>");
 				}
 				return $return;
+			} elseif ($style == 'document') {
+				// NOTE: if the response is defined to have multiple parts (i.e. unwrapped),
+				// we are only going to return the first part here...sorry about that
+				return $return;
 			} else {
 				// array of return values
 				if(is_array($return)){
-					// multiple 'out' parameters
+					// multiple 'out' parameters, which we return wrapped up
+					// in the array
 					if(sizeof($return) > 1){
 						return $return;
 					}
-					// single 'out' parameter
-					return array_shift($return);
+					// single 'out' parameter (normally the return value)
+					$return = array_shift($return);
+					$this->debug('return shifted value: ');
+					$this->appendDebug($this->varDump($return));
+           			return $return;
 				// nothing returned (ie, echoVoid)
 				} else {
 					return "";

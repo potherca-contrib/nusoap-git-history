@@ -247,6 +247,10 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
+			// specifies nil value (or not)
+			} elseif ($key_localpart == 'nil'){
+				$this->message[$pos]['nil'] = ($value == 'true' || $value == '1');
+			// some other attribute
 			} elseif ($key != 'href' && $key != 'xmlns' && $key_localpart != 'encodingStyle' && $key_localpart != 'root') {
 				$this->message[$pos]['xattrs']['!' . $key] = $value;
 			}
@@ -313,16 +317,17 @@ class soap_parser extends nusoap_base {
 				$this->multirefs[$id][$pos] = 'placeholder';
 				// add set a reference to it as the result value
 				$this->message[$pos]['result'] =& $this->multirefs[$id][$pos];
-            // build complex values
+            // build complexType values
 			} elseif($this->message[$pos]['children'] != ''){
-			
 				// if result has already been generated (struct/array)
 				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
 				}
-			// build complex values of attributes and possibly simpleContent
+			// build complexType values of attributes and possibly simpleContent
 			} elseif (isset($this->message[$pos]['xattrs'])) {
-				if (isset($this->message[$pos]['cdata']) && $this->message[$pos]['cdata'] != '') {
+				if (isset($this->message[$pos]['nil']) && $this->message[$pos]['nil']) {
+					$this->message[$pos]['xattrs']['!'] = null;
+				} elseif (isset($this->message[$pos]['cdata']) && $this->message[$pos]['cdata'] != '') {
 	            	if (isset($this->message[$pos]['type'])) {
 						$this->message[$pos]['xattrs']['!'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 					} else {
@@ -335,10 +340,12 @@ class soap_parser extends nusoap_base {
 					}
 				}
 				$this->message[$pos]['result'] = $this->message[$pos]['xattrs'];
-			// set value of simple type
+			// set value of simpleType (or nil complexType)
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-            	if (isset($this->message[$pos]['type'])) {
+				if (isset($this->message[$pos]['nil']) && $this->message[$pos]['nil']) {
+					$this->message[$pos]['xattrs']['!'] = null;
+				} elseif (isset($this->message[$pos]['type'])) {
 					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 				} else {
 					$parent = $this->message[$pos]['parent'];

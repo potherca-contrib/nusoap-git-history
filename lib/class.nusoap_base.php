@@ -296,6 +296,15 @@ class nusoap_base {
 				$atts .= " $k=\"$v\"";
 			}
 		}
+		// serialize null value
+		if (is_null($val)) {
+			if ($use == 'literal') {
+				// TODO: depends on nillable
+	        	return "<$name$xmlns $atts/>";
+        	} else {
+	        	return "<$name$xmlns $atts xsi:nil=\"true\"/>";
+        	}
+		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
         	if (is_bool($val)) {
@@ -308,22 +317,14 @@ class nusoap_base {
 				$val = $this->expandEntities($val);
 			}
 			if ($use == 'literal') {
-	        	return "<$name$xmlns>$val</$name>";
+	        	return "<$name$xmlns $atts>$val</$name>";
         	} else {
-	        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
+	        	return "<$name$xmlns $atts xsi:type=\"xsd:$type\">$val</$name>";
         	}
         }
 		// detect type and serialize
 		$xml = '';
 		switch(true) {
-			case ($type == '' && is_null($val)):
-				if ($use == 'literal') {
-					// TODO: depends on nillable
-					$xml .= "<$name$xmlns/>";
-				} else {
-					$xml .= "<$name$xmlns xsi:nil=\"true\"/>";
-				}
-				break;
 			case (is_bool($val) || $type == 'boolean'):
         		if ($type == 'boolean') {
 	        		$val = $val ? 'true' : 'false';

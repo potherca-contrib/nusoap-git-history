@@ -263,7 +263,8 @@ class soapclient extends nusoap_base  {
 			return false;
 		} else {
 			$this->return = $return;
-			$this->debug('sent message successfully and got a(n) '.gettype($return).' back');
+			$this->debug('sent message successfully and got a(n) '.gettype($return).' back: ');
+           	$this->appendDebug($this->varDump($return));
 			
 			// fault?
 			if(is_array($return) && isset($return['faultcode'])){
@@ -275,15 +276,23 @@ class soapclient extends nusoap_base  {
 					$this->debug("$k = $v<br>");
 				}
 				return $return;
+			} elseif ($style == 'document') {
+				// NOTE: if the response is defined to have multiple parts (i.e. unwrapped),
+				// we are only going to return the first part here...sorry about that
+				return $return;
 			} else {
 				// array of return values
 				if(is_array($return)){
-					// multiple 'out' parameters
+					// multiple 'out' parameters, which we return wrapped up
+					// in the array
 					if(sizeof($return) > 1){
 						return $return;
 					}
-					// single 'out' parameter
-					return array_shift($return);
+					// single 'out' parameter (normally the return value)
+					$return = array_shift($return);
+					$this->debug('return shifted value: ');
+					$this->appendDebug($this->varDump($return));
+           			return $return;
 				// nothing returned (ie, echoVoid)
 				} else {
 					return "";

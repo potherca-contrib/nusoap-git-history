@@ -372,6 +372,12 @@ class XMLSchema extends nusoap_base  {
 				}
 			break;
 			case 'enumeration':	//	restriction value list member
+				$this->xdebug('enumeration ' . $attrs['value']);
+				if ($this->currentSimpleType) {
+					$this->simpleTypes[$this->currentSimpleType]['enumeration'][] = $attrs['value'];
+				} elseif ($this->currentComplexType) {
+					$this->complexTypes[$this->currentComplexType]['enumeration'][] = $attrs['value'];
+				}
 			break;
 			case 'extension':	// simpleContent or complexContent type extension
 				$this->xdebug('extension ' . $attrs['base']);
@@ -565,8 +571,14 @@ class XMLSchema extends nusoap_base  {
 		}
 		// simple types
 		if(isset($this->simpleTypes) && count($this->simpleTypes) > 0){
-			foreach($this->simpleTypes as $typeName => $attr){
-				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <$schemaPrefix:restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n </$schemaPrefix:simpleType>";
+			foreach($this->simpleTypes as $typeName => $eParts){
+				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <$schemaPrefix:restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n";
+				if (isset($eParts['enumeration'])) {
+					foreach ($eParts['enumeration'] as $e) {
+						$xml .= "  <$schemaPrefix:enumeration value=\"$e\"/>\n";
+					}
+				}
+				$xml .= " </$schemaPrefix:simpleType>";
 			}
 		}
 		// elements

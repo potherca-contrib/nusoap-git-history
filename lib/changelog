@@ -325,3 +325,12 @@
 
 2005-01-24, version 0.6.8
 - xmlschema: correctly parse nested complexType definitions
+
+2005-02-14, version 0.6.8
+- nusoap_base: fix a bug in which attributes were sometimes not serialized with a value
+- nusoap_base: improve serialization of null values (thanks Dominique Stender)
+- soap_parser: parse null values by handling the nil attribute (thanks Dominique Stender)
+- soap_server: set character encoding for a fault to be the same as for the server (thanks Mark Scott)
+- soap_server: correctly check for null value returned from method when WSDL is used (without WSDL, cannot distinguish whether NULL or void return is desired)
+- soapclient: for document style, call should always return an array rooted at the response part (all bets are off when there are multiple parts)
+- xmlschema: save enumeration values parsed from WSDL
