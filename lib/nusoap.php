@@ -1356,7 +1356,7 @@ class soap_transport_http extends nusoap_base {
 			$this->debug('getting rid of headers, stringlen: '.strlen($data));
 			$header_array = explode("\r\n",$result[1]);
 			$data = $result[2];
-			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
+			$this->debug('cleaned data, stringlen: '.strlen($data));
 			// clean headers
 			foreach($header_array as $header_line){
 				$arr = explode(':',$header_line);
@@ -1371,7 +1371,10 @@ class soap_transport_http extends nusoap_base {
 		
 		// decode transfer-encoding
 		if($headers['Transfer-Encoding'] == 'chunked'){
-			$data = $this->decodeChunked($data);
+			if(!$data = $this->decodeChunked2($data)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
 			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 		}
 		// decode content-encoding
@@ -1527,8 +1530,55 @@ class soap_transport_http extends nusoap_base {
 				$octets_to_read = 0;
 			}
     	}
+		if($buffer == ''){
+			return false;
+		}
     	return $buffer;
     }
+	
+	//This function will decode the "chunked' transfer coding
+   //as defined in RFC2068 19.4.6
+   function decodeChunked2($buffer)
+   {
+      //if ($this->getHeader('transfer-encoding')!='chunked') return;
+      //$buffer=$this->Content;
+      $length = 0;
+      $new='';
+      $chunkend = strpos($buffer,"\r\n")+2;
+      $temp = substr($buffer,0,$chunkend);
+      $chunk_size=hexdec(trim($temp));
+      $chunkstart=$chunkend;
+      while ($chunk_size > 0) {
+          $chunkend=strpos($buffer,"\r\n",$chunkstart+$chunk_size);
+          if ($chunkend==FALSE) {       //Just in case we got a broken connection
+              $chunk=substr($buffer,$chunkstart);
+              $new.=$chunk;
+              $length+=strlen($chunk);
+              break;
+          }
+          $chunk=substr($buffer,$chunkstart,$chunkend-$chunkstart);
+          $new.=$chunk;
+          $length += strlen($chunk);
+          $chunkstart=$chunkend+2;
+          $chunkend=strpos($buffer,"\r\n",$chunkstart)+2;
+          if ($chunkend==FALSE) break; //Just in case we got a broken connection
+          $temp=substr($buffer,$chunkstart,$chunkend-$chunkstart);
+          $chunk_size=hexdec(trim($temp));
+          $chunkstart=$chunkend;
+      }
+      //Any additional header : not implemented yet
+//      read entity-header
+//      while (entity-header not empty) {
+//       append entity-header to existing header fields
+//       read entity-header
+//      }
+        //Update headers
+        //$this->Header['content-length'] = $length;
+        //unset($this->Header['transfer-encoding']);
+        //$this->Content=$new;
+		return $new;
+   }
+
 }
 
 ?><?php
@@ -2071,13 +2121,13 @@ class wsdl extends XMLSchema {
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
 		
-        if (array_key_exists('host', $wsdl_props)) {
+        if ( isset($wsdl_props['host']) ) {
         // $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
         
             $fsockopen_timeout = 30;
         	
             // check if a port value is supplied in url
-            if (array_key_exists('port', $wsdl_props)) {
+            if ( isset($wsdl_props['port']) ) {
                 // yes
                 $wsdl_url_port = $wsdl_props['port'];
             } else {

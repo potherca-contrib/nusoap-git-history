@@ -88,13 +88,13 @@ class wsdl extends XMLSchema {
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
 		
-        if (array_key_exists('host', $wsdl_props)) {
+        if ( isset($wsdl_props['host']) ) {
         // $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
         
             $fsockopen_timeout = 30;
         	
             // check if a port value is supplied in url
-            if (array_key_exists('port', $wsdl_props)) {
+            if ( isset($wsdl_props['port']) ) {
                 // yes
                 $wsdl_url_port = $wsdl_props['port'];
             } else {
