@@ -109,8 +109,8 @@ class soap_transport_http extends nusoap_base {
 			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
 		// set content type
-		$this->outgoing_payload .= "Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n";
-		// set encoding headers
+		$this->outgoing_payload .= 'Content-Type: text/xml; charset="'.$this->soap_defencoding."\"\r\nContent-Length: ".strlen($data)."\r\n";
+		// http encoding
 		if($this->encoding != '' && function_exists('gzdeflate')){
 			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
 			"Connection: close\r\n";
