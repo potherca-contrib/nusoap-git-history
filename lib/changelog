@@ -240,3 +240,22 @@
 - soap_transport_http: read chunked content "in-line" so it works on a persistent connection
 - nusoap_base: serialize boolean as true|false, not 1|0, to agree with XML Schema
 - nusoap_base: serialize array of struct differently than array of array
+
+2004-06-25, version 0.6.8
+- soap_server: prefer gzip to deflate, since IE does not like our deflate
+- soap_server: move webDescription to the wsdl class
+- soap_server: allow class and instance method calls for service (thanks Ingo Fischer and Roland Knall)
+- wsdl: get webDescription from the soap_server class
+- wsdl: allow compression from the server
+- wsdl: fix serialization of soapval without a type
+- wsdl: propagate debug value from query string to SOAP endpoint in programmatic WSDL generation
+- nusoap_base: add anyType, anySimpleType for 2001 XML Schema
+- nusoap_base: provide additional debug functions
+- soap_transport_http: ignore Content-Length when chunked encoding is used
+- soap_transport_http: remove ':' from username for Basic authentication (cf. RFC 2617)
+- soap_transport_http: urldecode username and password taken from URL
+- soap_transport_http: use raw inflate/deflate for IE/IIS compatibility, rather than having Zlib headers according to HTTP 1.1 spec
+- soap_transport_http: attempt to handle the case when both the service application and Web server compress the response
+- soapclient: when creating proxy methods, replace '.' in operation name with '__' in function name
+- soapclient: initialize requestHeaders in proxy
+- general: use new debug methods; never access debug_str directly

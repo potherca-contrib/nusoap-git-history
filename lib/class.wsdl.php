@@ -187,13 +187,11 @@ class wsdl extends nusoap_base {
 			if($this->proxyhost && $this->proxyport){
 				$tr->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 			}
-			if (isset($wsdl_props['user'])) {
-                $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
-            }
+			$tr->setEncoding('gzip, deflate');
 			$wsdl_string = $tr->send('', $this->timeout, $this->response_timeout);
 			//$this->debug("WSDL request\n" . $tr->outgoing_payload);
 			//$this->debug("WSDL response\n" . $tr->incoming_payload);
-			$this->debug("transport debug data...\n" . $tr->debug_str);
+			$this->appendDebug($tr->getDebug());
 			// catch errors
 			if($err = $tr->getError() ){
 				$errstr = 'HTTP ERROR: '.$err;
@@ -203,6 +201,7 @@ class wsdl extends nusoap_base {
 	            return false;
 			}
 			unset($tr);
+			$this->debug("got WSDL URL");
         } else {
             // $wsdl is not http(s), so treat it as a file URL or plain file path
         	if (isset($wsdl_props['scheme']) && ($wsdl_props['scheme'] == 'file') && isset($wsdl_props['path'])) {
@@ -224,6 +223,7 @@ class wsdl extends nusoap_base {
                 return false;
             } 
         }
+        $this->debug('Parse WSDL');
         // end new code added
         // Create an XML parser.
         $this->parser = xml_parser_create(); 
@@ -251,6 +251,7 @@ class wsdl extends nusoap_base {
         } 
 		// free the parser
         xml_parser_free($this->parser);
+        $this->debug('Parsing WSDL done');
 		// catch wsdl parse errors
 		if($this->getError()){
 			return false;
@@ -270,15 +271,16 @@ class wsdl extends nusoap_base {
     {
         if ($this->status == 'schema') {
             $this->currentSchema->schemaStartElement($parser, $name, $attrs);
-            $this->debug_str .= $this->currentSchema->debug_str;
-            $this->currentSchema->debug_str = '';
+            $this->appendDebug($this->currentSchema->getDebug());
+            $this->currentSchema->clearDebug();
         } elseif (ereg('schema$', $name)) {
+        	$this->debug('Parsing WSDL schema');
             // $this->debug("startElement for $name ($attrs[name]). status = $this->status (".$this->getLocalPart($name).")");
             $this->status = 'schema';
             $this->currentSchema = new xmlschema('', '', $this->namespaces);
             $this->currentSchema->schemaStartElement($parser, $name, $attrs);
-            $this->debug_str .= $this->currentSchema->debug_str;
-            $this->currentSchema->debug_str = '';
+            $this->appendDebug($this->currentSchema->getDebug());
+            $this->currentSchema->clearDebug();
         } else {
             // position in the total number of elements, starting from 0
             $pos = $this->position++;
@@ -479,6 +481,7 @@ class wsdl extends nusoap_base {
 		if (/*ereg('types$', $name) ||*/ ereg('schema$', $name)) {
 			$this->status = "";
 			$this->schemas[$this->currentSchema->schemaTargetNamespace][] = $this->currentSchema;
+        	$this->debug('Parsing WSDL schema done');
 		} 
 		if ($this->status == 'schema') {
 			$this->currentSchema->schemaEndElement($parser, $name);
@@ -600,10 +603,11 @@ class wsdl extends nusoap_base {
 			$ns = $this->namespaces['tns'];
 		}
 		if (isset($this->schemas[$ns])) {
-			foreach ($this->schemas[$ns] as $xs) {
+			for ($i = 0; $i < count($this->schemas[$ns]); $i++) {
+				$xs = &$this->schemas[$ns][$i];
 				$t = $xs->getTypeDef($type);
-				$this->debug_str .= $xs->debug_str;
-				$xs->debug_str = '';
+				$this->appendDebug($xs->getDebug());
+				$xs->clearDebug();
 				if ($t) {
 					return $t;
 				}
@@ -612,13 +616,135 @@ class wsdl extends nusoap_base {
 		return false;
 	}
 
+    /**
+    * prints html description of services
+    *
+    * @access private
+    */
+    function webDescription(){
+		$b = '
+		<html><head><title>NuSOAP: '.$this->serviceName.'</title>
+		<style type="text/css">
+		    body    { font-family: arial; color: #000000; background-color: #ffffff; margin: 0px 0px 0px 0px; }
+		    p       { font-family: arial; color: #000000; margin-top: 0px; margin-bottom: 12px; }
+		    pre { background-color: silver; padding: 5px; font-family: Courier New; font-size: x-small; color: #000000;}
+		    ul      { margin-top: 10px; margin-left: 20px; }
+		    li      { list-style-type: none; margin-top: 10px; color: #000000; }
+		    .content{
+			margin-left: 0px; padding-bottom: 2em; }
+		    .nav {
+			padding-top: 10px; padding-bottom: 10px; padding-left: 15px; font-size: .70em;
+			margin-top: 10px; margin-left: 0px; color: #000000;
+			background-color: #ccccff; width: 20%; margin-left: 20px; margin-top: 20px; }
+		    .title {
+			font-family: arial; font-size: 26px; color: #ffffff;
+			background-color: #999999; width: 105%; margin-left: 0px;
+			padding-top: 10px; padding-bottom: 10px; padding-left: 15px;}
+		    .hidden {
+			position: absolute; visibility: hidden; z-index: 200; left: 250px; top: 100px;
+			font-family: arial; overflow: hidden; width: 600;
+			padding: 20px; font-size: 10px; background-color: #999999;
+			layer-background-color:#FFFFFF; }
+		    a,a:active  { color: charcoal; font-weight: bold; }
+		    a:visited   { color: #666666; font-weight: bold; }
+		    a:hover     { color: cc3300; font-weight: bold; }
+		</style>
+		<script language="JavaScript" type="text/javascript">
+		<!--
+		// POP-UP CAPTIONS...
+		function lib_bwcheck(){ //Browsercheck (needed)
+		    this.ver=navigator.appVersion
+		    this.agent=navigator.userAgent
+		    this.dom=document.getElementById?1:0
+		    this.opera5=this.agent.indexOf("Opera 5")>-1
+		    this.ie5=(this.ver.indexOf("MSIE 5")>-1 && this.dom && !this.opera5)?1:0;
+		    this.ie6=(this.ver.indexOf("MSIE 6")>-1 && this.dom && !this.opera5)?1:0;
+		    this.ie4=(document.all && !this.dom && !this.opera5)?1:0;
+		    this.ie=this.ie4||this.ie5||this.ie6
+		    this.mac=this.agent.indexOf("Mac")>-1
+		    this.ns6=(this.dom && parseInt(this.ver) >= 5) ?1:0;
+		    this.ns4=(document.layers && !this.dom)?1:0;
+		    this.bw=(this.ie6 || this.ie5 || this.ie4 || this.ns4 || this.ns6 || this.opera5)
+		    return this
+		}
+		var bw = new lib_bwcheck()
+		//Makes crossbrowser object.
+		function makeObj(obj){
+		    this.evnt=bw.dom? document.getElementById(obj):bw.ie4?document.all[obj]:bw.ns4?document.layers[obj]:0;
+		    if(!this.evnt) return false
+		    this.css=bw.dom||bw.ie4?this.evnt.style:bw.ns4?this.evnt:0;
+		    this.wref=bw.dom||bw.ie4?this.evnt:bw.ns4?this.css.document:0;
+		    this.writeIt=b_writeIt;
+		    return this
+		}
+		// A unit of measure that will be added when setting the position of a layer.
+		//var px = bw.ns4||window.opera?"":"px";
+		function b_writeIt(text){
+		    if (bw.ns4){this.wref.write(text);this.wref.close()}
+		    else this.wref.innerHTML = text
+		}
+		//Shows the messages
+		var oDesc;
+		function popup(divid){
+		    if(oDesc = new makeObj(divid)){
+			oDesc.css.visibility = "visible"
+		    }
+		}
+		function popout(){ // Hides message
+		    if(oDesc) oDesc.css.visibility = "hidden"
+		}
+		//-->
+		</script>
+		</head>
+		<body>
+		<div class=content>
+			<br><br>
+			<div class=title>'.$this->serviceName.'</div>
+			<div class=nav>
+				<p>View the <a href="'.(isset($GLOBALS['PHP_SELF']) ? $GLOBALS['PHP_SELF'] : $_SERVER['PHP_SELF']).'?wsdl">WSDL</a> for the service.
+				Click on an operation name to view it&apos;s details.</p>
+				<ul>';
+				foreach($this->getOperations() as $op => $data){
+				    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
+				    // create hidden div
+				    $b .= "<div id='$op' class='hidden'>
+				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
+				    foreach($data as $donnie => $marie){ // loop through opdata
+						if($donnie == 'input' || $donnie == 'output'){ // show input/output data
+						    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
+						    foreach($marie as $captain => $tenille){ // loop through data
+								if($captain == 'parts'){ // loop thru parts
+								    $b .= "&nbsp;&nbsp;$captain:<br>";
+					                //if(is_array($tenille)){
+								    	foreach($tenille as $joanie => $chachi){
+											$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
+								    	}
+					        		//}
+								} else {
+								    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
+								}
+						    }
+						} else {
+						    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
+						}
+				    }
+					$b .= '</div>';
+				}
+				$b .= '
+				<ul>
+			</div>
+		</div></body></html>';
+		return $b;
+    }
+
 	/**
 	* serialize the parsed wsdl
-	* 
+	*
+	* @param $debug mixed whether to put debug=1 in endpoint URL
 	* @return string , serialization of WSDL
 	* @access public 
 	*/
-	function serialize()
+	function serialize($debug = 0)
 	{
 		$xml = '<?xml version="1.0" encoding="ISO-8859-1"?><definitions';
 		foreach($this->namespaces as $k => $v) {
@@ -728,7 +854,7 @@ class wsdl extends nusoap_base {
 		if (count($this->ports) >= 1) {
 			foreach($this->ports as $pName => $attrs) {
 				$xml .= '<port name="' . $pName . '" binding="tns:' . $attrs['binding'] . '">';
-				$xml .= '<soap:address location="' . $attrs['location'] . '"/>';
+				$xml .= '<soap:address location="' . $attrs['location'] . ($debug ? '?debug=1' : '') . '"/>';
 				$xml .= '</port>';
 			} 
 		} 
@@ -761,7 +887,8 @@ class wsdl extends nusoap_base {
 			$this->setError('Unable to retrieve WSDL data for operation: ' . $operation);
 			return false;
 		}
-		$this->debug($this->varDump($opData));
+		$this->debug('opData:');
+		$this->appendDebug($this->varDump($opData));
 
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
@@ -775,11 +902,10 @@ class wsdl extends nusoap_base {
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
 			
 			$use = $opData[$direction]['use'];
-			$this->debug("use=$use");
-			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
+			$this->debug('have ' . count($opData[$direction]['parts']) . ' part(s) to serialize');
 			if (is_array($parameters)) {
 				$parametersArrayType = $this->isArraySimpleOrStruct($parameters);
-				$this->debug('have ' . $parametersArrayType . ' parameters');
+				$this->debug('have ' . count($parameters) . ' parameter(s) provided as ' . $parametersArrayType . ' to serialize');
 				foreach($opData[$direction]['parts'] as $name => $type) {
 					$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
 					// Track encoding style
@@ -808,6 +934,7 @@ class wsdl extends nusoap_base {
 				$this->debug('no parameters passed.');
 			}
 		}
+		$this->debug("serializeRPCParameters returning: $xml");
 		return $xml;
 	} 
 	
@@ -836,7 +963,8 @@ class wsdl extends nusoap_base {
 			$this->setError('Unable to retrieve WSDL data for operation: ' . $operation);
 			return false;
 		}
-		$this->debug($this->varDump($opData));
+		$this->debug('opData:');
+		$this->appendDebug($this->varDump($opData));
 		
 		// Get encoding style for output and set to current
 		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
@@ -883,6 +1011,7 @@ class wsdl extends nusoap_base {
 				$this->debug('no parameters passed.');
 			}
 		}
+		$this->debug("serializeParameters returning: $xml");
 		return $xml;
 	} 
 	
@@ -909,12 +1038,18 @@ class wsdl extends nusoap_base {
     		// TODO: get attributes from soapval?
     		if ($value->type_ns) {
     			$type = $value->type_ns . ':' . $value->type;
-    		} else {
+		    	$forceType = true;
+		    	$this->debug("in serializeType: soapval overrides type to $type");
+    		} elseif ($value->type) {
 	    		$type = $value->type;
+		    	$forceType = true;
+		    	$this->debug("in serializeType: soapval overrides type to $type");
+	    	} else {
+	    		$forceType = false;
+		    	$this->debug("in serializeType: soapval does not override type");
 	    	}
 	    	$value = $value->value;
-	    	$forceType = true;
-	    	$this->debug("in serializeType: soapval overrides type to $type, value to $value");
+	    	$this->debug("in serializeType: soapval overrides value to $value");
         } else {
         	$forceType = false;
         }
@@ -934,10 +1069,12 @@ class wsdl extends nusoap_base {
 				if (is_null($value)) {
 					if ($use == 'literal') {
 						// TODO: depends on nillable
-						return "<$name/>";
+						$xml = "<$name/>";
 					} else {
-						return "<$name xsi:nil=\"true\"/>";
+						$xml = "<$name xsi:nil=\"true\"/>";
 					}
+					$this->debug("serializeType returning: $xml");
+					return $xml;
 				}
 		    	if ($uqType == 'boolean' && !$value) {
 					$value = 'false';
@@ -953,13 +1090,15 @@ class wsdl extends nusoap_base {
 				if (!$this->getTypeDef($uqType, $ns)) {
 					if ($use == 'literal') {
 						if ($forceType) {
-							return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+							$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
 						} else {
-							return "<$name>$value</$name>";
+							$xml = "<$name>$value</$name>";
 						}
 					} else {
-						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+						$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
 					}
+					$this->debug("serializeType returning: $xml");
+					return $xml;
 				}
 			} else if ($ns == 'http://xml.apache.org/xml-soap') {
 				if ($uqType == 'Map') {
@@ -973,13 +1112,15 @@ class wsdl extends nusoap_base {
 					}
 					if ($use == 'literal') {
 						if ($forceType) {
-						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\">$contents</$name>";
+							$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\">$contents</$name>";
 						} else {
-							return "<$name>$contents</$name>";
+							$xml = "<$name>$contents</$name>";
 						}
 					} else {
-						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
+						$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
 					}
+					$this->debug("serializeType returning: $xml");
+					return $xml;
 				}
 			}
 		} else {
@@ -992,9 +1133,8 @@ class wsdl extends nusoap_base {
 			$this->debug("$type ($uqType) is not a supported type.");
 			return false;
 		} else {
-			foreach($typeDef as $k => $v) {
-				$this->debug("typedef, $k: $v");
-			}
+			$this->debug("typedef:");
+			$this->appendDebug($this->varDump($typeDef));
 		}
 		$phpType = $typeDef['phpType'];
 		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . (isset($typeDef['arrayType']) ? $typeDef['arrayType'] : '') ); 
@@ -1012,10 +1152,12 @@ class wsdl extends nusoap_base {
 			if (is_null($value)) {
 				if ($use == 'literal') {
 					// TODO: depends on nillable
-					return "<$elementName$elementNS/>";
+					$xml = "<$elementName$elementNS/>";
 				} else {
-					return "<$elementName$elementNS xsi:nil=\"true\"/>";
+					$xml = "<$elementName$elementNS xsi:nil=\"true\"/>";
 				}
+				$this->debug("serializeType returning: $xml");
+				return $xml;
 			}
 			if ($use == 'literal') {
 				if ($forceType) {
@@ -1089,10 +1231,12 @@ class wsdl extends nusoap_base {
 			if (is_null($value)) {
 				if ($use == 'literal') {
 					// TODO: depends on nillable
-					return "<$name$elementNS/>";
+					$xml = "<$name$elementNS/>";
 				} else {
-					return "<$name$elementNS xsi:nil=\"true\"/>";
+					$xml = "<$name$elementNS xsi:nil=\"true\"/>";
 				}
+				$this->debug("serializeType returning: $xml");
+				return $xml;
 			}
 			if (isset($typeDef['multidimensional'])) {
 				$nv = array();
@@ -1116,7 +1260,6 @@ class wsdl extends nusoap_base {
 					    $contents .= $this->serialize_val($v, 'item', $typeDef['arrayType'], null, $this->XMLSchemaVersion, false, $use);
 					} 
 				}
-				$this->debug('contents: '.$this->varDump($contents));
 			} else {
 				$rows = 0;
 				$contents = null;
@@ -1144,15 +1287,15 @@ class wsdl extends nusoap_base {
 			}
 			if ($use == 'literal') {
 				if ($forceType) {
-					return "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">$value</$name>";
+					$xml = "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">$value</$name>";
 				} else {
-					return "<$name$elementNS>$value</$name>";
+					$xml = "<$name$elementNS>$value</$name>";
 				}
 			} else {
-				return "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>$value</$name>";
+				$xml = "<$name$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>$value</$name>";
 			}
 		}
-		$this->debug('returning: '.$this->varDump($xml));
+		$this->debug("serializeType returning: $xml");
 		return $xml;
 	}
 	

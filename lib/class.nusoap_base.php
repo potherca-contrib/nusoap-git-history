@@ -61,7 +61,7 @@ require_once('class.soap_server.php');*/
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.7';
+	var $version = '0.6.8';
 	var $revision = '$Revision$';
 	var $error_str = false;
     var $debug_str = '';
@@ -112,6 +112,8 @@ class nusoap_base {
 		'string'=>'string','boolean'=>'boolean','float'=>'double','double'=>'double','decimal'=>'double',
 		'duration'=>'','dateTime'=>'string','time'=>'string','date'=>'string','gYearMonth'=>'',
 		'gYear'=>'','gMonthDay'=>'','gDay'=>'','gMonth'=>'','hexBinary'=>'string','base64Binary'=>'string',
+		// abstract "any" types
+		'anyType'=>'string','anySimpleType'=>'string',
 		// derived datatypes
 		'normalizedString'=>'string','token'=>'string','language'=>'','NMTOKEN'=>'','NMTOKENS'=>'','Name'=>'','NCName'=>'','ID'=>'',
 		'IDREF'=>'','IDREFS'=>'','ENTITY'=>'','ENTITIES'=>'','integer'=>'integer','nonPositiveInteger'=>'integer',
@@ -136,13 +138,64 @@ class nusoap_base {
 		'lt' => '<','gt' => '>','apos' => "'");
 
 	/**
-	* adds debug data to the class level debug string
+	* adds debug data to the instance debug string with formatting
 	*
 	* @param    string $string debug data
 	* @access   private
 	*/
 	function debug($string){
-		$this->debug_str .= get_class($this).": $string\n";
+		$this->appendDebug($this->getmicrotime().' '.get_class($this).": $string\n");
+	}
+
+	/**
+	* adds debug data to the instance debug string without formatting
+	*
+	* @param    string $string debug data
+	* @access   private
+	*/
+	function appendDebug($string){
+		// it would be nice to use a memory stream here to use
+		// memory more efficiently
+		$this->debug_str .= $string;
+	}
+
+	/**
+	* clears the current debug data for this instance
+	*
+	* @access   public
+	*/
+	function clearDebug() {
+		// it would be nice to use a memory stream here to use
+		// memory more efficiently
+		$this->debug_str = '';
+	}
+
+	/**
+	* gets the current debug data for this instance
+	*
+	* @return   debug data
+	* @access   public
+	*/
+	function &getDebug() {
+		// it would be nice to use a memory stream here to use
+		// memory more efficiently
+		return $this->debug_str;
+	}
+
+	/**
+	* gets the current debug data for this instance as an XML comment
+	* this may change the contents of the debug data
+	*
+	* @return   debug data as an XML comment
+	* @access   public
+	*/
+	function &getDebugAsXMLComment() {
+		// it would be nice to use a memory stream here to use
+		// memory more efficiently
+		while (strpos($this->debug_str, '--')) {
+			$this->debug_str = str_replace('--', '- -', $this->debug_str);
+		}
+    	return "<!--\n" . $this->debug_str . "\n-->";
 	}
 
 	/**
@@ -562,6 +615,24 @@ class nusoap_base {
 			}
 		}
 		return false;
+	}
+
+	/**
+    * returns the time in ODBC canonical form with microseconds
+    *
+    * @return string
+    * @access public
+    */
+	function getmicrotime() {
+		if (function_exists('gettimeofday')) {
+			$tod = gettimeofday();
+			$sec = $tod['sec'];
+			$usec = $tod['usec'];
+		} else {
+			$sec = time();
+			$usec = 0;
+		}
+		return strftime('%Y-%m-%d %H:%M:%S', $sec) . '.' . sprintf('%06d', $usec);
 	}
 
     function varDump($data) {

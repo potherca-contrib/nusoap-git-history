@@ -98,8 +98,8 @@ class soapclient extends nusoap_base  {
 				$this->debug('instantiating wsdl class with doc: '.$endpoint);
 				$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword,$this->timeout,$this->response_timeout);
 			}
-			$this->debug("wsdl debug...\n".$this->wsdl->debug_str);
-			$this->wsdl->debug_str = '';
+			$this->appendDebug($this->wsdl->getDebug());
+			$this->wsdl->clearDebug();
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -132,7 +132,7 @@ class soapclient extends nusoap_base  {
 	* @param	string $namespace optional method namespace (WSDL can override)
 	* @param	string $soapAction optional SOAPAction value (WSDL can override)
 	* @param	boolean $headers optional array of soapval objects for headers
-	* @param	boolean $rpcParams optional no longer used
+	* @param	boolean $rpcParams optional (no longer used)
 	* @param	string	$style optional (rpc|document) the style to use when serializing parameters (WSDL can override)
 	* @param	string	$use optional (encoded|literal) the use when serializing parameters (WSDL can override)
 	* @return	mixed
@@ -157,9 +157,8 @@ class soapclient extends nusoap_base  {
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 			// use WSDL for operation
 			$this->opData = $opData;
-			foreach($opData as $key => $value){
-				$this->debug("$key -> $value");
-			}
+			$this->debug("opData:");
+			$this->appendDebug($this->varDump($opData));
 			if (isset($opData['soapAction'])) {
 				$soapAction = $opData['soapAction'];
 			}
@@ -192,8 +191,8 @@ class soapclient extends nusoap_base  {
 			} else {
 				$methodEncodingStyle = '';
 			}
-			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
-			$this->wsdl->debug_str = '';
+			$this->appendDebug($this->wsdl->getDebug());
+			$this->wsdl->clearDebug();
 			if ($errstr = $this->wsdl->getError()) {
 				$this->debug('got wsdl error: '.$errstr);
 				$this->setError('wsdl error: '.$errstr);
@@ -201,10 +200,10 @@ class soapclient extends nusoap_base  {
 			}
 		} elseif($this->endpointType == 'wsdl') {
 			// operation not in WSDL
+			$this->appendDebug($this->wsdl->getDebug());
+			$this->wsdl->clearDebug();
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
-			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
-			$this->wsdl->debug_str = '';
 			return false;
 		} else {
 			// no WSDL
@@ -357,11 +356,11 @@ class soapclient extends nusoap_base  {
 				}
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
-				$this->debug("transport debug data...\n".$http->debug_str);
-				
+				$this->appendDebug($http->getDebug());
+
 				// save transport object if using persistent connections
 				if ($this->persistentConnection) {
-					$http->debug_str = '';
+					$http->clearDebug();
 					if (!is_object($this->persistentConnection)) {
 						$this->persistentConnection = $http;
 					}
@@ -413,7 +412,7 @@ class soapclient extends nusoap_base  {
 		$this->debug('Use encoding: ' . $this->xml_encoding . ' when creating soap_parser');
 		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
 		// add parser debug data to our debug
-		$this->debug($parser->debug_str);
+		$this->appendDebug($parser->getDebug());
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -447,13 +446,11 @@ class soapclient extends nusoap_base  {
 	/**
 	* get the response headers
 	*
-	* @return	mixed object SOAPx4 soapval object or empty if no headers
+	* @return	string
 	* @access   public
 	*/
 	function getHeaders(){
-	    if($this->responseHeaders != '') {
-			return $this->responseHeaders;
-	    }
+		return $this->responseHeaders;
 	}
 
 	/**
@@ -524,8 +521,11 @@ class soapclient extends nusoap_base  {
 	* If true, default is that call params are like RPC even for document style
 	* Each call() can override this value.
 	*
+	* This is no longer used.
+	*
 	* @param    boolean $rpcParams
 	* @access public
+	* @deprecated
 	*/
 	function setDefaultRpcParams($rpcParams) {
 		$this->defaultRpcParams = $rpcParams;
@@ -550,7 +550,7 @@ class soapclient extends nusoap_base  {
 					$paramStr = substr($paramStr,0,strlen($paramStr)-1);
 				}
 				$opData['namespace'] = !isset($opData['namespace']) ? 'http://testuri.com' : $opData['namespace'];
-				$evalStr .= "function $operation ($paramStr){
+				$evalStr .= "function " . str_replace('.', '__', $operation) . " ($paramStr) {
 					// load params into array
 					\$params = array($paramStr);
 					return \$this->call('$operation',\$params,'".$opData['namespace']."','".(isset($opData['soapAction']) ? $opData['soapAction'] : '')."');
@@ -576,6 +576,7 @@ class soapclient extends nusoap_base  {
 		// transfer other state
 		$proxy->username = $this->username;
 		$proxy->password = $this->password;
+		$proxy->authtype = $this->authtype;
 		$proxy->proxyhost = $this->proxyhost;
 		$proxy->proxyport = $this->proxyport;
 		$proxy->proxyusername = $this->proxyusername;
@@ -584,6 +585,7 @@ class soapclient extends nusoap_base  {
 		$proxy->response_timeout = $this->response_timeout;
 		$proxy->http_encoding = $this->http_encoding;
 		$proxy->persistentConnection = $this->persistentConnection;
+		$proxy->requestHeaders = $this->requestHeaders;
 		return $proxy;
 	}
 

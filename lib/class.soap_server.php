@@ -86,8 +86,8 @@ class soap_server extends nusoap_base {
 				$this->wsdl = new wsdl($wsdl);
 				$this->externalWSDLURL = $wsdl;
 			}
-			$this->debug("wsdl...\n" . $this->wsdl->debug_str);
-			$this->wsdl->debug_str = '';
+			$this->appendDebug($this->wsdl->getDebug());
+			$this->wsdl->clearDebug();
 			if($err = $this->wsdl->getError()){
 				die('WSDL ERROR: '.$err);
 			}
@@ -122,11 +122,11 @@ class soap_server extends nusoap_base {
               }
 			} else {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
-				print $this->wsdl->serialize();
+				print $this->wsdl->serialize($this->debug_flag);
 			}
 		} elseif($data == '' && $this->wsdl){
 			// print web interface
-			print $this->webDescription();
+			print $this->wsdl->webDescription();
 		} else {
 			// handle the request
 			$this->parse_request($data);
@@ -297,7 +297,7 @@ class soap_server extends nusoap_base {
 		// parse response, get soap parser obj
 		$parser = new soap_parser($data,$this->xml_encoding);
 		// parser debug
-		$this->debug("parser debug: \n".$parser->debug_str);
+		$this->debug("parser debug: \n".$parser->getDebug());
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
 			$this->result = 'fault: error in msg parsing: '.$err;
@@ -337,21 +337,49 @@ class soap_server extends nusoap_base {
 	*/
 	function invoke_method() {
 		$this->debug('entering invoke_method');
+		// if a . is present in $this->methodname, we see if there is a class in scope,
+		// which could be referred to. We will also distinguish between two deliminators,
+		// to allow methods to be called a the class or an instance
+		$class = '';
+		$method = '';
+		if (strpos($this->methodname, '..') > 0) {
+			$delim = '..';
+		} else if (strpos($this->methodname, '.') > 0) {
+			$delim = '.';
+		} else {
+			$delim = '';
+		}
+
+		if (strlen($delim) > 0 && substr_count($this->methodname, $delim) == 1 &&
+			class_exists(substr($this->methodname, 0, strpos($this->methodname, $delim)))) {
+			// get the class and method name
+			$class = substr($this->methodname, 0, strpos($this->methodname, $delim));
+			$method = substr($this->methodname, strpos($this->methodname, $delim) + strlen($delim));
+			$this->debug("class: $class method: $method delim: $delim");
+		}
+
 		// does method exist?
-		if(!function_exists($this->methodname)){
-			// "method not found" fault here
-			$this->debug("method '$this->methodname' not found!");
+		if ($class == '' && !function_exists($this->methodname)) {
+			$this->debug("function '$this->methodname' not found!");
 			$this->result = 'fault: method not found';
 			$this->fault('Server',"method '$this->methodname' not defined in service");
 			return;
 		}
+		if ($class != '' && !in_array($method, get_class_methods($class))) {
+			$this->debug("method '$this->methodname' not found in class '$class'!");
+			$this->result = 'fault: method not found';
+			$this->fault('Server',"method '$this->methodname' not defined in service");
+			return;
+		}
+
 		if($this->wsdl){
 			if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
 			//if(
-		    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
+				$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
-		    }
-		    $this->debug('opData is ' . $this->varDump($this->opData));
+			}
+			$this->debug('opData:');
+			$this->appendDebug($this->varDump($this->opData));
 		}
 		$this->debug("method '$this->methodname' exists");
 		// evaluate message, getting back parameters
@@ -366,29 +394,50 @@ class soap_server extends nusoap_base {
 		}
 
 		// if there are parameters to pass
-        $this->debug('params var dump '.$this->varDump($this->methodparams));
-		if($this->methodparams){
-			$this->debug("calling '$this->methodname' with params");
-			if (! function_exists('call_user_func_array')) {
-				$this->debug('calling method using eval()');
-				$funcCall = $this->methodname.'(';
-				foreach($this->methodparams as $param) {
+		$this->debug('params:');
+		$this->appendDebug($this->varDump($this->methodparams));
+		$this->debug("calling '$this->methodname'");
+		if (!function_exists('call_user_func_array')) {
+			if ($class == '') {
+				$this->debug('calling function using eval()');
+				$funcCall = "\$this->methodreturn = $this->methodname(";
+			} else {
+				if ($delim == '..') {
+					$this->debug('calling class method using eval()');
+					$funcCall = "\$this->methodreturn = ".$class."::".$method."(";
+				} else {
+					$this->debug('calling instance method using eval()');
+					// generate unique instance name
+					$instname = "\$inst_".time();
+					$funcCall = $instname." = new ".$class."(); ";
+					$funcCall .= "\$this->methodreturn = ".$instname."->".$method."(";
+				}
+			}
+			if ($this->methodparams) {
+				foreach ($this->methodparams as $param) {
 					$funcCall .= "\"$param\",";
 				}
-				$funcCall = substr($funcCall, 0, -1).')';
-				$this->debug('function call:<br>'.$funcCall);
-				@eval("\$this->methodreturn = $funcCall;");
-			} else {
-				$this->debug('calling method using call_user_func_array()');
-				$this->methodreturn = call_user_func_array("$this->methodname",$this->methodparams);
+				$funcCall = substr($funcCall, 0, -1);
 			}
+			$funcCall .= ');';
+			$this->debug('function call: '.$funcCall);
+			@eval($funcCall);
 		} else {
-			// call method w/ no parameters
-			$this->debug("calling $this->methodname w/ no params");
-			$m = $this->methodname;
-			$this->methodreturn = @$m();
+			if ($class == '') {
+				$this->debug('calling function using call_user_func_array()');
+				$call_arg = $this->methodname;
+			} elseif ($delim == '..') {
+				$this->debug('calling class method using call_user_func_array()');
+				$call_arg = array ($class, $method);
+			} else {
+				$this->debug('calling instance method using call_user_func_array()');
+				$instance = new $class ();
+				$call_arg = array(&$instance, $method);
+			}
+			$this->methodreturn = call_user_func_array($call_arg, $this->methodparams);
 		}
-        $this->debug('methodreturn var dump'.$this->varDump($this->methodreturn));
+        $this->debug('methodreturn:');
+        $this->appendDebug($this->varDump($this->methodreturn));
 		$this->debug("leaving invoke_method: called method $this->methodname, received $this->methodreturn of type ".gettype($this->methodreturn));
 	}
 
@@ -427,6 +476,8 @@ class soap_server extends nusoap_base {
 				    	$opParams = array($this->methodreturn);
 				    }
 				    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
+				    $this->appendDebug($this->wsdl->getDebug());
+				    $this->wsdl->clearDebug();
 					if($errstr = $this->wsdl->getError()){
 						$this->debug('got wsdl error: '.$errstr);
 						$this->fault('Server', 'got wsdl error: '.$errstr);
@@ -436,7 +487,8 @@ class soap_server extends nusoap_base {
 				    $return_val = $this->serialize_val($this->methodreturn, 'return');
 				}
 			}
-			$this->debug('return val: '.$this->varDump($return_val));
+			$this->debug('return value:');
+			$this->appendDebug($this->varDump($return_val));
 		} else {
 			$return_val = '';
 			$this->debug('got no response from method');
@@ -454,7 +506,7 @@ class soap_server extends nusoap_base {
 		$this->result = 'successful';
 		if($this->wsdl){
 			//if($this->debug_flag){
-            	$this->debug("WSDL debug data:\n".$this->wsdl->debug_str);
+            	$this->appendDebug($this->wsdl->getDebug());
             //	}
 			// Added: In case we use a WSDL, return a serialized env. WITH the usedNamespaces.
 			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces,$this->opData['style']);
@@ -490,10 +542,7 @@ class soap_server extends nusoap_base {
 		}
         // add debug data if in debug mode
 		if(isset($this->debug_flag) && $this->debug_flag){
-			while (strpos($this->debug_str, '--')) {
-				$this->debug_str = str_replace('--', '- -', $this->debug_str);
-			}
-        	$payload .= "<!--\n" . $this->debug_str . "\n-->";
+        	$payload .= $this->getDebugAsXMLComment();
         }
 		$this->outgoing_headers[] = "Server: $this->title Server v$this->version";
 		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
@@ -502,20 +551,10 @@ class soap_server extends nusoap_base {
 		//$this->outgoing_headers[] = "Connection: Close\r\n";
 		$this->outgoing_headers[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
 		//begin code to compress payload - by John
+		// NOTE: there is no way to know whether the Web server will also compress
+		// this data.
 		if (strlen($payload) > 1024 && isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
-		   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
-				if (function_exists('gzcompress')) {
-					if (isset($this->debug_flag) && $this->debug_flag) {
-						$payload .= "<!-- Content being deflated -->";
-					}
-					$this->outgoing_headers[] = "Content-Encoding: deflate";
-					$payload = gzcompress($payload);
-				} else {
-					if (isset($this->debug_flag) && $this->debug_flag) {
-						$payload .= "<!-- Content will not be deflated: no gzcompress -->";
-					}
-				}
-		   } else if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
+			if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
 				if (function_exists('gzencode')) {
 					if (isset($this->debug_flag) && $this->debug_flag) {
 						$payload .= "<!-- Content being gzipped -->";
@@ -525,6 +564,21 @@ class soap_server extends nusoap_base {
 				} else {
 					if (isset($this->debug_flag) && $this->debug_flag) {
 						$payload .= "<!-- Content will not be gzipped: no gzencode -->";
+					}
+				}
+			} elseif (strstr($this->headers['Accept-Encoding'], 'deflate')) {
+				// Note: MSIE requires gzdeflate output (no Zlib header and checksum),
+				// instead of gzcompress output,
+				// which conflicts with HTTP 1.1 spec (http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.5)
+				if (function_exists('gzdeflate')) {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content being deflated -->";
+					}
+					$this->outgoing_headers[] = "Content-Encoding: deflate";
+					$payload = gzdeflate($payload);
+				} else {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content will not be deflated: no gzcompress -->";
 					}
 				}
 			}
@@ -583,13 +637,9 @@ class soap_server extends nusoap_base {
 	* @param	string $documentation optional Description to include in WSDL
 	* @access   public
 	*/
-	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
+	function register($name,$in=array(),$out=array(),$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
 		if($this->externalWSDLURL){
 			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
-		}
-	    if(false == $in) {
-		}
-		if(false == $out) {
 		}
 		if(false == $namespace) {
 		}
@@ -630,127 +680,6 @@ class soap_server extends nusoap_base {
 	function fault($faultcode,$faultstring,$faultactor='',$faultdetail=''){
 		$this->fault = new soap_fault($faultcode,$faultactor,$faultstring,$faultdetail);
 	}
-
-    /**
-    * prints html description of services
-    *
-    * @access private
-    */
-    function webDescription(){
-		$b = '
-		<html><head><title>NuSOAP: '.$this->wsdl->serviceName.'</title>
-		<style type="text/css">
-		    body    { font-family: arial; color: #000000; background-color: #ffffff; margin: 0px 0px 0px 0px; }
-		    p       { font-family: arial; color: #000000; margin-top: 0px; margin-bottom: 12px; }
-		    pre { background-color: silver; padding: 5px; font-family: Courier New; font-size: x-small; color: #000000;}
-		    ul      { margin-top: 10px; margin-left: 20px; }
-		    li      { list-style-type: none; margin-top: 10px; color: #000000; }
-		    .content{
-			margin-left: 0px; padding-bottom: 2em; }
-		    .nav {
-			padding-top: 10px; padding-bottom: 10px; padding-left: 15px; font-size: .70em;
-			margin-top: 10px; margin-left: 0px; color: #000000;
-			background-color: #ccccff; width: 20%; margin-left: 20px; margin-top: 20px; }
-		    .title {
-			font-family: arial; font-size: 26px; color: #ffffff;
-			background-color: #999999; width: 105%; margin-left: 0px;
-			padding-top: 10px; padding-bottom: 10px; padding-left: 15px;}
-		    .hidden {
-			position: absolute; visibility: hidden; z-index: 200; left: 250px; top: 100px;
-			font-family: arial; overflow: hidden; width: 600;
-			padding: 20px; font-size: 10px; background-color: #999999;
-			layer-background-color:#FFFFFF; }
-		    a,a:active  { color: charcoal; font-weight: bold; }
-		    a:visited   { color: #666666; font-weight: bold; }
-		    a:hover     { color: cc3300; font-weight: bold; }
-		</style>
-		<script language="JavaScript" type="text/javascript">
-		<!--
-		// POP-UP CAPTIONS...
-		function lib_bwcheck(){ //Browsercheck (needed)
-		    this.ver=navigator.appVersion
-		    this.agent=navigator.userAgent
-		    this.dom=document.getElementById?1:0
-		    this.opera5=this.agent.indexOf("Opera 5")>-1
-		    this.ie5=(this.ver.indexOf("MSIE 5")>-1 && this.dom && !this.opera5)?1:0;
-		    this.ie6=(this.ver.indexOf("MSIE 6")>-1 && this.dom && !this.opera5)?1:0;
-		    this.ie4=(document.all && !this.dom && !this.opera5)?1:0;
-		    this.ie=this.ie4||this.ie5||this.ie6
-		    this.mac=this.agent.indexOf("Mac")>-1
-		    this.ns6=(this.dom && parseInt(this.ver) >= 5) ?1:0;
-		    this.ns4=(document.layers && !this.dom)?1:0;
-		    this.bw=(this.ie6 || this.ie5 || this.ie4 || this.ns4 || this.ns6 || this.opera5)
-		    return this
-		}
-		var bw = new lib_bwcheck()
-		//Makes crossbrowser object.
-		function makeObj(obj){
-		    this.evnt=bw.dom? document.getElementById(obj):bw.ie4?document.all[obj]:bw.ns4?document.layers[obj]:0;
-		    if(!this.evnt) return false
-		    this.css=bw.dom||bw.ie4?this.evnt.style:bw.ns4?this.evnt:0;
-		    this.wref=bw.dom||bw.ie4?this.evnt:bw.ns4?this.css.document:0;
-		    this.writeIt=b_writeIt;
-		    return this
-		}
-		// A unit of measure that will be added when setting the position of a layer.
-		//var px = bw.ns4||window.opera?"":"px";
-		function b_writeIt(text){
-		    if (bw.ns4){this.wref.write(text);this.wref.close()}
-		    else this.wref.innerHTML = text
-		}
-		//Shows the messages
-		var oDesc;
-		function popup(divid){
-		    if(oDesc = new makeObj(divid)){
-			oDesc.css.visibility = "visible"
-		    }
-		}
-		function popout(){ // Hides message
-		    if(oDesc) oDesc.css.visibility = "hidden"
-		}
-		//-->
-		</script>
-		</head>
-		<body>
-		<div class=content>
-			<br><br>
-			<div class=title>'.$this->wsdl->serviceName.'</div>
-			<div class=nav>
-				<p>View the <a href="'.(isset($GLOBALS['PHP_SELF']) ? $GLOBALS['PHP_SELF'] : $_SERVER['PHP_SELF']).'?wsdl">WSDL</a> for the service.
-				Click on an operation name to view it&apos;s details.</p>
-				<ul>';
-				foreach($this->wsdl->getOperations() as $op => $data){
-				    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
-				    // create hidden div
-				    $b .= "<div id='$op' class='hidden'>
-				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
-				    foreach($data as $donnie => $marie){ // loop through opdata
-						if($donnie == 'input' || $donnie == 'output'){ // show input/output data
-						    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
-						    foreach($marie as $captain => $tenille){ // loop through data
-								if($captain == 'parts'){ // loop thru parts
-								    $b .= "&nbsp;&nbsp;$captain:<br>";
-					                //if(is_array($tenille)){
-								    	foreach($tenille as $joanie => $chachi){
-											$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
-								    	}
-					        		//}
-								} else {
-								    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
-								}
-						    }
-						} else {
-						    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
-						}
-				    }
-					$b .= '</div>';
-				}
-				$b .= '
-				<ul>
-			</div>
-		</div></body></html>';
-		return $b;
-    }
 
     /**
     * sets up wsdl object

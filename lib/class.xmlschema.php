@@ -224,7 +224,8 @@ class XMLSchema extends nusoap_base  {
 			break;
 			case 'attribute':
             	//$this->xdebug("parsing attribute $attrs[name] $attrs[ref] of value: ".$attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']);
-            	$this->xdebug("parsing attribute " . $this->varDump($attrs));
+            	$this->xdebug("parsing attribute:");
+            	$this->appendDebug($this->varDump($attrs));
             	if (isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])) {
 					$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
 					if (!strpos($v, ':')) {
@@ -736,7 +737,8 @@ class XMLSchema extends nusoap_base  {
 	    'arrayType'	=> $arrayType
 		);
 		
-		$this->xdebug("addComplexType $name: " . $this->varDump($this->complexTypes[$name]));
+		$this->xdebug("addComplexType $name:");
+		$this->appendDebug($this->varDump($this->complexTypes[$name]));
 	}
 	
 	/**
@@ -757,7 +759,8 @@ class XMLSchema extends nusoap_base  {
 	    'type' => $restrictionBase
 		);
 		
-		$this->xdebug("addSimpleType $name: " . $this->varDump($this->simpleTypes[$name]));
+		$this->xdebug("addSimpleType $name:");
+		$this->appendDebug($this->varDump($this->simpleTypes[$name]));
 	}
 }
 

@@ -70,7 +70,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		if (isset($u['user']) && $u['user'] != '') {
-			$this->setCredentials($u['user'], isset($u['pass']) ? $u['pass'] : '');
+			$this->setCredentials(urldecode($u['user']), isset($u['pass']) ? urldecode($u['pass']) : '');
 		}
 	}
 	
@@ -181,6 +181,7 @@ class soap_transport_http extends nusoap_base {
         curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
         curl_setopt($this->ch, CURLOPT_SSLCERT, '$pathToPemFiles/mycert.pem');
         curl_setopt($this->ch, CURLOPT_SSLKEY, '$pathToPemFiles/mykey.pem');
+	    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $passphrase);
 		*/
 		$this->debug('cURL connection set up');
 		return true;
@@ -258,7 +259,7 @@ class soap_transport_http extends nusoap_base {
 		$this->debug("Set credentials for authtype $authtype");
 		// cf. RFC 2617
 		if ($authtype == 'basic') {
-			$this->outgoing_headers['Authorization'] = 'Basic '.base64_encode($username.':'.$password);
+			$this->outgoing_headers['Authorization'] = 'Basic '.base64_encode(str_replace(':','',$username).':'.$password);
 		} elseif ($authtype == 'digest') {
 			if (isset($digestRequest['nonce'])) {
 				$digestRequest['nc'] = isset($digestRequest['nc']) ? $digestRequest['nc']++ : 1;
@@ -333,8 +334,10 @@ class soap_transport_http extends nusoap_base {
 	function setEncoding($enc='gzip, deflate'){
 		$this->protocol_version = '1.1';
 		$this->outgoing_headers['Accept-Encoding'] = $enc;
-		$this->outgoing_headers['Connection'] = 'close';
-		$this->persistentConnection = false;
+		if (!isset($this->outgoing_headers['Connection'])) {
+			$this->outgoing_headers['Connection'] = 'close';
+			$this->persistentConnection = false;
+		}
 		set_magic_quotes_runtime(0);
 		// deprecated
 		$this->encoding = $enc;
@@ -366,6 +369,7 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $lb
 	* @returns	string
 	* @access   public
+	* @deprecated
 	*/
 	function decodeChunked($buffer, $lb){
 		// length := 0
@@ -424,13 +428,17 @@ class soap_transport_http extends nusoap_base {
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
 		// start building outgoing payload:
-		$this->outgoing_payload = "$this->request_method $this->uri HTTP/$this->protocol_version\r\n";
+		$req = "$this->request_method $this->uri HTTP/$this->protocol_version";
+		$this->debug("HTTP request: $req");
+		$this->outgoing_payload = "$req\r\n";
 
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
-			$this->outgoing_payload .= $k.': '.$v."\r\n";
+			$hdr = $k.': '.$v;
+			$this->debug("HTTP header: $hdr");
+			$this->outgoing_payload .= "$hdr\r\n";
 		}
-		
+
 		// header/body separator
 		$this->outgoing_payload .= "\r\n";
 		
@@ -534,19 +542,18 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
-		if (isset($this->incoming_headers['content-length'])) {
+		if (isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked') {
+			$content_length =  2147483647;	// ignore any content-length header
+			$chunked = true;
+			$this->debug("want to read chunked content");
+		} elseif (isset($this->incoming_headers['content-length'])) {
 			$content_length = $this->incoming_headers['content-length'];
 			$chunked = false;
 			$this->debug("want to read content of length $content_length");
 		} else {
 			$content_length =  2147483647;
-			if (isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked') {
-				$chunked = true;
-				$this->debug("want to read chunked content");
-			} else {
-				$chunked = false;
-				$this->debug("want to read content to EOF");
-			}
+			$chunked = false;
+			$this->debug("want to read content to EOF");
 		}
 		$data = '';
 		do {
@@ -715,23 +722,59 @@ class soap_transport_http extends nusoap_base {
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzuncompress')){
+    			if(function_exists('gzinflate')){
 					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
-    					$data = $degzdata;
-					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){	// do our best
-						$data = $degzdata;
-					} else {
-						$this->setError('Errors occurred when trying to decode the data');
+					// IIS 5 requires gzinflate instead of gzuncompress (similar to IE 5 and gzdeflate v. gzcompress)
+					// this means there are no Zlib headers, although there should be
+					$this->debug('The gzinflate function exists');
+					$datalen = strlen($data);
+					if ($this->incoming_headers['content-encoding'] == 'deflate') {
+						if ($degzdata = @gzinflate($data)) {
+	    					$data = $degzdata;
+	    					$this->debug('The payload has been inflated to ' . strlen($data) . ' bytes');
+	    					if (strlen($data) < $datalen) {
+	    						// test for the case that the payload has been compressed twice
+		    					$this->debug('The inflated payload is smaller than the gzipped one; try again');
+								if ($degzdata = @gzinflate($data)) {
+			    					$data = $degzdata;
+			    					$this->debug('The payload has been inflated again to ' . strlen($data) . ' bytes');
+								}
+	    					}
+	    				} else {
+	    					$this->debug('Error using gzinflate to inflate the payload');
+	    					$this->setError('Error using gzinflate to inflate the payload');
+	    				}
+					} elseif ($this->incoming_headers['content-encoding'] == 'gzip') {
+						if ($degzdata = @gzinflate(substr($data, 10))) {	// do our best
+							$data = $degzdata;
+	    					$this->debug('The payload has been un-gzipped to ' . strlen($data) . ' bytes');
+	    					if (strlen($data) < $datalen) {
+	    						// test for the case that the payload has been compressed twice
+		    					$this->debug('The un-gzipped payload is smaller than the gzipped one; try again');
+								if ($degzdata = @gzinflate(substr($data, 10))) {
+			    					$data = $degzdata;
+			    					$this->debug('The payload has been un-gzipped again to ' . strlen($data) . ' bytes');
+								}
+	    					}
+	    				} else {
+	    					$this->debug('Error using gzinflate to un-gzip the payload');
+							$this->setError('Error using gzinflate to un-gzip the payload');
+	    				}
 					}
 					//$timer->setMarker('finished decoding of gzip/deflated content');
 					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
 					// set decoded payload
 					$this->incoming_payload = $header_data.$lb.$lb.$data;
     			} else {
-					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
+					$this->debug('The server sent compressed data. Your php install must have the Zlib extension compiled in to support this.');
+					$this->setError('The server sent compressed data. Your php install must have the Zlib extension compiled in to support this.');
 				}
+			} else {
+				$this->debug('Unsupported Content-Encoding ' . $this->incoming_headers['content-encoding']);
+				$this->setError('Unsupported Content-Encoding ' . $this->incoming_headers['content-encoding']);
 			}
+		} else {
+			$this->debug('No Content-Encoding header');
 		}
 		
 		if(strlen($data) == 0){
