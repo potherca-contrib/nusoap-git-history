@@ -1,4 +1,4 @@
-<?
+<?php
 
 /**
 * parses an XML Schema, allows access to it's data, other utility methods
@@ -391,7 +391,7 @@ class XMLSchema extends nusoap_base  {
 	*/
 	function expandQname($qname){
 		// get element prefix
-		if(strpos($qname,':')){
+		if(strpos($qname,':') && !ereg('^http://',$qname)){
 			// get unqualified name
 			$name = substr(strstr($qname,':'),1);
 			// get ns prefix

@@ -883,7 +883,7 @@ class XMLSchema extends nusoap_base  {
 	*/
 	function expandQname($qname){
 		// get element prefix
-		if(strpos($qname,':')){
+		if(strpos($qname,':') && !ereg('^http://',$qname)){
 			// get unqualified name
 			$name = substr(strstr($qname,':'),1);
 			// get ns prefix
@@ -1299,7 +1299,12 @@ class soap_transport_http extends nusoap_base {
 	    while ($data = fread($fp, 32768)) {
 			$this->incoming_payload .= $data;
 	    }
-		
+		//$s = socket_get_status($fp);
+		// connection was closed
+		if($this->incoming_payload == ''){
+			$this->setError('no response from server');
+			return false;
+		}
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 		
 		// close filepointer
@@ -1323,12 +1328,12 @@ class soap_transport_http extends nusoap_base {
 			$clean_data = $result[2];
 			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
 		} else {
-			$this->setError('no proper separation of headers and document.');
+			$this->setError('no proper separation of headers and document');
 			return false;
 		}
 		if(strlen($clean_data) == 0){
 			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers.');
+			$this->setError('no data present after HTTP headers');
 			return false;
 		}
 		$this->debug('end of send()');
@@ -2060,7 +2065,7 @@ class wsdl extends XMLSchema {
 					}//
                     // expand each attribute
                 	$k = strpos($k,':') ? $this->expandQname($k) : $k;
-                	if($k != 'location' && $k != 'soapAction'){
+                	if($k != 'location' && $k != 'soapAction' && $k != 'namespace'){
                     	$v = strpos($v,':') ? $this->expandQname($v) : $v;
                     }
         			$eAttrs[$k] = $v;

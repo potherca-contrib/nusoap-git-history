@@ -1,4 +1,4 @@
-<?
+<?php
 
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
@@ -176,7 +176,7 @@ class wsdl extends XMLSchema {
 					}//
                     // expand each attribute
                 	$k = strpos($k,':') ? $this->expandQname($k) : $k;
-                	if($k != 'location' && $k != 'soapAction'){
+                	if($k != 'location' && $k != 'soapAction' && $k != 'namespace'){
                     	$v = strpos($v,':') ? $this->expandQname($v) : $v;
                     }
         			$eAttrs[$k] = $v;
