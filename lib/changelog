@@ -209,3 +209,8 @@
 - wsdl: better serialization of null values
 - wsdl: standardize parsing error message
 - xmlschema: standardize parsing error message
+
+2003-03-24, version 0.6.7
+- soap_transport_http: add digest authentication (based on code by Kevin A. Miller)
+- xmlschema: improve parsing of import elements
+- wsdl: do schema imports even if there are no wsdl imports

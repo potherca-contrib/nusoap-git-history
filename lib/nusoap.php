@@ -61,7 +61,7 @@ require_once('class.soap_server.php');*/
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.6';
+	var $version = '0.6.7';
 	var $revision = '$Revision$';
 	var $error_str = false;
     var $debug_str = '';
@@ -943,7 +943,11 @@ class XMLSchema extends nusoap_base  {
 					$this->attributes[$attrs['name']] = $attrs;
 					$aname = $attrs['name'];
 				} elseif(isset($attrs['ref']) && $attrs['ref'] == 'http://schemas.xmlsoap.org/soap/encoding/:arrayType'){
-                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+					if (isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])) {
+	                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+	                } else {
+	                	$aname = '';
+	                }
 				} elseif(isset($attrs['ref'])){
 					$aname = $attrs['ref'];
                     $this->attributes[$attrs['ref']] = $attrs;
@@ -1031,10 +1035,11 @@ class XMLSchema extends nusoap_base  {
 			//case 'enumeration':
 			//break;
 			case 'import':
-				//$this->xdebug('import namespace ' . $attrs['namespace']);
-			    if (isset($attrs['location'])) {
-                    $this->imports[$attrs['namespace']][] = array('location' => $attrs['location'], 'loaded' => false);
+			    if (isset($attrs['schemaLocation'])) {
+					//$this->xdebug('import namespace ' . $attrs['namespace'] . ' from ' . $attrs['schemaLocation']);
+                    $this->imports[$attrs['namespace']][] = array('location' => $attrs['schemaLocation'], 'loaded' => false);
 				} else {
+					//$this->xdebug('import namespace ' . $attrs['namespace']);
                     $this->imports[$attrs['namespace']][] = array('location' => '', 'loaded' => true);
 					if (! $this->getPrefixFromNamespace($attrs['namespace'])) {
 						$this->namespaces['ns'.(count($this->namespaces)+1)] = $attrs['namespace'];
@@ -1549,6 +1554,8 @@ class soap_transport_http extends nusoap_base {
 	var $useSOAPAction = true;
 	var $persistentConnection = false;
 	var $ch = false;	// cURL handle
+	var $username;
+	var $password;
 	
 	/**
 	* constructor
@@ -1714,24 +1721,30 @@ class soap_transport_http extends nusoap_base {
 	function send($data, $timeout=0, $response_timeout=30) {
 		
 		$this->debug('entered send() with data of length: '.strlen($data));
-		
-		// make connnection
-		if(!$this->connect($timeout, $response_timeout)){
-			return false;
-		}
-		
-		// send request
-		if(!$this->sendRequest($data)){
-			return false;
-		}
-		
-		// get response
-		if(!$data = $this->getResponse()){
-			return false;
-		}
-		
+
+		$this->tryagain = true;
+		$tries = 0;
+		while ($this->tryagain) {
+			$this->tryagain = false;
+			if ($tries++ < 2) {
+				// make connnection
+				if (!$this->connect($timeout, $response_timeout)){
+					return false;
+				}
+				
+				// send request
+				if (!$this->sendRequest($data)){
+					return false;
+				}
+				
+				// get response
+				$respdata = $this->getResponse();
+			} else {
+				$this->setError('Too many tries to get an OK response');
+			}
+		}		
 		$this->debug('end of send()');
-		return $data;
+		return $respdata;
 	}
 
 
@@ -1751,12 +1764,65 @@ class soap_transport_http extends nusoap_base {
 	/**
 	* if authenticating, set user credentials here
 	*
-	* @param    string $user
-	* @param    string $pass
+	* @param    string $username
+	* @param    string $password
+	* @param	string $authtype
+	* @param	array $digestRequest
 	* @access   public
 	*/
-	function setCredentials($username, $password) {
-		$this->outgoing_headers['Authorization'] = ' Basic '.base64_encode($username.':'.$password);
+	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array()) {
+		global $_SERVER;
+
+		// cf. RFC 2617
+		if ($authtype == 'basic') {
+			$this->outgoing_headers['Authorization'] = 'Basic '.base64_encode($username.':'.$password);
+		} elseif ($authtype == 'digest') {
+			if (isset($digestRequest['nonce'])) {
+				$digestRequest['nc'] = isset($digestRequest['nc']) ? $digestRequest['nc']++ : 1;
+				
+				// calculate the Digest hashes (calculate code based on digest implementation found at: http://www.rassoc.com/gregr/weblog/stories/2002/07/09/webServicesSecurityHttpDigestAuthenticationWithoutActiveDirectory.html)
+	
+				// A1 = unq(username-value) ":" unq(realm-value) ":" passwd
+				$A1 = $username. ':' . $digestRequest['realm'] . ':' . $password;
+	
+				// H(A1) = MD5(A1)
+				$HA1 = md5($A1);
+	
+				// A2 = Method ":" digest-uri-value
+				$A2 = 'POST:' . $this->uri;
+	
+				// H(A2)
+				$HA2 =  md5($A2);
+	
+				// KD(secret, data) = H(concat(secret, ":", data))
+				// if qop == auth:
+				// request-digest  = <"> < KD ( H(A1),     unq(nonce-value)
+				//                              ":" nc-value
+				//                              ":" unq(cnonce-value)
+				//                              ":" unq(qop-value)
+				//                              ":" H(A2)
+				//                            ) <">
+				// if qop is missing,
+				// request-digest  = <"> < KD ( H(A1), unq(nonce-value) ":" H(A2) ) > <">
+	
+				$unhashedDigest = '';
+				$nonce = isset($digestRequest['nonce']) ? $digestRequest['nonce'] : '';
+				$cnonce = $nonce;
+				if ($digestRequest['qop'] != '') {
+					$unhashedDigest = $HA1 . ':' . $nonce . ':' . sprintf("%08d", $digestRequest['nc']) . ':' . $cnonce . ':' . $digestRequest['qop'] . ':' . $HA2;
+				} else {
+					$unhashedDigest = $HA1 . ':' . $nonce . ':' . $HA2;
+				}
+	
+				$hashedDigest = md5($unhashedDigest);
+	
+				$this->outgoing_headers['Authorization'] = 'Digest username="' . $username . '", realm="' . $digestRequest['realm'] . '", nonce="' . $nonce . '", uri="' . $this->uri . '", cnonce="' . $cnonce . '", nc=' . sprintf("%08x", $digestRequest['nc']) . ', qop="' . $digestRequest['qop'] . '", response="' . $hashedDigest . '"';
+			}
+		}
+		$this->username = $username;
+		$this->password = $password;
+		$this->authtype = $authtype;
+		$this->digestRequest = $digestRequest;
 	}
 	
 	/**
@@ -2062,12 +2128,33 @@ class soap_transport_http extends nusoap_base {
 				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 			}
 		}
-		if (strlen($data) == 0) {
-			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers.');
-			return false;
-		}
 	  }
+
+ 		// see if we need to resend the request with http digest authentication
+ 		if (isset($this->incoming_headers['www-authenticate']) && strstr($header_array[0], '401 Unauthorized')) {
+ 			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
+ 				// remove "Digest " from our elements
+ 				$digestString = str_replace('Digest ', '', $this->incoming_headers['www-authenticate']);
+ 				
+ 				// parse elements into array
+ 				$digestElements = explode(', ', $digestString);
+ 				while (list($key, $val) = each($digestElements)) {
+ 					$tempElement = explode('=', $val);
+ 					$digestRequest[$tempElement[0]] = str_replace("\"", '', $tempElement[1]);
+ 				}
+
+				// should have (at least) qop, realm, nonce
+ 				if (isset($digestRequest['nonce'])) {
+ 					$this->debug('found nonce in WWW-Authenticate: ' . $this->incoming_headers['www-authenticate']);
+ 					$this->setCredentials($this->username, $this->password, 'digest', $digestRequest);
+ 					$this->tryagain = true;
+ 					return false;
+ 				}
+ 			}
+			$this->debug('HTTP authentication failed');
+			$this->setError('HTTP authentication failed');
+			return false;
+ 		}
 		
 		// decode content-encoding
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
@@ -3006,27 +3093,31 @@ class wsdl extends nusoap_base {
             $this->parseWSDL($wsdl);
         }
         // imports
-        if (sizeof($this->import) > 0) {
+        // TODO: handle imports more properly, grabbing them in-line and nesting them
+        	$imported_urls = array();
         	$imported = 1;
         	while ($imported > 0) {
         		$imported = 0;
         		// Schema imports
         		foreach ($this->schemas as $ns => $list) {
         			foreach ($list as $xs) {
-						$wsdlparts = parse_url($this->wsdl);	// this is bogus!
-			            foreach ($xs->imports as $ns2 => $list) {
-			                for ($ii = 0; $ii < count($list); $ii++) {
-			                	if (! $list[$ii]['loaded']) {
+						$wsdlparts = parse_url($this->wsdl);	// this is bogusly simple!
+			            foreach ($xs->imports as $ns2 => $list2) {
+			                for ($ii = 0; $ii < count($list2); $ii++) {
+			                	if (! $list2[$ii]['loaded']) {
 			                		$this->schemas[$ns]->imports[$ns2][$ii]['loaded'] = true;
-			                		$url = $list[ii]['location'];
+			                		$url = $list2[$ii]['location'];
 									if ($url != '') {
 										$urlparts = parse_url($url);
 										if (!isset($urlparts['host'])) {
 											$url = $wsdlparts['scheme'] . '://' . $wsdlparts['host'] . 
 													substr($wsdlparts['path'],0,strrpos($wsdlparts['path'],'/') + 1) .$urlparts['path'];
 										}
-					                	$this->parseWSDL($url);
-				                		$imported++;
+										if (! in_array($url, $imported_urls)) {
+						                	$this->parseWSDL($url);
+					                		$imported++;
+					                		$imported_urls[] = $url;
+					                	}
 									} else {
 										$this->debug("Unexpected scenario: empty URL for unloaded import");
 									}
@@ -3036,7 +3127,7 @@ class wsdl extends nusoap_base {
         			}
         		}
         		// WSDL imports
-				$wsdlparts = parse_url($this->wsdl);
+				$wsdlparts = parse_url($this->wsdl);	// this is bogusly simple!
 	            foreach ($this->import as $ns => $list) {
 	                for ($ii = 0; $ii < count($list); $ii++) {
 	                	if (! $list[$ii]['loaded']) {
@@ -3048,8 +3139,11 @@ class wsdl extends nusoap_base {
 									$url = $wsdlparts['scheme'] . '://' . $wsdlparts['host'] . 
 											substr($wsdlparts['path'],0,strrpos($wsdlparts['path'],'/') + 1) .$urlparts['path'];
 								}
-			                	$this->parseWSDL($url);
-		                		$imported++;
+								if (! in_array($url, $imported_urls)) {
+				                	$this->parseWSDL($url);
+			                		$imported++;
+			                		$imported_urls[] = $url;
+			                	}
 							} else {
 								$this->debug("Unexpected scenario: empty URL for unloaded import");
 							}
@@ -3057,7 +3151,6 @@ class wsdl extends nusoap_base {
 					}
 	            } 
 			}
-        } 
         // add new data to operation data
         foreach($this->bindings as $binding => $bindingData) {
             if (isset($bindingData['operations']) && is_array($bindingData['operations'])) {
@@ -5228,7 +5321,7 @@ class soapclient extends nusoap_base  {
 				$evalStr .= "function $operation ($paramStr){
 					// load params into array
 					\$params = array($paramStr);
-					return \$this->call('$operation',\$params,'".$opData['namespace']."','".$opData['soapAction']."');
+					return \$this->call('$operation',\$params,'".$opData['namespace']."','".(isset($opData['soapAction']) ? $opData['soapAction'] : '')."');
 				}";
 				unset($paramStr);
 			}
