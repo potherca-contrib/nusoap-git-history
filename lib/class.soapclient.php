@@ -384,14 +384,15 @@ class soapclient extends nusoap_base  {
 				unset($paramStr);
 			}
 		}
-		$evalStr = 'class soap_proxy extends soapclient {
+		$r = rand();
+		$evalStr = 'class soap_proxy_'.$r.' extends soapclient {
 				'.$evalStr.'
 			}';
 		//print "proxy class:<pre>$evalStr</pre>";
 		// eval the class
 		eval($evalStr);
 		// instantiate proxy object
-		$proxy = new soap_proxy("");
+		eval("\$proxy = new soap_proxy_$r('');");
 		// transfer current wsdl data to the proxy thereby avoiding parsing the wsdl twice
 		$proxy->endpointType = 'wsdl';
 		$proxy->wsdlFile = $this->wsdlFile;
