@@ -2,7 +2,7 @@
 /*
  *	$Id$
  *
- *	WSDL client sample.
+ *	WSDL client sample, based on soap builders round 2 interop.
  *
  *	Service: WSDL
  *	Payload: rpc/encoded
@@ -14,6 +14,7 @@ require_once('../lib/nusoap.php');
  *	Grab post vars, if present
  */
 $method = isset($_POST['method']) ? $_POST['method'] : '';
+$null = isset($_POST['null']) ? $_POST['null'] : '';
 $proxyhost = isset($_POST['proxyhost']) ? $_POST['proxyhost'] : '';
 $proxyport = isset($_POST['proxyport']) ? $_POST['proxyport'] : '';
 $proxyusername = isset($_POST['proxyusername']) ? $_POST['proxyusername'] : '';
@@ -40,6 +41,7 @@ if ($method == '') {
 	echo '<option>echoBoolean</option>';
 	echo '<option>echoBase64</option>';
 	echo '</select><br><br>';
+	echo 'Null parameter? <input type="checkbox" name="null" value="1"><br><br>';
 	echo '<input type="submit" value="&#160;Execute&#160;">';
 	echo '</form>';
 	exit();
@@ -48,35 +50,75 @@ if ($method == '') {
  *	Execute the specified method
  */
 if ($method == 'echoString') {
-	$params = array('inputString' => 'If you cannot echo a string, you probably cannot do much');
+	if ($null != '1') {
+		$params = array('inputString' => 'If you cannot echo a string, you probably cannot do much');
+	} else {
+		$params = array('inputString' => null);
+	}
 } elseif ($method == 'echoStringArray') {
-	$params = array('inputStringArray' => array('String 1', 'String 2', 'String Three'));
+	if ($null != '1') {
+		$params = array('inputStringArray' => array('String 1', 'String 2', 'String Three'));
+	} else {
+		$params = array('inputStringArray' => null);
+	}
 } elseif ($method == 'echoInteger') {
-	$params = array('inputInteger' => 329);
+	if ($null != '1') {
+		$params = array('inputInteger' => 329);
+	} else {
+		$params = array('inputInteger' => null);
+	}
 } elseif ($method == 'echoIntegerArray') {
-	$params = array('inputIntegerArray' => array(451, 43, -392220011, 1, 1, 2, 3, 5, 8, 13, 21));
+	if ($null != '1') {
+		$params = array('inputIntegerArray' => array(451, 43, -392220011, 1, 1, 2, 3, 5, 8, 13, 21));
+	} else {
+		$params = array('inputIntegerArray' => null);
+	}
 } elseif ($method == 'echoFloat') {
-	$params = array('inputFloat' => 3.14159265);
+	if ($null != '1') {
+		$params = array('inputFloat' => 3.14159265);
+	} else {
+		$params = array('inputFloat' => null);
+	}
 } elseif ($method == 'echoFloatArray') {
-	$params = array('inputFloatArray' => array(1.1, 2.2, 3.3, 1/4, -1/9));
+	if ($null != '1') {
+		$params = array('inputFloatArray' => array(1.1, 2.2, 3.3, 1/4, -1/9));
+	} else {
+		$params = array('inputFloatArray' => null);
+	}
 } elseif ($method == 'echoStruct') {
-	$struct = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
-	$params = array('inputStruct' => $struct);
+	if ($null != '1') {
+		$struct = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
+		$params = array('inputStruct' => $struct);
+	} else {
+		$params = array('inputStruct' => null);
+	}
 } elseif ($method == 'echoStructArray') {
-	$structs[] = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
-	$structs[] = array('varString' => 'when', 'varInt' => 4, 'varFloat' => 99.9876);
-	$params = array('inputStructArray' => $structs);
+	if ($null != '1') {
+		$structs[] = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
+		$structs[] = array('varString' => 'when', 'varInt' => 4, 'varFloat' => 99.9876);
+		$params = array('inputStructArray' => $structs);
+	} else {
+		$params = array('inputStructArray' => null);
+	}
 } elseif ($method == 'echoVoid') {
 	$params = array();
 } elseif ($method == 'echoBoolean') {
-	$params = array('inputBoolean' => false);
+	if ($null != '1') {
+		$params = array('inputBoolean' => false);
+	} else {
+		$params = array('inputBoolean' => null);
+	}
 } elseif ($method == 'echoBase64') {
-	$params = array('inputBase64' => base64_encode('You must encode the data you send; NuSOAP will automatically decode the data it receives'));
+	if ($null != '1') {
+		$params = array('inputBase64' => base64_encode('You must encode the data you send; NuSOAP will automatically decode the data it receives'));
+	} else {
+		$params = array('inputBase64' => null);
+	}
 } else {
 	echo 'Sorry, I do not know about method ' . $method;
 	exit();
 }
-$client = new soapclient('http://www.scottnichol.com/samples/round2_base_server.php?wsdl', true,
+$client = new soapclient('http://www.scottnichol.com/samples/round2_base_server.php?wsdl&debug=1', true,
 						$proxyhost, $proxyport, $proxyusername, $proxypassword);
 $err = $client->getError();
 if ($err) {
