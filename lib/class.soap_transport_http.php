@@ -99,7 +99,7 @@ class soap_transport_http extends nusoap_base {
 			$port = 443;
 		}
 		
-		$this->debug("connection params: $host, $port, $this->errno, $this->error_str, $timeout");
+		$this->debug("connection params: $host, $port");
 		// timeout
 		if($timeout > 0){
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
