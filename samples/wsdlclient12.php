@@ -14,7 +14,7 @@ $proxyhost = isset($_POST['proxyhost']) ? $_POST['proxyhost'] : '';
 $proxyport = isset($_POST['proxyport']) ? $_POST['proxyport'] : '';
 $proxyusername = isset($_POST['proxyusername']) ? $_POST['proxyusername'] : '';
 $proxypassword = isset($_POST['proxypassword']) ? $_POST['proxypassword'] : '';
-$client = new soapclient("http://aws-beta.amazon.com/AWSSchemas/AWSProductData/beta/US.wsdl", true,
+$client = new soapclient("http://webservices.amazon.com/AWSECommerceService/AWSECommerceService.wsdl", true,
 						$proxyhost, $proxyport, $proxyusername, $proxypassword);
 $err = $client->getError();
 if ($err) {
@@ -31,7 +31,7 @@ $itemSearchRequest = array(
 	'Sort' => 'salesrank'
 );
 
-echo 'You must set your own Amazon Web Services subscription id in the source code to run this client!'; exit();
+echo 'You must set your own Amazon E-Commerce Services subscription id in the source code to run this client!'; exit();
 $itemSearch = array(
 	'SubscriptionId' => 'Your AWS subscription id',
 //	'AssociateTag' => '',
