@@ -114,23 +114,20 @@ class soap_transport_http extends nusoap_base {
 		}
 
 		if($this->gzip){
-			// set header
-			//$gzip = "Accept-Encoding: gzip, deflate\r\n";
-			/* gzip our output if possible
-			if(function_exists('gzencode') && $gzdata = gzencode($data)){
-				$gzip = "Accept-Encoding: gzip\r\n";
-				$data = $gzdata;
+			/*(function_exists('gzdeflate') && $gzdata = gzdeflate($data)){
+				$gzip = "Accept-Encoding: gzip, deflate\r\n";
+				//"Content-Encoding: deflate\r\n";
+				//$data = $gzdata;
 			}*/
 		}
 		
 		$this->outgoing_payload .=
-			"User-Agent: $this->title/$this->version\r\n".
-			//"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\n".
+			//"User-Agent: $this->title/$this->version\r\n".
+			"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
 			"Host: ".$this->host."\r\n".
 			$credentials.
 			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
 			$gzip.
-			//"Accept: */*\r\n".
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 		
@@ -145,7 +142,12 @@ class soap_transport_http extends nusoap_base {
 	    while ($data = fread($fp, 32768)) {
 			$this->incoming_payload .= $data;
 	    }
-		
+		//$s = socket_get_status($fp);
+		// connection was closed
+		if($this->incoming_payload == ''){
+			$this->setError('no response from server');
+			return false;
+		}
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 		
 		// close filepointer
@@ -169,12 +171,12 @@ class soap_transport_http extends nusoap_base {
 			$clean_data = $result[2];
 			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
 		} else {
-			$this->setError('no proper separation of headers and document.');
+			$this->setError('no proper separation of headers and document');
 			return false;
 		}
 		if(strlen($clean_data) == 0){
 			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers.');
+			$this->setError('no data present after HTTP headers');
 			return false;
 		}
 		$this->debug('end of send()');

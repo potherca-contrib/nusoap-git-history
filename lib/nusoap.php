@@ -490,7 +490,7 @@ class soap_fault extends nusoap_base {
 	}
 }
 
-?><?
+?><?php
 
 /**
 * parses an XML Schema, allows access to it's data, other utility methods
@@ -1268,23 +1268,20 @@ class soap_transport_http extends nusoap_base {
 		}
 
 		if($this->gzip){
-			// set header
-			//$gzip = "Accept-Encoding: gzip, deflate\r\n";
-			/* gzip our output if possible
-			if(function_exists('gzencode') && $gzdata = gzencode($data)){
-				$gzip = "Accept-Encoding: gzip\r\n";
-				$data = $gzdata;
+			/*(function_exists('gzdeflate') && $gzdata = gzdeflate($data)){
+				$gzip = "Accept-Encoding: gzip, deflate\r\n";
+				//"Content-Encoding: deflate\r\n";
+				//$data = $gzdata;
 			}*/
 		}
 		
 		$this->outgoing_payload .=
-			"User-Agent: $this->title/$this->version\r\n".
-			//"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\n".
+			//"User-Agent: $this->title/$this->version\r\n".
+			"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
 			"Host: ".$this->host."\r\n".
 			$credentials.
 			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
 			$gzip.
-			//"Accept: */*\r\n".
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 		
@@ -1887,7 +1884,7 @@ class soap_server extends nusoap_base {
     }
 }
 
-?><?
+?><?php
 
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
@@ -2682,7 +2679,7 @@ class wsdl extends XMLSchema {
 	}
 }
 
-?><?
+?><?php
 
 /**
 *
