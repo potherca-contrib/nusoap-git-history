@@ -325,10 +325,12 @@ class XMLSchema extends nusoap_base  {
 					$this->currentElement = $attrs['name'];
 					$this->elements[ $attrs['name'] ] = $attrs;
 					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
-					$this->elements[ $attrs['name'] ]['type'] = $this->schemaTargetNamespace . ':' . $attrs['name'] . '_ContainedType';
+					$attrs['type'] = $this->schemaTargetNamespace . ':' . $attrs['name'] . '_ContainedType';
+					$this->elements[ $attrs['name'] ]['type'] = $attrs['type'];
 					if (!isset($this->elements[ $attrs['name'] ]['form'])) {
 						$this->elements[ $attrs['name'] ]['form'] = $this->schemaInfo['elementFormDefault'];
 					}
+					$ename = $attrs['name'];
 				}
 				if(isset($ename) && $this->currentComplexType){
 					$this->complexTypes[$this->currentComplexType]['elements'][$ename] = $attrs;
@@ -380,8 +382,11 @@ class XMLSchema extends nusoap_base  {
 					$this->simpleTypes[ $attrs['name'] ]['typeClass'] = 'simpleType';
 					$this->simpleTypes[ $attrs['name'] ]['phpType'] = 'scalar';
 				} else {
-					//echo 'not parsing: '.$name;
-					//var_dump($attrs);
+					$this->xdebug('processing unnamed simpleType for element '.$this->currentElement);
+					$this->currentSimpleType = $this->currentElement . '_ContainedType';
+					$this->currentElement = false;
+					$this->simpleTypes[$this->currentSimpleType] = $attrs;
+					$this->simpleTypes[$this->currentSimpleType]['phpType'] = 'scalar';
 				}
 			break;
 			default:
@@ -774,6 +779,24 @@ class XMLSchema extends nusoap_base  {
 		
 		$this->xdebug("addSimpleType $name:");
 		$this->appendDebug($this->varDump($this->simpleTypes[$name]));
+	}
+
+	/**
+	* adds an element to the schema
+	*
+	* @param name
+	* @param array $attrs attributes that must include name and type
+	* @see xmlschema
+	*/
+	function addElement($attrs) {
+		if (! $this->getPrefix($attrs['type'])) {
+			$attrs['type'] = $this->schemaTargetNamespace . ':' . $attrs['type'];
+		}
+		$this->elements[ $attrs['name'] ] = $attrs;
+		$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+		
+		$this->xdebug("addElement " . $attrs['name']);
+		$this->appendDebug($this->varDump($this->elements[ $attrs['name'] ]));
 	}
 }
 

@@ -1113,10 +1113,12 @@ class XMLSchema extends nusoap_base  {
 					$this->currentElement = $attrs['name'];
 					$this->elements[ $attrs['name'] ] = $attrs;
 					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
-					$this->elements[ $attrs['name'] ]['type'] = $this->schemaTargetNamespace . ':' . $attrs['name'] . '_ContainedType';
+					$attrs['type'] = $this->schemaTargetNamespace . ':' . $attrs['name'] . '_ContainedType';
+					$this->elements[ $attrs['name'] ]['type'] = $attrs['type'];
 					if (!isset($this->elements[ $attrs['name'] ]['form'])) {
 						$this->elements[ $attrs['name'] ]['form'] = $this->schemaInfo['elementFormDefault'];
 					}
+					$ename = $attrs['name'];
 				}
 				if(isset($ename) && $this->currentComplexType){
 					$this->complexTypes[$this->currentComplexType]['elements'][$ename] = $attrs;
@@ -1168,8 +1170,11 @@ class XMLSchema extends nusoap_base  {
 					$this->simpleTypes[ $attrs['name'] ]['typeClass'] = 'simpleType';
 					$this->simpleTypes[ $attrs['name'] ]['phpType'] = 'scalar';
 				} else {
-					//echo 'not parsing: '.$name;
-					//var_dump($attrs);
+					$this->xdebug('processing unnamed simpleType for element '.$this->currentElement);
+					$this->currentSimpleType = $this->currentElement . '_ContainedType';
+					$this->currentElement = false;
+					$this->simpleTypes[$this->currentSimpleType] = $attrs;
+					$this->simpleTypes[$this->currentSimpleType]['phpType'] = 'scalar';
 				}
 			break;
 			default:
@@ -1562,6 +1567,24 @@ class XMLSchema extends nusoap_base  {
 		
 		$this->xdebug("addSimpleType $name:");
 		$this->appendDebug($this->varDump($this->simpleTypes[$name]));
+	}
+
+	/**
+	* adds an element to the schema
+	*
+	* @param name
+	* @param array $attrs attributes that must include name and type
+	* @see xmlschema
+	*/
+	function addElement($attrs) {
+		if (! $this->getPrefix($attrs['type'])) {
+			$attrs['type'] = $this->schemaTargetNamespace . ':' . $attrs['type'];
+		}
+		$this->elements[ $attrs['name'] ] = $attrs;
+		$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+		
+		$this->xdebug("addElement " . $attrs['name']);
+		$this->appendDebug($this->varDump($this->elements[ $attrs['name'] ]));
 	}
 }
 
@@ -4185,7 +4208,13 @@ class wsdl extends nusoap_base {
 						        die("$partType has no namespace!");
 						    } 
 						} 
-						$xml .= '<part name="' . $partName . '" type="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
+						$typeDef = $this->getTypeDef($this->getLocalPart($partType), $typePrefix);
+						if ($typeDef['typeClass'] == 'element') {
+							$elementortype = 'element';
+						} else {
+							$elementortype = 'type';
+						}
+						$xml .= '<part name="' . $partName . '" ' . $elementortype . '="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
 					}
 				}
 				$xml .= '</message>';
@@ -4201,7 +4230,7 @@ class wsdl extends nusoap_base {
 				$portType_xml .= '<portType name="' . $attrs['portType'] . '">';
 				foreach($attrs['operations'] as $opName => $opParts) {
 					$binding_xml .= '<operation name="' . $opName . '">';
-					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
+					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $opParts['style'] . '"/>';
 					if (isset($opParts['input']['encodingStyle']) && $opParts['input']['encodingStyle'] != '') {
 						$enc_style = ' encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
 					} else {
@@ -4527,6 +4556,8 @@ class wsdl extends nusoap_base {
 				$elementName = $uqType;
 				if (isset($typeDef['form']) && ($typeDef['form'] == 'qualified')) {
 					$elementNS = " xmlns=\"$ns\"";
+				} else {
+					$elementNS = '';
 				}
 			} else {
 				$elementName = $name;
@@ -4753,6 +4784,18 @@ class wsdl extends nusoap_base {
 	}
 
 	/**
+	* adds an element to the WSDL types
+	*
+	* @param name
+	* @param array $attrs attributes that must include name and type
+	* @see xmlschema
+	*/
+	function addElement($attrs) {
+		$typens = isset($this->namespaces['types']) ? $this->namespaces['types'] : $this->namespaces['tns'];
+		$this->schemas[$typens][0]->addElement($attrs);
+	}
+
+	/**
 	* register a service with the server
 	* 
 	* @param string $methodname 
@@ -4770,7 +4813,26 @@ class wsdl extends nusoap_base {
 			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
 		} else {
 			$encodingStyle = '';
-		} 
+		}
+
+		if ($style == 'document') {
+			$elements = array();
+			foreach ($in as $n => $t) {
+				$elements[$n] = array('name' => $n, 'type' => $t);
+			}
+			$this->addComplexType($name . 'RequestType', 'complexType', 'struct', 'all', '', $elements);
+			$this->addElement(array('name' => $name, 'type' => $name . 'RequestType'));
+			$in = array('parameters' => 'tns:' . $name);
+
+			$elements = array();
+			foreach ($out as $n => $t) {
+				$elements[$n] = array('name' => $n, 'type' => $t);
+			}
+			$this->addComplexType($name . 'ResponseType', 'complexType', 'struct', 'all', '', $elements);
+			$this->addElement(array('name' => $name . 'Response', 'type' => $name . 'ResponseType'));
+			$out = array('parameters' => 'tns:' . $name . 'Response');
+		}
+
 		// get binding
 		$this->bindings[ $this->serviceName . 'Binding' ]['operations'][$name] =
 		array(

@@ -289,3 +289,10 @@
 - soapclient: read/write cookies (thanks Ingo)
 - soap_server: change faultcode on non-resendable faults to Client
 - soap_transport_http: read/write cookies (thanks Ingo)
+
+2004-10-05, version 0.6.8
+- wsdl: add addElement method
+- wsdl: support the document style in the register method
+- xmlschema: parse unnamed simpleTypes, rather than ignoring them
+- xmlschema: include untyped elements when parsing a complexType
+- xmlschema: add addElement method
