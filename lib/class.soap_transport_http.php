@@ -105,7 +105,7 @@ class soap_transport_http extends nusoap_base {
 		// make payload
 		$this->outgoing_payload .=
 			"User-Agent: $this->title/$this->version\r\n".
-			"Host: ".$this->host."\r\n";
+			'Host: '.$this->host.':'.$this->port."\r\n";
 		// http auth
 		$credentials = '';
 		if($this->username != '') {

@@ -25,7 +25,7 @@ class soap_server extends nusoap_base {
 	var $result = 'successful';
 	var $wsdl = false;
 	var $externalWSDLURL = false;
-    var $debug_flag = true;
+    var $debug_flag = false;
 	
 	/**
 	* constructor
