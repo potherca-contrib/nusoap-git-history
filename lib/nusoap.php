@@ -1230,6 +1230,13 @@ class soap_transport_http extends nusoap_base {
 	* @return	string data
 	* @access   public
 	*/
+	/**
+	 * soap_transport_http::send()
+	 * 
+	 * @param $data
+	 * @param integer $timeout
+	 * @return 
+	 **/
 	function send($data, $timeout=0) {
 	    flush();
 		$this->debug('entered send() with data of length: '.strlen($data));
@@ -1268,16 +1275,17 @@ class soap_transport_http extends nusoap_base {
 		}
 
 		if($this->gzip){
-			/*(function_exists('gzdeflate') && $gzdata = gzdeflate($data)){
+			if(function_exists('gzdeflate') && $gzdata = gzdeflate($data)){
 				$gzip = "Accept-Encoding: gzip, deflate\r\n";
+				//set_socket_blocking($fp, 1); 
 				//"Content-Encoding: deflate\r\n";
 				//$data = $gzdata;
-			}*/
+			}//
 		}
 		
 		$this->outgoing_payload .=
-			//"User-Agent: $this->title/$this->version\r\n".
-			"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
+			"User-Agent: $this->title/$this->version\r\n".
+			//"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
 			"Host: ".$this->host."\r\n".
 			$credentials.
 			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
@@ -1291,11 +1299,23 @@ class soap_transport_http extends nusoap_base {
 			$this->debug('Write error');
 		}
 		$this->debug('wrote data to socket');
-		// get response
+		
+		/* get response
 	    $this->incoming_payload = '';
 	    while ($data = fread($fp, 32768)) {
 			$this->incoming_payload .= $data;
-	    }
+	    }*/
+		//while(!feof($fp) && $t < $timeout) {
+		while(!feof($fp)){
+			$this->incoming_payload .= fgets($fp,32768);
+			//$t = time();
+		}
+		
+		/*if ($t>=$timeout){
+			$this->setError('Operation timed out');
+			return false;
+		}*/
+		
 		//$s = socket_get_status($fp);
 		// connection was closed
 		if($this->incoming_payload == ''){
@@ -1318,6 +1338,11 @@ class soap_transport_http extends nusoap_base {
 		
 		//print "data: <xmp>$data</xmp>";
 		
+		// remove 100
+		if($this->gzip){
+			$data = ereg_replace("^([^<]*)\r?\n\r?\n",'',$data);
+		}
+		//print '<pre>'.$data.'</pre>';
 		// separate content from HTTP headers
         if(preg_match("/([^<]*?)\r?\n\r?\n(<.*>)/s",$data,$result)) {
 			$this->debug('found proper separation of headers and document');
@@ -2741,7 +2766,7 @@ class soap_parser extends nusoap_base {
 			//xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
 			xml_parser_set_option($this->parser, XML_OPTION_CASE_FOLDING, 0);
 			// Set the object for the parser.
-			xml_set_object($this->parser, &$this);
+			xml_set_object($this->parser, $this);
 			// Set the element handlers for the parser.
 			xml_set_element_handler($this->parser, 'start_element','end_element');
 			xml_set_character_data_handler($this->parser,'character_data');
