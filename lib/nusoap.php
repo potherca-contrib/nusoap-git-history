@@ -1107,7 +1107,7 @@ class XMLSchema extends nusoap_base  {
 					}
 					$ename = $attrs['name'];
 				} elseif(isset($attrs['ref'])){
-					$ename = $attrs['ref'];
+					$ename = $this->getLocalPart($attrs['ref']);
 				} else {
 					$this->xdebug("processing untyped element ".$attrs['name']);
 					$this->currentElement = $attrs['name'];
@@ -1137,6 +1137,11 @@ class XMLSchema extends nusoap_base  {
 					if (! $this->getPrefixFromNamespace($attrs['namespace'])) {
 						$this->namespaces['ns'.(count($this->namespaces)+1)] = $attrs['namespace'];
 					}
+				}
+			break;
+			case 'extension':
+				if ($this->currentComplexType) {
+					$this->complexTypes[$this->currentComplexType]['extensionBase'] = $attrs['base'];
 				}
 			break;
 			case 'restriction':
@@ -1679,9 +1684,16 @@ class soap_transport_http extends nusoap_base {
 	var $useSOAPAction = true;
 	var $persistentConnection = false;
 	var $ch = false;	// cURL handle
-	var $username;
-	var $password;
-	
+	var $username = '';
+	var $password = '';
+	var $authtype = '';
+	var $digestRequest = array();
+	var $certRequest = array();	// keys must be cainfofile, sslcertfile, sslkeyfile, passphrase
+								// cainfofile: certificate authority file, e.g. '$pathToPemFiles/rootca.pem'
+								// sslcertfile: SSL certificate file, e.g. '$pathToPemFiles/mycert.pem'
+								// sslkeyfile: SSL key file, e.g. '$pathToPemFiles/mykey.pem'
+								// passphrase: SSL key password/passphrase
+
 	/**
 	* constructor
 	*/
@@ -1831,15 +1843,15 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 0);
 
-		/*
-			TODO: support client certificates (thanks Tobias Boes)
-        curl_setopt($this->ch, CURLOPT_CAINFO, '$pathToPemFiles/rootca.pem');
-        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
-        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
-        curl_setopt($this->ch, CURLOPT_SSLCERT, '$pathToPemFiles/mycert.pem');
-        curl_setopt($this->ch, CURLOPT_SSLKEY, '$pathToPemFiles/mykey.pem');
-	    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $passphrase);
-		*/
+		// support client certificates (thanks Tobias Boes)
+		if ($this->authtype == 'certificate') {
+	        curl_setopt($this->ch, CURLOPT_CAINFO, $certRequest['cainfofile']);
+	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
+	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
+	        curl_setopt($this->ch, CURLOPT_SSLCERT, $certRequest['sslcertfile']);
+	        curl_setopt($this->ch, CURLOPT_SSLKEY, $certRequest['sslkeyfile']);
+		    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $certRequest['passphrase']);
+		}
 		$this->debug('cURL connection set up');
 		return true;
 	  } else {
@@ -1908,11 +1920,12 @@ class soap_transport_http extends nusoap_base {
 	*
 	* @param    string $username
 	* @param    string $password
-	* @param	string $authtype
-	* @param	array $digestRequest
+	* @param	string $authtype (basic, digest, certificate)
+	* @param	array $digestRequest (keys must be nonce, nc, realm, qop)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
 	* @access   public
 	*/
-	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array()) {
+	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array(), $certRequest = array()) {
 		global $_SERVER;
 
 		$this->debug("Set credentials for authtype $authtype");
@@ -1961,6 +1974,8 @@ class soap_transport_http extends nusoap_base {
 	
 				$this->outgoing_headers['Authorization'] = 'Digest username="' . $username . '", realm="' . $digestRequest['realm'] . '", nonce="' . $nonce . '", uri="' . $this->digest_uri . '", cnonce="' . $cnonce . '", nc=' . sprintf("%08x", $digestRequest['nc']) . ', qop="' . $digestRequest['qop'] . '", response="' . $hashedDigest . '"';
 			}
+		} elseif ($authtype == 'certificate') {
+			$this->certRequest = $certRequest;
 		}
 		$this->username = $username;
 		$this->password = $password;
@@ -2738,6 +2753,8 @@ class soap_server extends nusoap_base {
 	*/
 	function service($data){
 		global $QUERY_STRING;
+		global $_SERVER;
+
 		if(isset($_SERVER['QUERY_STRING'])){
 			$qs = $_SERVER['QUERY_STRING'];
 		} elseif(isset($GLOBALS['QUERY_STRING'])){
@@ -2756,11 +2773,14 @@ class soap_server extends nusoap_base {
                 $fp = fopen($this->externalWSDLURL, 'r');
                 fpassthru($fp);
               }
-			} else {
+			} elseif ($this->wsdl) {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize($this->debug_flag);
+			} else {
+				header("Content-Type: text/html; charset=ISO-8859-1\r\n");
+				print "This service does not provide WSDL";
 			}
-		} elseif($data == '' && $this->wsdl){
+		} elseif ($data == '' && $this->wsdl) {
 			// print web interface
 			print $this->wsdl->webDescription();
 		} else {
@@ -4003,10 +4023,10 @@ class wsdl extends nusoap_base {
 	function getTypeDef($type, $ns) {
 		if ((! $ns) && isset($this->namespaces['tns'])) {
 			$ns = $this->namespaces['tns'];
-			$this->debug("Type namespace forced to $ns");
+			$this->debug("type namespace forced to $ns");
 		}
 		if (isset($this->schemas[$ns])) {
-			$this->debug("Have schema for namespace $ns");
+			$this->debug("have schema for namespace $ns");
 			for ($i = 0; $i < count($this->schemas[$ns]); $i++) {
 				$xs = &$this->schemas[$ns][$i];
 				$t = $xs->getTypeDef($type);
@@ -4017,7 +4037,7 @@ class wsdl extends nusoap_base {
 				}
 			}
 		} else {
-			$this->debug("Do not have schema for namespace $ns");
+			$this->debug("do not have schema for namespace $ns");
 		}
 		return false;
 	}
@@ -4440,7 +4460,9 @@ class wsdl extends nusoap_base {
 	 */
 	function serializeType($name, $type, $value, $use='encoded', $encodingStyle=false)
 	{
-		$this->debug("in serializeType: $name, $type, $value, $use, $encodingStyle");
+		$this->debug("in serializeType: $name, $type, $use, $encodingStyle");
+		$this->debug("value:");
+		$this->appendDebug($this->varDump($value));
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
@@ -4460,8 +4482,15 @@ class wsdl extends nusoap_base {
 	    		$forceType = false;
 		    	$this->debug("in serializeType: soapval does not override type");
 	    	}
+	    	$attrs = $value->attributes;
 	    	$value = $value->value;
 	    	$this->debug("in serializeType: soapval overrides value to $value");
+	    	if ($attrs) {
+	    		foreach ($attrs as $n => $v) {
+	    			$value['!' . $n] = $v;
+	    		}
+		    	$this->debug("in serializeType: soapval provides attributes");
+		    }
         } else {
         	$forceType = false;
         }
@@ -4477,7 +4506,7 @@ class wsdl extends nusoap_base {
 			}
 
 			if($ns == $this->XMLSchemaVersion || $ns == 'http://schemas.xmlsoap.org/soap/encoding/'){
-				
+				$this->debug('type namespace indicates XML Schema or SOAP Encoding type');
 				if (is_null($value)) {
 					if ($use == 'literal') {
 						// TODO: depends on nillable
@@ -4512,6 +4541,7 @@ class wsdl extends nusoap_base {
 					$this->debug("serializeType returning: $xml");
 					return $xml;
 				}
+				$this->debug('custom type extends XML Schema or SOAP Encoding namespace (yuck)');
 			} else if ($ns == 'http://xml.apache.org/xml-soap') {
 				if ($uqType == 'Map') {
 					$contents = '';
@@ -4573,68 +4603,18 @@ class wsdl extends nusoap_base {
 				$this->debug("serializeType returning: $xml");
 				return $xml;
 			}
+			$elementAttrs = $this->serializeComplexTypeAttributes($typeDef, $value, $ns, $uqType);
 			if ($use == 'literal') {
 				if ($forceType) {
-					$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
+					$xml = "<$elementName$elementNS$elementAttrs xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 				} else {
-					$xml = "<$elementName$elementNS>";
+					$xml = "<$elementName$elementNS$elementAttrs>";
 				}
 			} else {
-				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
+				$xml = "<$elementName$elementNS$elementAttrs xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
 			}
-			
-			if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
-				if (is_array($value)) {
-					$xvalue = $value;
-				} elseif (is_object($value)) {
-					$xvalue = get_object_vars($value);
-				} else {
-					$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
-					$xvalue = array();
-				}
-				// toggle whether all elements are present - ideally should validate against schema
-				if(count($typeDef['elements']) != count($xvalue)){
-					$optionals = true;
-				}
-				foreach($typeDef['elements'] as $eName => $attrs) {
-					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if(isset($optionals) && !isset($xvalue[$eName])){
-						// do nothing
-					} else {
-						// get value
-						if (isset($xvalue[$eName])) {
-						    $v = $xvalue[$eName];
-						} else {
-						    $v = null;
-						}
-						// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
-						if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
-							$vv = $v;
-							foreach ($vv as $k => $v) {
-								if (isset($attrs['type'])) {
-									// serialize schema-defined type
-								    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
-								} else {
-									// serialize generic type
-								    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
-								    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
-								}
-							}
-						} else {
-							if (isset($attrs['type'])) {
-								// serialize schema-defined type
-							    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
-							} else {
-								// serialize generic type
-							    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
-							    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
-							}
-						}
-					}
-				} 
-			} else {
-				$this->debug("Expected elements for XML Schema type $ns:$uqType");
-			}
+
+			$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use, $encodingStyle);
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
 			if (isset($typeDef['form']) && ($typeDef['form'] == 'qualified')) {
@@ -4713,6 +4693,156 @@ class wsdl extends nusoap_base {
 		return $xml;
 	}
 	
+	/**
+	 * serializes the attributes for a complexType
+	 *
+	 * @param array $typeDef
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $ns the namespace of the type
+	 * @param string $uqType the local part of the type
+	 * @return string serialization
+	 * @access public 
+	 */
+	function serializeComplexTypeAttributes($typeDef, $value, $ns, $uqType) {
+		$xml = '';
+		if (isset($typeDef['attrs']) && is_array($typeDef['attrs'])) {
+			$this->debug("serialize attributes for XML Schema type $ns:$uqType");
+			if (is_array($value)) {
+				$xvalue = $value;
+			} elseif (is_object($value)) {
+				$xvalue = get_object_vars($value);
+			} else {
+				$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+				$xvalue = array();
+			}
+			foreach ($typeDef['attrs'] as $aName => $attrs) {
+				if (isset($xvalue['!' . $aName])) {
+					$xname = '!' . $aName;
+					$this->debug("value provided for attribute $aName with key $xname");
+				} elseif (isset($xvalue[$aName])) {
+					$xname = $aName;
+					$this->debug("value provided for attribute $aName with key $xname");
+				} elseif (isset($attrs['default'])) {
+					$xname = '!' . $aName;
+					$xvalue[$xname] = $attrs['default'];
+					$this->debug('use default value of ' . $xvalue[$aName] . ' for attribute ' . $aName);
+				} else {
+					$xname = '';
+					$this->debug("no value provided for attribute $aName");
+				}
+				if ($xname) {
+					$xml .=  " $aName=\"" . $xvalue[$xname] . "\"";
+				}
+			} 
+		} else {
+			$this->debug("no attributes to serialize for XML Schema type $ns:$uqType");
+		}
+		if (isset($typeDef['extensionBase'])) {
+			$ns = $this->getPrefix($typeDef['extensionBase']);
+			$uqType = $this->getLocalPart($typeDef['extensionBase']);
+			if ($this->getNamespaceFromPrefix($ns)) {
+				$ns = $this->getNamespaceFromPrefix($ns);
+			}
+			if ($typeDef = $this->getTypeDef($uqType, $ns)) {
+				$this->debug("serialize attributes for extension base $ns:$uqType");
+				$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType);
+			} else {
+				$this->debug("extension base $ns:$uqType is not a supported type");
+			}
+		}
+		return $xml;
+	}
+
+	/**
+	 * serializes the elements for a complexType
+	 *
+	 * @param array $typeDef
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $ns the namespace of the type
+	 * @param string $uqType the local part of the type
+	 * @param string $use , use for part (encoded|literal)
+	 * @param string $encodingStyle , use to add encoding changes to serialisation
+	 * @return string serialization
+	 * @access public 
+	 */
+	function serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use='encoded', $encodingStyle=false) {
+		$xml = '';
+		if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
+			$this->debug("serialize elements for XML Schema type $ns:$uqType");
+			if (is_array($value)) {
+				$xvalue = $value;
+			} elseif (is_object($value)) {
+				$xvalue = get_object_vars($value);
+			} else {
+				$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+				$xvalue = array();
+			}
+			// toggle whether all elements are present - ideally should validate against schema
+			if (count($typeDef['elements']) != count($xvalue)){
+				$optionals = true;
+			}
+			foreach ($typeDef['elements'] as $eName => $attrs) {
+				if (!isset($xvalue[$eName])) {
+					if (isset($attrs['default'])) {
+						$xvalue[$eName] = $attrs['default'];
+						$this->debug('use default value of ' . $xvalue[$eName] . ' for element ' . $eName);
+					}
+				}
+				// if user took advantage of a minOccurs=0, then only serialize named parameters
+				if (isset($optionals) && !isset($xvalue[$eName])){
+					// do nothing
+					$this->debug("no value provided for complexType element $eName, so serialize nothing");
+				} else {
+					// get value
+					if (isset($xvalue[$eName])) {
+					    $v = $xvalue[$eName];
+					} else {
+					    $v = null;
+					}
+					// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
+					if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
+						$vv = $v;
+						foreach ($vv as $k => $v) {
+							if (isset($attrs['type'])) {
+								// serialize schema-defined type
+							    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+							} else {
+								// serialize generic type
+							    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+							    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+							}
+						}
+					} else {
+						if (isset($attrs['type'])) {
+							// serialize schema-defined type
+						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+						} else {
+							// serialize generic type
+						    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+						    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+						}
+					}
+				}
+			} 
+		} else {
+			$this->debug("no elements to serialize for XML Schema type $ns:$uqType");
+		}
+		if (isset($typeDef['extensionBase'])) {
+			$ns = $this->getPrefix($typeDef['extensionBase']);
+			$uqType = $this->getLocalPart($typeDef['extensionBase']);
+			if ($this->getNamespaceFromPrefix($ns)) {
+				$ns = $this->getNamespaceFromPrefix($ns);
+			}
+			if ($typeDef = $this->getTypeDef($uqType, $ns)) {
+				$this->debug("serialize elements for extension base $ns:$uqType");
+				$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use, $encodingStyle);
+			} else {
+				$this->debug("extension base $ns:$uqType is not a supported type");
+			}
+		}
+		return $xml;
+	}
+
 	/**
 	* adds an XML Schema complex type to the WSDL types
 	*
@@ -5129,7 +5259,10 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
+			} elseif ($key != 'href' && $key != 'xmlns') {
+				$this->message[$pos]['xattrs']['!' . $key] = $value;
 			}
+
 			if ($key == 'xmlns') {
 				$this->default_namespace = $value;
 			}
@@ -5199,7 +5332,9 @@ class soap_parser extends nusoap_base {
 				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
 				}
-				
+			// build complex values of just attributes
+			} elseif (isset($this->message[$pos]['xattrs'])) {
+				$this->message[$pos]['result'] = $this->message[$pos]['xattrs'];
 			// set value of simple type
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
@@ -5414,6 +5549,11 @@ class soap_parser extends nusoap_base {
                 	}
                 }
 			}
+			if (isset($this->message[$pos]['xattrs'])) {
+				foreach ($this->message[$pos]['xattrs'] as $n => $v) {
+					$params[$n] = $v;
+				}
+			}
 			return is_array($params) ? $params : array();
 		} else {
         	$this->debug('no children');
@@ -5456,6 +5596,7 @@ class soapclient extends nusoap_base  {
 	var $username = '';
 	var $password = '';
 	var $authtype = '';
+	var $certRequest = array();
 	var $requestHeaders = false;	// SOAP headers in request (text)
 	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
 	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
@@ -5769,8 +5910,8 @@ class soapclient extends nusoap_base  {
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 				}
-                if($this->username != '' && $this->password != '') {
-					$http->setCredentials($this->username, $this->password, $this->authtype);
+                if($this->authtype != '') {
+					$http->setCredentials($this->username, $this->password, $this->authtype, array(), $this->certRequest);
 				}
 				if($this->http_encoding != ''){
 					$http->setEncoding($this->http_encoding);
@@ -5911,13 +6052,15 @@ class soapclient extends nusoap_base  {
 	*
 	* @param    string $username
 	* @param    string $password
-	* @param	string $authtype (basic|digest)
+	* @param	string $authtype (basic|digest|certificate)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
 	* @access   public
 	*/
-	function setCredentials($username, $password, $authtype = 'basic') {
+	function setCredentials($username, $password, $authtype = 'basic', $certRequest = array()) {
 		$this->username = $username;
 		$this->password = $password;
 		$this->authtype = $authtype;
+		$this->certRequest = $certRequest;
 	}
 	
 	/**

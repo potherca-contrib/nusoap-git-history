@@ -601,10 +601,10 @@ class wsdl extends nusoap_base {
 	function getTypeDef($type, $ns) {
 		if ((! $ns) && isset($this->namespaces['tns'])) {
 			$ns = $this->namespaces['tns'];
-			$this->debug("Type namespace forced to $ns");
+			$this->debug("type namespace forced to $ns");
 		}
 		if (isset($this->schemas[$ns])) {
-			$this->debug("Have schema for namespace $ns");
+			$this->debug("have schema for namespace $ns");
 			for ($i = 0; $i < count($this->schemas[$ns]); $i++) {
 				$xs = &$this->schemas[$ns][$i];
 				$t = $xs->getTypeDef($type);
@@ -615,7 +615,7 @@ class wsdl extends nusoap_base {
 				}
 			}
 		} else {
-			$this->debug("Do not have schema for namespace $ns");
+			$this->debug("do not have schema for namespace $ns");
 		}
 		return false;
 	}
@@ -1038,7 +1038,9 @@ class wsdl extends nusoap_base {
 	 */
 	function serializeType($name, $type, $value, $use='encoded', $encodingStyle=false)
 	{
-		$this->debug("in serializeType: $name, $type, $value, $use, $encodingStyle");
+		$this->debug("in serializeType: $name, $type, $use, $encodingStyle");
+		$this->debug("value:");
+		$this->appendDebug($this->varDump($value));
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
@@ -1058,8 +1060,15 @@ class wsdl extends nusoap_base {
 	    		$forceType = false;
 		    	$this->debug("in serializeType: soapval does not override type");
 	    	}
+	    	$attrs = $value->attributes;
 	    	$value = $value->value;
 	    	$this->debug("in serializeType: soapval overrides value to $value");
+	    	if ($attrs) {
+	    		foreach ($attrs as $n => $v) {
+	    			$value['!' . $n] = $v;
+	    		}
+		    	$this->debug("in serializeType: soapval provides attributes");
+		    }
         } else {
         	$forceType = false;
         }
@@ -1075,7 +1084,7 @@ class wsdl extends nusoap_base {
 			}
 
 			if($ns == $this->XMLSchemaVersion || $ns == 'http://schemas.xmlsoap.org/soap/encoding/'){
-				
+				$this->debug('type namespace indicates XML Schema or SOAP Encoding type');
 				if (is_null($value)) {
 					if ($use == 'literal') {
 						// TODO: depends on nillable
@@ -1110,6 +1119,7 @@ class wsdl extends nusoap_base {
 					$this->debug("serializeType returning: $xml");
 					return $xml;
 				}
+				$this->debug('custom type extends XML Schema or SOAP Encoding namespace (yuck)');
 			} else if ($ns == 'http://xml.apache.org/xml-soap') {
 				if ($uqType == 'Map') {
 					$contents = '';
@@ -1171,68 +1181,18 @@ class wsdl extends nusoap_base {
 				$this->debug("serializeType returning: $xml");
 				return $xml;
 			}
+			$elementAttrs = $this->serializeComplexTypeAttributes($typeDef, $value, $ns, $uqType);
 			if ($use == 'literal') {
 				if ($forceType) {
-					$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
+					$xml = "<$elementName$elementNS$elementAttrs xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 				} else {
-					$xml = "<$elementName$elementNS>";
+					$xml = "<$elementName$elementNS$elementAttrs>";
 				}
 			} else {
-				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
+				$xml = "<$elementName$elementNS$elementAttrs xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
 			}
-			
-			if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
-				if (is_array($value)) {
-					$xvalue = $value;
-				} elseif (is_object($value)) {
-					$xvalue = get_object_vars($value);
-				} else {
-					$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
-					$xvalue = array();
-				}
-				// toggle whether all elements are present - ideally should validate against schema
-				if(count($typeDef['elements']) != count($xvalue)){
-					$optionals = true;
-				}
-				foreach($typeDef['elements'] as $eName => $attrs) {
-					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if(isset($optionals) && !isset($xvalue[$eName])){
-						// do nothing
-					} else {
-						// get value
-						if (isset($xvalue[$eName])) {
-						    $v = $xvalue[$eName];
-						} else {
-						    $v = null;
-						}
-						// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
-						if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
-							$vv = $v;
-							foreach ($vv as $k => $v) {
-								if (isset($attrs['type'])) {
-									// serialize schema-defined type
-								    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
-								} else {
-									// serialize generic type
-								    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
-								    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
-								}
-							}
-						} else {
-							if (isset($attrs['type'])) {
-								// serialize schema-defined type
-							    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
-							} else {
-								// serialize generic type
-							    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
-							    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
-							}
-						}
-					}
-				} 
-			} else {
-				$this->debug("Expected elements for XML Schema type $ns:$uqType");
-			}
+
+			$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use, $encodingStyle);
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
 			if (isset($typeDef['form']) && ($typeDef['form'] == 'qualified')) {
@@ -1311,6 +1271,156 @@ class wsdl extends nusoap_base {
 		return $xml;
 	}
 	
+	/**
+	 * serializes the attributes for a complexType
+	 *
+	 * @param array $typeDef
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $ns the namespace of the type
+	 * @param string $uqType the local part of the type
+	 * @return string serialization
+	 * @access public 
+	 */
+	function serializeComplexTypeAttributes($typeDef, $value, $ns, $uqType) {
+		$xml = '';
+		if (isset($typeDef['attrs']) && is_array($typeDef['attrs'])) {
+			$this->debug("serialize attributes for XML Schema type $ns:$uqType");
+			if (is_array($value)) {
+				$xvalue = $value;
+			} elseif (is_object($value)) {
+				$xvalue = get_object_vars($value);
+			} else {
+				$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+				$xvalue = array();
+			}
+			foreach ($typeDef['attrs'] as $aName => $attrs) {
+				if (isset($xvalue['!' . $aName])) {
+					$xname = '!' . $aName;
+					$this->debug("value provided for attribute $aName with key $xname");
+				} elseif (isset($xvalue[$aName])) {
+					$xname = $aName;
+					$this->debug("value provided for attribute $aName with key $xname");
+				} elseif (isset($attrs['default'])) {
+					$xname = '!' . $aName;
+					$xvalue[$xname] = $attrs['default'];
+					$this->debug('use default value of ' . $xvalue[$aName] . ' for attribute ' . $aName);
+				} else {
+					$xname = '';
+					$this->debug("no value provided for attribute $aName");
+				}
+				if ($xname) {
+					$xml .=  " $aName=\"" . $xvalue[$xname] . "\"";
+				}
+			} 
+		} else {
+			$this->debug("no attributes to serialize for XML Schema type $ns:$uqType");
+		}
+		if (isset($typeDef['extensionBase'])) {
+			$ns = $this->getPrefix($typeDef['extensionBase']);
+			$uqType = $this->getLocalPart($typeDef['extensionBase']);
+			if ($this->getNamespaceFromPrefix($ns)) {
+				$ns = $this->getNamespaceFromPrefix($ns);
+			}
+			if ($typeDef = $this->getTypeDef($uqType, $ns)) {
+				$this->debug("serialize attributes for extension base $ns:$uqType");
+				$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType);
+			} else {
+				$this->debug("extension base $ns:$uqType is not a supported type");
+			}
+		}
+		return $xml;
+	}
+
+	/**
+	 * serializes the elements for a complexType
+	 *
+	 * @param array $typeDef
+	 * @param mixed $value , a native PHP value (parameter value)
+	 * @param string $ns the namespace of the type
+	 * @param string $uqType the local part of the type
+	 * @param string $use , use for part (encoded|literal)
+	 * @param string $encodingStyle , use to add encoding changes to serialisation
+	 * @return string serialization
+	 * @access public 
+	 */
+	function serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use='encoded', $encodingStyle=false) {
+		$xml = '';
+		if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
+			$this->debug("serialize elements for XML Schema type $ns:$uqType");
+			if (is_array($value)) {
+				$xvalue = $value;
+			} elseif (is_object($value)) {
+				$xvalue = get_object_vars($value);
+			} else {
+				$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+				$xvalue = array();
+			}
+			// toggle whether all elements are present - ideally should validate against schema
+			if (count($typeDef['elements']) != count($xvalue)){
+				$optionals = true;
+			}
+			foreach ($typeDef['elements'] as $eName => $attrs) {
+				if (!isset($xvalue[$eName])) {
+					if (isset($attrs['default'])) {
+						$xvalue[$eName] = $attrs['default'];
+						$this->debug('use default value of ' . $xvalue[$eName] . ' for element ' . $eName);
+					}
+				}
+				// if user took advantage of a minOccurs=0, then only serialize named parameters
+				if (isset($optionals) && !isset($xvalue[$eName])){
+					// do nothing
+					$this->debug("no value provided for complexType element $eName, so serialize nothing");
+				} else {
+					// get value
+					if (isset($xvalue[$eName])) {
+					    $v = $xvalue[$eName];
+					} else {
+					    $v = null;
+					}
+					// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
+					if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
+						$vv = $v;
+						foreach ($vv as $k => $v) {
+							if (isset($attrs['type'])) {
+								// serialize schema-defined type
+							    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+							} else {
+								// serialize generic type
+							    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+							    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+							}
+						}
+					} else {
+						if (isset($attrs['type'])) {
+							// serialize schema-defined type
+						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
+						} else {
+							// serialize generic type
+						    $this->debug("calling serialize_val() for $v, $eName, false, false, false, false, $use");
+						    $xml .= $this->serialize_val($v, $eName, false, false, false, false, $use);
+						}
+					}
+				}
+			} 
+		} else {
+			$this->debug("no elements to serialize for XML Schema type $ns:$uqType");
+		}
+		if (isset($typeDef['extensionBase'])) {
+			$ns = $this->getPrefix($typeDef['extensionBase']);
+			$uqType = $this->getLocalPart($typeDef['extensionBase']);
+			if ($this->getNamespaceFromPrefix($ns)) {
+				$ns = $this->getNamespaceFromPrefix($ns);
+			}
+			if ($typeDef = $this->getTypeDef($uqType, $ns)) {
+				$this->debug("serialize elements for extension base $ns:$uqType");
+				$xml .= $this->serializeComplexTypeElements($typeDef, $value, $ns, $uqType, $use, $encodingStyle);
+			} else {
+				$this->debug("extension base $ns:$uqType is not a supported type");
+			}
+		}
+		return $xml;
+	}
+
 	/**
 	* adds an XML Schema complex type to the WSDL types
 	*

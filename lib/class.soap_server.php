@@ -104,6 +104,8 @@ class soap_server extends nusoap_base {
 	*/
 	function service($data){
 		global $QUERY_STRING;
+		global $_SERVER;
+
 		if(isset($_SERVER['QUERY_STRING'])){
 			$qs = $_SERVER['QUERY_STRING'];
 		} elseif(isset($GLOBALS['QUERY_STRING'])){
@@ -122,11 +124,14 @@ class soap_server extends nusoap_base {
                 $fp = fopen($this->externalWSDLURL, 'r');
                 fpassthru($fp);
               }
-			} else {
+			} elseif ($this->wsdl) {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize($this->debug_flag);
+			} else {
+				header("Content-Type: text/html; charset=ISO-8859-1\r\n");
+				print "This service does not provide WSDL";
 			}
-		} elseif($data == '' && $this->wsdl){
+		} elseif ($data == '' && $this->wsdl) {
 			// print web interface
 			print $this->wsdl->webDescription();
 		} else {

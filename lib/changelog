@@ -296,3 +296,13 @@
 - xmlschema: parse unnamed simpleTypes, rather than ignoring them
 - xmlschema: include untyped elements when parsing a complexType
 - xmlschema: add addElement method
+
+2004-10-14, version 0.6.8
+- soapclient: support client certificates
+- soap_parser: deserialize attributes, prefixing names with "!"
+- soap_server: notify the client with HTML when WSDL is requested but not supported by service
+- soap_transport_http: support client certificates
+- wsdl: support defaults for elements of a complexType
+- wsdl: serialize elements from complexType extension base
+- wsdl: serialize data (associative array elements) as attributes according to XML Schema
+- xmlschema: record extension base if present for a complexType

@@ -243,7 +243,10 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
+			} elseif ($key != 'href' && $key != 'xmlns') {
+				$this->message[$pos]['xattrs']['!' . $key] = $value;
 			}
+
 			if ($key == 'xmlns') {
 				$this->default_namespace = $value;
 			}
@@ -313,7 +316,9 @@ class soap_parser extends nusoap_base {
 				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
 				}
-				
+			// build complex values of just attributes
+			} elseif (isset($this->message[$pos]['xattrs'])) {
+				$this->message[$pos]['result'] = $this->message[$pos]['xattrs'];
 			// set value of simple type
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
@@ -527,6 +532,11 @@ class soap_parser extends nusoap_base {
 					    }
                 	}
                 }
+			}
+			if (isset($this->message[$pos]['xattrs'])) {
+				foreach ($this->message[$pos]['xattrs'] as $n => $v) {
+					$params[$n] = $v;
+				}
 			}
 			return is_array($params) ? $params : array();
 		} else {

@@ -31,9 +31,16 @@ class soap_transport_http extends nusoap_base {
 	var $useSOAPAction = true;
 	var $persistentConnection = false;
 	var $ch = false;	// cURL handle
-	var $username;
-	var $password;
-	
+	var $username = '';
+	var $password = '';
+	var $authtype = '';
+	var $digestRequest = array();
+	var $certRequest = array();	// keys must be cainfofile, sslcertfile, sslkeyfile, passphrase
+								// cainfofile: certificate authority file, e.g. '$pathToPemFiles/rootca.pem'
+								// sslcertfile: SSL certificate file, e.g. '$pathToPemFiles/mycert.pem'
+								// sslkeyfile: SSL key file, e.g. '$pathToPemFiles/mykey.pem'
+								// passphrase: SSL key password/passphrase
+
 	/**
 	* constructor
 	*/
@@ -183,15 +190,15 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 0);
 
-		/*
-			TODO: support client certificates (thanks Tobias Boes)
-        curl_setopt($this->ch, CURLOPT_CAINFO, '$pathToPemFiles/rootca.pem');
-        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
-        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
-        curl_setopt($this->ch, CURLOPT_SSLCERT, '$pathToPemFiles/mycert.pem');
-        curl_setopt($this->ch, CURLOPT_SSLKEY, '$pathToPemFiles/mykey.pem');
-	    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $passphrase);
-		*/
+		// support client certificates (thanks Tobias Boes)
+		if ($this->authtype == 'certificate') {
+	        curl_setopt($this->ch, CURLOPT_CAINFO, $certRequest['cainfofile']);
+	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
+	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
+	        curl_setopt($this->ch, CURLOPT_SSLCERT, $certRequest['sslcertfile']);
+	        curl_setopt($this->ch, CURLOPT_SSLKEY, $certRequest['sslkeyfile']);
+		    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $certRequest['passphrase']);
+		}
 		$this->debug('cURL connection set up');
 		return true;
 	  } else {
@@ -260,11 +267,12 @@ class soap_transport_http extends nusoap_base {
 	*
 	* @param    string $username
 	* @param    string $password
-	* @param	string $authtype
-	* @param	array $digestRequest
+	* @param	string $authtype (basic, digest, certificate)
+	* @param	array $digestRequest (keys must be nonce, nc, realm, qop)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
 	* @access   public
 	*/
-	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array()) {
+	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array(), $certRequest = array()) {
 		global $_SERVER;
 
 		$this->debug("Set credentials for authtype $authtype");
@@ -313,6 +321,8 @@ class soap_transport_http extends nusoap_base {
 	
 				$this->outgoing_headers['Authorization'] = 'Digest username="' . $username . '", realm="' . $digestRequest['realm'] . '", nonce="' . $nonce . '", uri="' . $this->digest_uri . '", cnonce="' . $cnonce . '", nc=' . sprintf("%08x", $digestRequest['nc']) . ', qop="' . $digestRequest['qop'] . '", response="' . $hashedDigest . '"';
 			}
+		} elseif ($authtype == 'certificate') {
+			$this->certRequest = $certRequest;
 		}
 		$this->username = $username;
 		$this->password = $password;

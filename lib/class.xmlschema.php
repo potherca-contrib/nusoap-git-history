@@ -319,7 +319,7 @@ class XMLSchema extends nusoap_base  {
 					}
 					$ename = $attrs['name'];
 				} elseif(isset($attrs['ref'])){
-					$ename = $attrs['ref'];
+					$ename = $this->getLocalPart($attrs['ref']);
 				} else {
 					$this->xdebug("processing untyped element ".$attrs['name']);
 					$this->currentElement = $attrs['name'];
@@ -349,6 +349,11 @@ class XMLSchema extends nusoap_base  {
 					if (! $this->getPrefixFromNamespace($attrs['namespace'])) {
 						$this->namespaces['ns'.(count($this->namespaces)+1)] = $attrs['namespace'];
 					}
+				}
+			break;
+			case 'extension':
+				if ($this->currentComplexType) {
+					$this->complexTypes[$this->currentComplexType]['extensionBase'] = $attrs['base'];
 				}
 			break;
 			case 'restriction':

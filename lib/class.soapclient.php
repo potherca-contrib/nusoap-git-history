@@ -27,6 +27,7 @@ class soapclient extends nusoap_base  {
 	var $username = '';
 	var $password = '';
 	var $authtype = '';
+	var $certRequest = array();
 	var $requestHeaders = false;	// SOAP headers in request (text)
 	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
 	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
@@ -340,8 +341,8 @@ class soapclient extends nusoap_base  {
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 				}
-                if($this->username != '' && $this->password != '') {
-					$http->setCredentials($this->username, $this->password, $this->authtype);
+                if($this->authtype != '') {
+					$http->setCredentials($this->username, $this->password, $this->authtype, array(), $this->certRequest);
 				}
 				if($this->http_encoding != ''){
 					$http->setEncoding($this->http_encoding);
@@ -482,13 +483,15 @@ class soapclient extends nusoap_base  {
 	*
 	* @param    string $username
 	* @param    string $password
-	* @param	string $authtype (basic|digest)
+	* @param	string $authtype (basic|digest|certificate)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
 	* @access   public
 	*/
-	function setCredentials($username, $password, $authtype = 'basic') {
+	function setCredentials($username, $password, $authtype = 'basic', $certRequest = array()) {
 		$this->username = $username;
 		$this->password = $password;
 		$this->authtype = $authtype;
+		$this->certRequest = $certRequest;
 	}
 	
 	/**
