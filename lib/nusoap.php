@@ -31,10 +31,6 @@ http://www.nusphere.com
 
 */
 
-// make errors handle properly in windows (thx, thong@xmethods.com)
-//error_reporting(2039);
-//error_reporting(E_ALL);
-
 /* load classes
 
 // necessary classes
@@ -664,7 +660,7 @@ class XMLSchema extends nusoap_base  {
 		    	xml_set_element_handler($this->parser, 'schemaStartElement','schemaEndElement');
 		    	xml_set_character_data_handler($this->parser,'schemaCharacterData');
 			} elseif($type == "xml"){
-				xml_set_element_handler($this->parser, 'xmlStartElement"','xmlEndElement');
+				xml_set_element_handler($this->parser, 'xmlStartElement','xmlEndElement');
 		    	xml_set_character_data_handler($this->parser,'xmlCharacterData');
 			}
 
@@ -727,6 +723,8 @@ class XMLSchema extends nusoap_base  {
 						$this->namespaces['xsi'] = $v.'-instance';
 					}
 				}
+        	}
+        	foreach($attrs as $k => $v){
                 // expand each attribute
                 $k = strpos($k,':') ? $this->expandQname($k) : $k;
                 $v = strpos($v,':') ? $this->expandQname($v) : $v;
@@ -750,7 +748,9 @@ class XMLSchema extends nusoap_base  {
                 if(isset($attrs['name'])){
 					$this->attributes[$attrs['name']] = $attrs;
 					$aname = $attrs['name'];
-				} elseif($attrs['ref']){
+				} elseif(isset($attrs['ref']) && $attrs['ref'] == 'http://schemas.xmlsoap.org/soap/encoding/:arrayType'){
+                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+				} elseif(isset($attrs['ref'])){
 					$aname = $attrs['ref'];
                     $this->attributes[$attrs['ref']] = $attrs;
 				}
@@ -761,8 +761,9 @@ class XMLSchema extends nusoap_base  {
 					$this->elements[$this->currentElement]['attrs'][$aname] = $attrs;
 				}
 				// arrayType attribute
-				if($this->getLocalPart($aname) == 'arrayType'){
-                	$this->complexTypes[$this->currentComplexType]['phpType'] = 'array';
+				if(isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']) || $this->getLocalPart($aname) == 'arrayType'){
+					$this->complexTypes[$this->currentComplexType]['phpType'] = 'array';
+                	$prefix = $this->getPrefix($aname);
 					if(isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])){
 						$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
 					} else {
@@ -2383,37 +2384,23 @@ class wsdl extends XMLSchema {
         } 
 
         $this->debug('getting ' . $wsdl);
-        /**
-         * old
-         * if ($fp =
-         * 
-         * @fopen ($wsdl,'r')) {
-         * $wsdl_string = '';
-         * while($data = fread($fp, 32768)) {
-         * $wsdl_string .= $data;
-         * }
-         * fclose($fp);
-         * } else {
-         * $this->setError('bad path to WSDL file.');
-         * return false;
-         * }
-         */ 
-        // start new code added
-        // props go to robert tuttle for the wsdl-grabbing code
+        
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
 
         if (isset($wsdl_props['host'])) {
         	
         	// get wsdl
-        	//die("$wsdl");
 	        $tr = new soap_transport_http($wsdl);
 			$tr->request_method = 'GET';
 			$tr->useSOAPAction = false;
 			if($this->proxyhost && $this->proxyport){
 				$tr->setProxy($this->proxyhost,$this->proxyport);
 			}
-			$wsdl_string = $tr->send($request);
+			if (isset($wsdl_props['user'])) {
+                $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);
+            }
+			$wsdl_string = $tr->send('');
 			// catch errors
 			if($err = $tr->getError() ){
 				$this->debug('HTTP ERROR: '.$err);
@@ -3060,7 +3047,10 @@ class wsdl extends XMLSchema {
 			} else {
 				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 			}
-			if (is_array($this->complexTypes[$uqType]['elements'])) {
+			
+			if (isset($this->complexTypes[$uqType]['elements']) && is_array($this->complexTypes[$uqType]['elements'])) {
+			
+			//if (is_array($this->complexTypes[$uqType]['elements'])) {
 				// toggle whether all elements are present - ideally should validate against schema
 				if(count($this->complexTypes[$uqType]['elements']) != count($value)){
 					$optionals = true;
@@ -3112,6 +3102,8 @@ class wsdl extends XMLSchema {
 					} 
 				}
 				$this->debug('contents: '.$this->varDump($contents));
+			} else {
+				$contents = null;
 			}
 			if ($use == 'literal') {
 				$xml = "<$name>"

@@ -104,7 +104,7 @@ class XMLSchema extends nusoap_base  {
 		    	xml_set_element_handler($this->parser, 'schemaStartElement','schemaEndElement');
 		    	xml_set_character_data_handler($this->parser,'schemaCharacterData');
 			} elseif($type == "xml"){
-				xml_set_element_handler($this->parser, 'xmlStartElement"','xmlEndElement');
+				xml_set_element_handler($this->parser, 'xmlStartElement','xmlEndElement');
 		    	xml_set_character_data_handler($this->parser,'xmlCharacterData');
 			}
 
@@ -167,6 +167,8 @@ class XMLSchema extends nusoap_base  {
 						$this->namespaces['xsi'] = $v.'-instance';
 					}
 				}
+        	}
+        	foreach($attrs as $k => $v){
                 // expand each attribute
                 $k = strpos($k,':') ? $this->expandQname($k) : $k;
                 $v = strpos($v,':') ? $this->expandQname($v) : $v;
@@ -190,7 +192,9 @@ class XMLSchema extends nusoap_base  {
                 if(isset($attrs['name'])){
 					$this->attributes[$attrs['name']] = $attrs;
 					$aname = $attrs['name'];
-				} elseif($attrs['ref']){
+				} elseif(isset($attrs['ref']) && $attrs['ref'] == 'http://schemas.xmlsoap.org/soap/encoding/:arrayType'){
+                	$aname = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
+				} elseif(isset($attrs['ref'])){
 					$aname = $attrs['ref'];
                     $this->attributes[$attrs['ref']] = $attrs;
 				}
@@ -201,8 +205,9 @@ class XMLSchema extends nusoap_base  {
 					$this->elements[$this->currentElement]['attrs'][$aname] = $attrs;
 				}
 				// arrayType attribute
-				if($this->getLocalPart($aname) == 'arrayType'){
-                	$this->complexTypes[$this->currentComplexType]['phpType'] = 'array';
+				if(isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']) || $this->getLocalPart($aname) == 'arrayType'){
+					$this->complexTypes[$this->currentComplexType]['phpType'] = 'array';
+                	$prefix = $this->getPrefix($aname);
 					if(isset($attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'])){
 						$v = $attrs['http://schemas.xmlsoap.org/wsdl/:arrayType'];
 					} else {

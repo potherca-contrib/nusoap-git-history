@@ -31,10 +31,6 @@ http://www.nusphere.com
 
 */
 
-// make errors handle properly in windows (thx, thong@xmethods.com)
-//error_reporting(2039);
-//error_reporting(E_ALL);
-
 // load classes
 
 // necessary classes
