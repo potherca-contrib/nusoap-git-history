@@ -2089,7 +2089,10 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false){
-	    if(false == $in) {
+	    if($this->externalWSDLURL){
+			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
+		}
+		if(false == $in) {
 		}
 		if(false == $out) {
 		}

@@ -25,7 +25,7 @@ class soap_server extends nusoap_base {
 	var $result = 'successful';
 	var $wsdl = false;
 	var $externalWSDLURL = false;
-    var $debug_flag = 0;
+    var $debug_flag = true;
 	
 	/**
 	* constructor
@@ -229,6 +229,7 @@ class soap_server extends nusoap_base {
 						$this->debug('got a(n) '.gettype($method_response).' from method');
 						$this->debug('serializing return value');
 						if($this->wsdl){
+							// weak attempt at supporting multiple output params
 							if(sizeof($this->opData['output']['parts']) > 1){
 						    	$opParams = $method_response;
 						    } else {
@@ -310,6 +311,9 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false){
+		if($this->externalWSDLURL){
+			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
+		}
 	    if(false == $in) {
 		}
 		if(false == $out) {
@@ -446,20 +450,20 @@ class soap_server extends nusoap_base {
 				    // create hidden div
 				    $b .= "<div id='$op' class='hidden'>
 				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
-				    foreach($data as $donnie => $marie){
-						if($donnie == 'input' || $donnie == 'output'){
+				    foreach($data as $donnie => $marie){ // loop through opdata
+						if($donnie == 'input' || $donnie == 'output'){ // show input/output data
 						    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
-						    foreach($marie as $captain => $tenille){
-							if($captain == 'parts'){
-							    $b .= "&nbsp;&nbsp;$captain:<br>";
-				                if(is_array($tenille)){
-							    foreach($tenille as $joanie => $chachi){
-									$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
-							    }
-				        		}
-							} else {
-							    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
-							}
+						    foreach($marie as $captain => $tenille){ // loop through data
+								if($captain == 'parts'){ // loop thru parts
+								    $b .= "&nbsp;&nbsp;$captain:<br>";
+					                //if(is_array($tenille)){
+								    	foreach($tenille as $joanie => $chachi){
+											$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
+								    	}
+					        		//}
+								} else {
+								    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
+								}
 						    }
 						} else {
 						    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
