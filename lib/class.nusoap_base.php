@@ -207,6 +207,8 @@ class nusoap_base {
         	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
         }
 		// detect type and serialize
+		$xml = '';
+		$atts = '';
 		switch(true) {
 			case ($type == '' && is_null($val)):
 				$xml .= "<$name$xmlns xsi:type=\"xsd:nil\"/>";

@@ -36,6 +36,7 @@ class soap_fault extends nusoap_base {
 	* @access   public
 	*/
 	function serialize(){
+		$ns_string = '';
 		foreach($this->namespaces as $k => $v){
 			$ns_string .= "\n  xmlns:$k=\"$v\"";
 		}

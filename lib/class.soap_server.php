@@ -14,6 +14,7 @@
 class soap_server extends nusoap_base {
 
     // assoc array of operations => opData
+	var $service = '';
     var $operations = array();
     var $responseHeaders = false;
 	var $headers = '';
@@ -22,7 +23,7 @@ class soap_server extends nusoap_base {
 	var $fault = false;
 	var $result = 'successful';
 	var $wsdl = false;
-    var $debug_flag = false;
+    var $debug_flag = 1;
 	/**
 	* constructor
     * the optional parameter is a path to a WSDL file that you'd like to bind the server instance to.
@@ -35,7 +36,7 @@ class soap_server extends nusoap_base {
 		// turn on debugging?
 		global $debug;
 		if(isset($debug)){
-			$this->debug_flag = true;
+			$this->debug_flag = 1;
 		}
 
 		// wsdl
@@ -55,14 +56,22 @@ class soap_server extends nusoap_base {
 	*/
 	function service($data){
 		// print wsdl
-		$QUERY_STRING = isset($_SERVER['QUERY_STRING']) ? $_SERVER['QUERY_STRING'] : $GLOBALS['QUERY_STRING'];
-		if( ereg('^wsdl', $_SERVER['QUERY_STRING']) ){
+		global $QUERY_STRING;
+		if(isset($_SERVER['QUERY_STRING'])){
+			$qs = $_SERVER['QUERY_STRING'];
+		} elseif(isset($GLOBALS['QUERY_STRING'])){
+			$qs = $GLOBALS['QUERY_STRING'];
+		} elseif(isset($QUERY_STRING) && $QUERY_STRING != ''){
+			$qs = $QUERY_STRING;
+		}
+		if(isset($qs) && ereg('wsdl', $qs) ){
 			header("Content-Type: text/xml\r\n");
 			print $this->wsdl->serialize();
 		// print web interface
-		//} elseif($data == '' && $this->wsdl){
-			//print $this->webDescription();
+		} elseif($data == '' && $this->wsdl){
+			print $this->webDescription();
 		} else {
+			
 			// $response is the serialized response message
 			$response = $this->parse_request($data);
 			$this->debug('server sending...');
@@ -176,7 +185,7 @@ class soap_server extends nusoap_base {
 						}
 						$funcCall = substr($funcCall, 0, -1).')';
 						$this->debug('function call:<br>'.$funcCall);
-						eval("\$method_response = $funcCall;");
+						@eval("\$method_response = $funcCall;");
 					} else {
 						$this->debug('calling method using call_user_func_array()');
 						$method_response = call_user_func_array("$this->methodname",$request_data);
@@ -186,7 +195,7 @@ class soap_server extends nusoap_base {
 					// call method w/ no parameters
 					$this->debug("calling $this->methodname w/ no params");
 					$m = $this->methodname;
-					$method_response = $m();
+					$method_response = @$m();
 				}
 				$this->debug("done calling method: $this->methodname, received $method_response of type".gettype($method_response));
 				// if we got nothing back. this might be ok (echoVoid)
@@ -215,8 +224,10 @@ class soap_server extends nusoap_base {
 						    $return_val = $this->serialize_val($method_response);
 						}
 					}
+					$this->debug('return val:'.$this->varDump($return_val));
 				} else {
 					$return_val = '';
+					$this->debug('got no response from method');
 				}
 				$this->debug('serializing response');
 				$payload = '<'.$this->methodname."Response>".$return_val.'</'.$this->methodname."Response>";
@@ -227,8 +238,9 @@ class soap_server extends nusoap_base {
 	                //	}
 					// Added: In case we use a WSDL, return a serialized env. WITH the usedNamespaces.
 					return $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces);
+				} else {
+					return $this->serializeEnvelope($payload,$this->responseHeaders);
 				}
-				return $this->serializeEnvelope($payload,$this->responseHeaders);
 			} else {
 				// debug
 				$this->debug('ERROR: request not verified against method signature');

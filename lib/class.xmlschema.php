@@ -184,7 +184,7 @@ class XMLSchema extends nusoap_base  {
 				}
 			break;
 			case 'attribute':
-            	$this->xdebug("parsing attribute $attrs[name] $attrs[ref] of value: ".$attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']);
+            	//$this->xdebug("parsing attribute $attrs[name] $attrs[ref] of value: ".$attrs['http://schemas.xmlsoap.org/wsdl/:arrayType']);
                 if(isset($attrs['name'])){
 					$this->attributes[$attrs['name']] = $attrs;
 					$aname = $attrs['name'];
@@ -320,7 +320,7 @@ class XMLSchema extends nusoap_base  {
 			// serialize child elements
 			if(count($attrs['elements']) > 0){
 				foreach($attrs['elements'] as $element => $eParts){
-					if($eParts['ref']){
+					if(isset($eParts['ref'])){
 						$contentStr .= "<element ref=\"$element\"/>";
 					} else {
 						$contentStr .= "<element name=\"$element\" type=\"$eParts[type]\"/>";
@@ -355,20 +355,20 @@ class XMLSchema extends nusoap_base  {
 			}
 			// finalize complex type
 			if($contentStr != ''){
-				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\" $attrsStr>".$contentStr."</$schemaPrefix:complexType>";
+				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\">".$contentStr."</$schemaPrefix:complexType>";
 			} else {
-				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\" $attrsStr/>";
+				$contentStr = "<$schemaPrefix:complexType name=\"$typeName\"/>";
 			}
 			$xml .= $contentStr;
 		}
 		// elements
-		if(count($this->elements) > 0){
+		if(isset($this->elements) && count($this->elements) > 0){
 			foreach($this->elements as $element => $eParts){
 				$xml .= "<$schemaPrefix:element name=\"$element\" type=\"".$eParts['type']."\"/>";
 			}
 		}
 		// attributes
-		if(count($this->attributes) > 0){
+		if(isset($this->attributes) && count($this->attributes) > 0){
 			foreach($this->attributes as $attr => $aParts){
 				$xml .= "<$schemaPrefix:attribute name=\"$attr\" type=\"".$aParts['type']."\"/>";
 			}

@@ -12,12 +12,14 @@ class soap_transport_http extends nusoap_base {
 
 	var $username = '';
 	var $password = '';
-	var $url;
+	var $url = '';
     var $proxyhost = '';
     var $proxyport = '';
 	var $scheme = '';
 	var $protocol_version = '1.0';
-	var $encoding;
+	var $encoding = '';
+	var $outgoing_payload = '';
+	var $incoming_payload = '';
 	
 	/**
 	* constructor
@@ -125,6 +127,8 @@ class soap_transport_http extends nusoap_base {
 			$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
 			"Connection: close\r\n";
 			set_magic_quotes_runtime(0);
+		} else {
+			$encoding_headers = '';
 		}
 		// make payload
 		$this->outgoing_payload .=
@@ -192,13 +196,15 @@ class soap_transport_http extends nusoap_base {
 		// clean headers
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line);
-			$headers[trim($arr[0])] = trim($arr[1]);
+			if(count($arr) >= 2){
+				$headers[trim($arr[0])] = trim($arr[1]);
+			}
 		}
 		//print "headers: <pre>$header_data</pre><br>";
 		//print "data: <pre>$data</pre><br>";
 		
 		// decode transfer-encoding
-		if($headers['Transfer-Encoding'] == 'chunked'){
+		if(isset($headers['Transfer-Encoding']) && $headers['Transfer-Encoding'] == 'chunked'){
 			//$timer->setMarker('starting to decode chunked content');
 			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
@@ -209,7 +215,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// decode content-encoding
-		if($headers['Content-Encoding'] != ''){
+		if(isset($headers['Content-Encoding']) && $headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){

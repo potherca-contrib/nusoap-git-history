@@ -32,6 +32,7 @@ class soapclient extends nusoap_base  {
     var $xml_encoding = '';
 	var $http_encoding = false;
 	var $timeout = 0;
+	var $endpointType = '';
 	/**
 	* fault related variables
 	*
@@ -113,11 +114,12 @@ class soapclient extends nusoap_base  {
             }
 			// serialize payload
 			if($style == 'rpc'){
-				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>\n".
+				$this->debug("serializing RPC params for operation $operation");
+				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
 				$this->wsdl->serializeRPCParameters($operation,'input',$params).
-				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>\n";
+				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
 			} elseif($opData['input']['use'] == 'literal') {
-				$payload .= array_shift($params);
+				$payload = array_shift($params);
 			}
 			// serialize envelope
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces);
@@ -130,7 +132,7 @@ class soapclient extends nusoap_base  {
 		// no wsdl
 		} else {
 			// make message
-			if(!$style){
+			if(!isset($style)){
 				$style = 'rpc';
 			}
             if($namespace == ''){
@@ -138,6 +140,7 @@ class soapclient extends nusoap_base  {
                 $this->wsdl->namespaces['ns1'] = $namespace;
             }
 			// serialize envelope
+			$payload = '';
 			foreach($params as $k => $v){
 				$payload .= $this->serialize_val($v,$k);
 			}

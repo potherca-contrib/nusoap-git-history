@@ -32,6 +32,7 @@ class wsdl extends XMLSchema {
     var $position = 0;
     var $depth = 0;
     var $depth_array = array();
+	var $usedNamespaces = array();
 
     /**
      * constructor
@@ -116,12 +117,12 @@ class wsdl extends XMLSchema {
                 // perform HTTP GET for WSDL file
                 // 10.9.02 - added poulter fix for doing this properly
                 $sHeader = "GET " . $wsdl_props['path'];
-                if ($wsdl_props['query']) {
+                if (isset($wsdl_props['query'])) {
                     $sHeader .= "?" . $wsdl_props['query'];
                 } 
                 $sHeader .= " HTTP/1.0\r\n";
 
-                if ($wsdl_props['user']) {
+                if (isset($wsdl_props['user'])) {
                     $base64auth = base64_encode($wsdl_props['user'] . ":" . $wsdl_props['pass']);
                     $sHeader .= "Authorization: Basic $base64auth\r\n";
                 } 
@@ -194,9 +195,13 @@ class wsdl extends XMLSchema {
                     $this->debug('post-parse data gathering for ' . $operation);
                     $this->bindings[$binding]['operations'][$operation]['input'] = array_merge($this->bindings[$binding]['operations'][$operation]['input'], $this->portTypes[ $bindingData['portType'] ][$operation]['input']);
                     $this->bindings[$binding]['operations'][$operation]['output'] = array_merge($this->bindings[$binding]['operations'][$operation]['output'], $this->portTypes[ $bindingData['portType'] ][$operation]['output']);
-                    $this->bindings[$binding]['operations'][$operation]['input']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ];
-                    $this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
-                    if (!isset($this->bindings[$binding]['operations'][$operation]['style'])) {
+                    if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ])){
+						$this->bindings[$binding]['operations'][$operation]['input']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ];
+					}
+					if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ])){
+                   		$this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
+                    }
+					if (!isset($this->bindings[$binding]['operations'][$operation]['style'])) {
                         $this->bindings[$binding]['operations'][$operation]['style'] = $bindingData['style'];
                     } 
                     $this->bindings[$binding]['operations'][$operation]['transport'] = $bindingData['transport'];
@@ -495,8 +500,10 @@ class wsdl extends XMLSchema {
 			// binding type of port matches parameter
 			if ($portData['bindingType'] == $bindingType) {
 				// get binding
-				foreach($this->bindings[ $portData['binding'] ]['operations'] as $bOperation => $opData) {
+				//foreach($this->bindings[ $portData['binding'] ]['operations'] as $bOperation => $opData) {
+				foreach(array_keys($this->bindings[ $portData['binding'] ]['operations']) as $bOperation) {
 					if ($operation == $bOperation) {
+						$opData =& $this->bindings[ $portData['binding'] ]['operations'][$operation];
 					    return $opData;
 					} 
 				} 
@@ -616,18 +623,22 @@ class wsdl extends XMLSchema {
 	 */
 	function serializeRPCParameters($operation, $direction, $parameters)
 	{
+		$this->debug('in serializeRPCParameters with operation '.$operation.', direction '.$direction.' and '.count($parameters).' param(s), and xml schema version ' . $this->XMLSchemaVersion); 
+		
 		if ($direction != 'input' && $direction != 'output') {
+			$this->debug('The value of the \$direction argument needs to be either "input" or "output"');
 			$this->setError('The value of the \$direction argument needs to be either "input" or "output"');
 			return false;
 		} 
 		if (!$opData = $this->getOperationData($operation)) {
+			$this->debug('Unable to retrieve WSDL data for operation: ' . $operation);
 			$this->setError('Unable to retrieve WSDL data for operation: ' . $operation);
 			return false;
-		} 
-		$this->debug('in serializeRPCParameters with xml schema version ' . $this->XMLSchemaVersion); 
+		}
+		$this->debug($this->varDump($opData));
 		// set input params
 		$xml = '';
-		if (sizeof($opData[$direction]['parts']) > 0) {
+		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				// NOTE: add error handling here
@@ -653,7 +664,7 @@ class wsdl extends XMLSchema {
 	 */
 	function serializeType($name, $type, $value)
 	{
-		$contents = '';
+		
 		$this->debug("in serializeType: $name, $type, $value");
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -676,7 +687,7 @@ class wsdl extends XMLSchema {
 			$uqType = $type;
 		}
 		if(!$typeDef = $this->getTypeDef($uqType)){
-			$this->setError("$upType is not a supported type.");
+			$this->setError("$uqType is not a supported type.");
 			return false;
 		} else {
 			//foreach($typeDef as $k => $v) {
@@ -718,6 +729,7 @@ class wsdl extends XMLSchema {
 				$cols = '';
 			} 
 			if (is_array($value) && sizeof($value) >= 1) {
+				$contents = '';
 				foreach($value as $k => $v) {
 					if (strpos($typeDef['arrayType'], ':')) {
 					    $contents .= $this->serializeType('item', $typeDef['arrayType'], $v);
@@ -733,7 +745,8 @@ class wsdl extends XMLSchema {
 				.":".$this->getLocalPart($typeDef['arrayType'])."[$rows$cols]\">"
 				.$contents
 				."</$name>";
-		} 
+		}
+		$this->debug('returning: '.$this->varDump($xml));
 		return $xml;
 	} 
 	
