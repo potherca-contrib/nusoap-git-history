@@ -194,6 +194,7 @@ class nusoap_base {
 			$xmlns .= " xmlns:$type_prefix=\"$type_ns\"";
 		}
 		// serialize attributes if present
+		$atts = '';
 		if($attributes){
 			foreach($attributes as $k => $v){
 				$atts .= " $k=\"$v\"";
@@ -212,7 +213,6 @@ class nusoap_base {
         }
 		// detect type and serialize
 		$xml = '';
-		$atts = '';
 		switch(true) {
 			case ($type == '' && is_null($val)):
 				if ($use == 'literal') {
