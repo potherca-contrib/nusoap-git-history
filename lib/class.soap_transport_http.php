@@ -15,6 +15,7 @@ class soap_transport_http extends nusoap_base {
 
 	var $url = '';
 	var $uri = '';
+	var $digest_uri = '';
 	var $scheme = '';
 	var $host = '';
 	var $port = '';
@@ -59,6 +60,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		$this->uri = $this->path;
+		$this->digest_uri = $this->uri;
 		
 		// build headers
 		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
@@ -273,7 +275,7 @@ class soap_transport_http extends nusoap_base {
 				$HA1 = md5($A1);
 	
 				// A2 = Method ":" digest-uri-value
-				$A2 = 'POST:' . $this->uri;
+				$A2 = 'POST:' . $this->digest_uri;
 	
 				// H(A2)
 				$HA2 =  md5($A2);
@@ -300,7 +302,7 @@ class soap_transport_http extends nusoap_base {
 	
 				$hashedDigest = md5($unhashedDigest);
 	
-				$this->outgoing_headers['Authorization'] = 'Digest username="' . $username . '", realm="' . $digestRequest['realm'] . '", nonce="' . $nonce . '", uri="' . $this->uri . '", cnonce="' . $cnonce . '", nc=' . sprintf("%08x", $digestRequest['nc']) . ', qop="' . $digestRequest['qop'] . '", response="' . $hashedDigest . '"';
+				$this->outgoing_headers['Authorization'] = 'Digest username="' . $username . '", realm="' . $digestRequest['realm'] . '", nonce="' . $nonce . '", uri="' . $this->digest_uri . '", cnonce="' . $cnonce . '", nc=' . sprintf("%08x", $digestRequest['nc']) . ', qop="' . $digestRequest['qop'] . '", response="' . $hashedDigest . '"';
 			}
 		}
 		$this->username = $username;

@@ -601,8 +601,10 @@ class wsdl extends nusoap_base {
 	function getTypeDef($type, $ns) {
 		if ((! $ns) && isset($this->namespaces['tns'])) {
 			$ns = $this->namespaces['tns'];
+			$this->debug("Type namespace forced to $ns");
 		}
 		if (isset($this->schemas[$ns])) {
+			$this->debug("Have schema for namespace $ns");
 			for ($i = 0; $i < count($this->schemas[$ns]); $i++) {
 				$xs = &$this->schemas[$ns][$i];
 				$t = $xs->getTypeDef($type);
@@ -612,6 +614,8 @@ class wsdl extends nusoap_base {
 					return $t;
 				}
 			}
+		} else {
+			$this->debug("Do not have schema for namespace $ns");
 		}
 		return false;
 	}
@@ -1064,7 +1068,7 @@ class wsdl extends nusoap_base {
 				$this->debug("expanded prefixed type: $uqType, $ns");
 			}
 
-			if($ns == $this->XMLSchemaVersion){
+			if($ns == $this->XMLSchemaVersion || $ns == 'http://schemas.xmlsoap.org/soap/encoding/'){
 				
 				if (is_null($value)) {
 					if ($use == 'literal') {
@@ -1090,12 +1094,12 @@ class wsdl extends nusoap_base {
 				if (!$this->getTypeDef($uqType, $ns)) {
 					if ($use == 'literal') {
 						if ($forceType) {
-							$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+							$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">$value</$name>";
 						} else {
 							$xml = "<$name>$value</$name>";
 						}
 					} else {
-						$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
+						$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>$value</$name>";
 					}
 					$this->debug("serializeType returning: $xml");
 					return $xml;

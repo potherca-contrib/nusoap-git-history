@@ -259,3 +259,21 @@
 - soapclient: when creating proxy methods, replace '.' in operation name with '__' in function name
 - soapclient: initialize requestHeaders in proxy
 - general: use new debug methods; never access debug_str directly
+
+2004-09-30, version 0.6.8
+- soapclient: do not allow getProxy call when WSDL is not used
+- soapclient: use ISO-8859-1 as the charset if not specified in the Content-Type header
+- soapclient: when an empty string is specified for the call namespace, do not put the method element in a namespace
+- soapclient: let soap_transport_http check for SSL support
+- soapclient: have proxy inherit soap_defencoding from the client from which it is generated
+- soapclient: do not assume that 'ns1' is an unused namespace prefix; always generate namespace prefixes randomly
+- soap_parser: compare any encoding in the XML declaration to the charset from the HTTP Content-Type header (thanks Ingo Fischer)
+- soap_parser: improve parse repeated element name into an array (de-serializes doc/lit array into a PHP array when there is more than 1 array element)
+- soap_server: use ISO-8859-1 as the charset if not specified in the Content-Type header
+- soap_server: allow suppression of automatic UTF-8 decoding
+- soap_server: fix a bug when call_user_func_array() is used
+- soap_transport_http: correct digest authentication through a proxy
+- wsdl: serialize SOAP-ENC types similarly to XSD types
+- xmlschema: force unprefixed type into default namespace
+- xmlschema: fix serialization of definition of simple types
+

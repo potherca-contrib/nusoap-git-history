@@ -305,6 +305,12 @@ class XMLSchema extends nusoap_base  {
 				// reason, they are
 				if(isset($attrs['type'])){
 					$this->xdebug("processing typed element ".$attrs['name']." of type ".$attrs['type']);
+					if (! $this->getPrefix($attrs['type'])) {
+						if ($this->defaultNamespace[$pos]) {
+							$attrs['type'] = $this->defaultNamespace[$pos] . ':' . $attrs['type'];
+							$this->xdebug('used default namespace to make type ' . $attrs['type']);
+						}
+					}
 					$this->currentElement = $attrs['name'];
 					$this->elements[ $attrs['name'] ] = $attrs;
 					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
@@ -490,7 +496,7 @@ class XMLSchema extends nusoap_base  {
 		// simple types
 		if(isset($this->simpleTypes) && count($this->simpleTypes) > 0){
 			foreach($this->simpleTypes as $typeName => $attr){
-				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n </$schemaPrefix:simpleType>";
+				$xml .= " <$schemaPrefix:simpleType name=\"$typeName\">\n  <$schemaPrefix:restriction base=\"".$this->contractQName($eParts['type'])."\"/>\n </$schemaPrefix:simpleType>";
 			}
 		}
 		// elements

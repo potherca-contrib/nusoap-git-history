@@ -63,7 +63,7 @@ class nusoap_base {
 	var $title = 'NuSOAP';
 	var $version = '0.6.8';
 	var $revision = '$Revision$';
-	var $error_str = false;
+	var $error_str = '';
     var $debug_str = '';
 	// toggles automatic encoding of special characters as entities
 	// (should always be true, I think)
@@ -218,7 +218,7 @@ class nusoap_base {
 	/**
 	* returns error string if present
 	*
-	* @return   boolean $string error string
+	* @return   mixed error string or false
 	* @access   public
 	*/
 	function getError(){

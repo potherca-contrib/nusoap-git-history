@@ -63,6 +63,26 @@ class soap_parser extends nusoap_base {
 
 		// Check whether content has been read.
 		if(!empty($xml)){
+			// Check XML encoding
+			$pos_xml = strpos($xml, '<?xml');
+			if ($pos_xml !== FALSE) {
+				$xml_decl = substr($xml, $pos_xml, strpos($xml, '?>', $pos_xml + 2) - $pos_xml + 1);
+				if (preg_match("/encoding=[\"']([^\"']*)[\"']/", $xml_decl, $res)) {
+					$xml_encoding = $res[1];
+					if (strtoupper($xml_encoding) != $encoding) {
+						$err = "Charset from HTTP Content-Type '" . $encoding . "' does not match encoding from XML declaration '" . $xml_encoding . "'";
+						$this->debug($err);
+						$this->setError($err);
+						return;
+					} else {
+						$this->debug('Charset from HTTP Content-Type matches encoding from XML declaration');
+					}
+				} else {
+					$this->debug('No encoding specified in XML declaration');
+				}
+			} else {
+				$this->debug('No XML declaration');
+			}
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
 			// Create an XML parser - why not xml_parser_create_ns?
 			$this->parser = xml_parser_create($this->xml_encoding);
@@ -486,23 +506,16 @@ class soap_parser extends nusoap_base {
 				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
 					$notstruct = 1;
 				} else {
-	            	// is array or struct?
-	            	foreach($children as $child_pos){
-	            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
-	            			$notstruct = 1;
-	            			break;
-	            		}
-	            		$keys[$this->message[$child_pos]['name']] = 1;
-	            	}
+					$notstruct = 0;
 	            }
             	//
             	foreach($children as $child_pos){
-            		if(isset($notstruct)){
+            		if($notstruct){
             			$params[] = &$this->message[$child_pos]['result'];
             		} else {
             			if (isset($params[$this->message[$child_pos]['name']])) {
             				// de-serialize repeated element name into an array
-            				if (!is_array($params[$this->message[$child_pos]['name']])) {
+            				if ((!is_array($params[$this->message[$child_pos]['name']])) || (!isset($params[$this->message[$child_pos]['name']][0]))) {
             					$params[$this->message[$child_pos]['name']] = array($params[$this->message[$child_pos]['name']]);
             				}
             				$params[$this->message[$child_pos]['name']][] = &$this->message[$child_pos]['result'];

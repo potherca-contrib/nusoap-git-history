@@ -17,8 +17,8 @@
 class soap_server extends nusoap_base {
 	var $headers = array();			// HTTP headers of request
 	var $request = '';				// HTTP request
-	var $requestHeaders = '';		// SOAP headers from request (incomplete namespace resolution) (text)
-	var $document = '';				// SOAP body request portion (incomplete namespace resolution) (text)
+	var $requestHeaders = '';		// SOAP headers from request (incomplete namespace resolution; special characters not escaped) (text)
+	var $document = '';				// SOAP body request portion (incomplete namespace resolution; special characters not escaped) (text)
 	var $requestSOAP = '';			// SOAP payload for request (text)
 	var $methodURI = '';			// requested method namespace URI
 	var $methodname = '';			// name of method requested
@@ -176,8 +176,8 @@ class soap_server extends nusoap_base {
 					$this->xml_encoding = 'US-ASCII';
 				}
 			} else {
-				// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-				$this->xml_encoding = 'UTF-8';
+				// should be US-ASCII for HTTP 1.0 or ISO-8859-1 for HTTP 1.1
+				$this->xml_encoding = 'ISO-8859-1';
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
 			foreach ($_SERVER as $k => $v) {
@@ -204,8 +204,8 @@ class soap_server extends nusoap_base {
 							$this->xml_encoding = 'US-ASCII';
 						}
 					} else {
-						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-						$this->xml_encoding = 'UTF-8';
+						// should be US-ASCII for HTTP 1.0 or ISO-8859-1 for HTTP 1.1
+						$this->xml_encoding = 'ISO-8859-1';
 					}
 				}
 				$this->headers[$k] = $v;
@@ -234,8 +234,8 @@ class soap_server extends nusoap_base {
 								$this->xml_encoding = 'US-ASCII';
 							}
 						} else {
-							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-							$this->xml_encoding = 'UTF-8';
+							// should be US-ASCII for HTTP 1.0 or ISO-8859-1 for HTTP 1.1
+							$this->xml_encoding = 'ISO-8859-1';
 						}
 					}
 					$this->headers[$k] = $v;
@@ -295,7 +295,7 @@ class soap_server extends nusoap_base {
 		$this->request .= "\r\n".$data;
 		$this->requestSOAP = $data;
 		// parse response, get soap parser obj
-		$parser = new soap_parser($data,$this->xml_encoding);
+		$parser = new soap_parser($data,$this->xml_encoding,'',$this->decode_utf8);
 		// parser debug
 		$this->debug("parser debug: \n".$parser->getDebug());
 		// if fault occurred during message parsing
@@ -415,6 +415,10 @@ class soap_server extends nusoap_base {
 			}
 			if ($this->methodparams) {
 				foreach ($this->methodparams as $param) {
+					if (is_array($param)) {
+						$this->fault('Server', 'NuSOAP does not handle complexType parameters correctly when using eval; call_user_func_array must be available');
+						return;
+					}
 					$funcCall .= "\"$param\",";
 				}
 				$funcCall = substr($funcCall, 0, -1);
@@ -425,7 +429,7 @@ class soap_server extends nusoap_base {
 		} else {
 			if ($class == '') {
 				$this->debug('calling function using call_user_func_array()');
-				$call_arg = $this->methodname;
+				$call_arg = "$this->methodname";	// straight assignment changes $this->methodname to lower case after call_user_func_array()
 			} elseif ($delim == '..') {
 				$this->debug('calling class method using call_user_func_array()');
 				$call_arg = array ($class, $method);
@@ -589,8 +593,8 @@ class soap_server extends nusoap_base {
 		foreach($this->outgoing_headers as $hdr){
 			header($hdr, false);
 		}
-		$this->response = join("\r\n",$this->outgoing_headers)."\r\n".$payload;
 		print $payload;
+		$this->response = join("\r\n",$this->outgoing_headers)."\r\n\r\n".$payload;
 	}
 
 	/**
