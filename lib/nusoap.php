@@ -3138,9 +3138,10 @@ class soap_parser extends nusoap_base {
 				if(sizeof($this->multirefs) > 0){
 					foreach($this->multirefs as $id => $hrefs){
 						$this->debug('resolving multirefs for id: '.$id);
+						$idVal = $this->buildVal($this->ids[$id]);
 						foreach($hrefs as $refPos => $ref){
 							$this->debug('resolving href at pos '.$refPos);
-							$this->multirefs[$id][$refPos] = $this->buildVal($this->ids[$id]);
+							$this->multirefs[$id][$refPos] = $idVal;
 						}
 					}
 				}
@@ -3337,7 +3338,17 @@ class soap_parser extends nusoap_base {
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
-			// do nothing
+			// resolve hrefs/ids
+			if(sizeof($this->multirefs) > 0){
+				foreach($this->multirefs as $id => $hrefs){
+					$this->debug('resolving multirefs for id: '.$id);
+					$idVal = $this->buildVal($this->ids[$id]);
+					foreach($hrefs as $refPos => $ref){
+						$this->debug('resolving href at pos '.$refPos);
+						$this->multirefs[$id][$refPos] = $idVal;
+					}
+				}
+			}
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
