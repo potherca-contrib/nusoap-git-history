@@ -25,6 +25,7 @@ class soap_server extends nusoap_base {
 	var $methodparams = array();	// method parameters from request
 	var $xml_encoding = '';			// character set encoding of incoming (request) messages
 	var $SOAPAction = '';			// SOAP Action from request
+    var $decode_utf8 = true;		// toggles whether the parser decodes element content w/ utf8_decode()
 
 	var $outgoing_headers = array();// HTTP headers of response
 	var $response = '';				// HTTP response
@@ -39,7 +40,8 @@ class soap_server extends nusoap_base {
 	var $wsdl = false;				// wsdl instance
 	var $externalWSDLURL = false;	// URL for WSDL
 	var $debug_flag = false;		// whether to append debug to response as XML comment
-	
+
+
 	/**
 	* constructor
     * the optional parameter is a path to a WSDL file that you'd like to bind the server instance to.
@@ -269,7 +271,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function parse_request($data='') {
-		$this->debug('entering parse_request() on '.date('H:i Y-m-d'));
+		$this->debug('entering parse_request()');
 		$this->parse_http_headers();
 		$this->debug('got character encoding: '.$this->xml_encoding);
 		// uncompress if necessary
@@ -307,7 +309,7 @@ class soap_server extends nusoap_base {
 			// get/set methodname
 			$this->methodURI = $parser->root_struct_namespace;
 			$this->methodname = $parser->root_struct_name;
-			$this->debug('method name: '.$this->methodname);
+			$this->debug('methodname: '.$this->methodname.' methodURI: '.$this->methodURI);
 			$this->debug('calling parser->get_response()');
 			$this->methodparams = $parser->get_response();
 			// get SOAP headers
@@ -315,7 +317,7 @@ class soap_server extends nusoap_base {
             // add document for doclit support
             $this->document = $parser->document;
 		}
-		$this->debug('leaving parse_request() on '.date('H:i Y-m-d'));
+		$this->debug('leaving parse_request');
 	}
 
 	/**
@@ -336,7 +338,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function invoke_method() {
-		$this->debug('entering invoke_method');
+		$this->debug('entering invoke_method methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
 		// if a . is present in $this->methodname, we see if there is a class in scope,
 		// which could be referred to. We will also distinguish between two deliminators,
 		// to allow methods to be called a the class or an instance
@@ -457,7 +459,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function serialize_return() {
-		$this->debug("Entering serialize_return");
+		$this->debug('Entering serialize_return methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
 		// if we got nothing back. this might be ok (echoVoid)
 		if(isset($this->methodreturn) && ($this->methodreturn != '' || is_bool($this->methodreturn))) {
 			// if fault
@@ -499,12 +501,20 @@ class soap_server extends nusoap_base {
 		}
 		$this->debug('serializing response');
 		if ($this->wsdl) {
+			$this->debug('have WSDL for serialization: style is ' . $this->opData['style']);
 			if ($this->opData['style'] == 'rpc') {
-				$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+				$this->debug('style is rpc for serialization: use is ' . $this->opData['output']['use']);
+				if ($this->opData['output']['use'] == 'literal') {
+					$payload = '<'.$this->methodname.'Response xmlns="'.$this->methodURI.'">'.$return_val.'</'.$this->methodname."Response>";
+				} else {
+					$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+				}
 			} else {
+				$this->debug('style is not rpc for serialization: assume document');
 				$payload = $return_val;
 			}
 		} else {
+			$this->debug('do not have WSDL for serialization: assume rpc/encoded');
 			$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
 		}
 		$this->result = 'successful';

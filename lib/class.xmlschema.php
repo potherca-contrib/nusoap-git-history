@@ -458,7 +458,14 @@ class XMLSchema extends nusoap_base  {
 					if(isset($eParts['ref'])){
 						$contentStr .= "   <$schemaPrefix:element ref=\"$element\"/>\n";
 					} else {
-						$contentStr .= "   <$schemaPrefix:element name=\"$element\" type=\"" . $this->contractQName($eParts['type']) . "\"/>\n";
+						$contentStr .= "   <$schemaPrefix:element name=\"$element\" type=\"" . $this->contractQName($eParts['type']) . "\"";
+						foreach ($eParts as $aName => $aValue) {
+							// handle, e.g., abstract, default, form, minOccurs, maxOccurs, nillable
+							if ($aName != 'name' && $aName != 'type') {
+								$contentStr .= " $aName=\"$aValue\"";
+							}
+						}
+						$contentStr .= "/>\n";
 					}
 				}
 			}

@@ -37,8 +37,14 @@ class soap_transport_http extends nusoap_base {
 	* constructor
 	*/
 	function soap_transport_http($url){
+		$this->setURL($url);
+		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
+	}
+
+	function setURL($url) {
 		$this->url = $url;
-		
+
 		$u = parse_url($url);
 		foreach($u as $k => $v){
 			$this->debug("$k = $v");
@@ -63,8 +69,6 @@ class soap_transport_http extends nusoap_base {
 		$this->digest_uri = $this->uri;
 		
 		// build headers
-		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
-		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;
 		} else {
@@ -693,9 +697,22 @@ class soap_transport_http extends nusoap_base {
 		}
 	  }
 
+		$arr = explode(' ', $header_array[0], 3);
+		$http_version = $arr[0];
+		$http_status = intval($arr[1]);
+		$http_reason = count($arr) > 2 ? $arr[2] : '';
+
  		// see if we need to resend the request with http digest authentication
- 		if (isset($this->incoming_headers['www-authenticate']) && strstr($header_array[0], '401 Unauthorized')) {
- 			$this->debug('Got 401 Unauthorized with WWW-Authenticate: ' . $this->incoming_headers['www-authenticate']);
+ 		if (isset($this->incoming_headers['location']) && $http_status == 301) {
+ 			$this->debug("Got 301 $http_reason with Location: " . $this->incoming_headers['location']);
+ 			$this->setURL($this->incoming_headers['location']);
+			$this->tryagain = true;
+			return false;
+		}
+
+ 		// see if we need to resend the request with http digest authentication
+ 		if (isset($this->incoming_headers['www-authenticate']) && $http_status == 401) {
+ 			$this->debug("Got 401 $http_reason with WWW-Authenticate: " . $this->incoming_headers['www-authenticate']);
  			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
  				$this->debug('Server wants digest authentication');
  				// remove "Digest " from our elements
@@ -720,6 +737,15 @@ class soap_transport_http extends nusoap_base {
 			return false;
  		}
 		
+		if (
+			($http_status >= 300 && $http_status <= 307) ||
+			($http_status >= 400 && $http_status <= 417) ||
+			($http_status >= 501 && $http_status <= 505)
+		   ) {
+			$this->setError("Unsupported HTTP response status $http_status $http_reason (soapclient->response has contents of the response)");
+			return false;
+		}
+
 		// decode content-encoding
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){

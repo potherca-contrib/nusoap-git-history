@@ -1246,7 +1246,14 @@ class XMLSchema extends nusoap_base  {
 					if(isset($eParts['ref'])){
 						$contentStr .= "   <$schemaPrefix:element ref=\"$element\"/>\n";
 					} else {
-						$contentStr .= "   <$schemaPrefix:element name=\"$element\" type=\"" . $this->contractQName($eParts['type']) . "\"/>\n";
+						$contentStr .= "   <$schemaPrefix:element name=\"$element\" type=\"" . $this->contractQName($eParts['type']) . "\"";
+						foreach ($eParts as $aName => $aValue) {
+							// handle, e.g., abstract, default, form, minOccurs, maxOccurs, nillable
+							if ($aName != 'name' && $aName != 'type') {
+								$contentStr .= " $aName=\"$aValue\"";
+							}
+						}
+						$contentStr .= "/>\n";
 					}
 				}
 			}
@@ -1655,8 +1662,14 @@ class soap_transport_http extends nusoap_base {
 	* constructor
 	*/
 	function soap_transport_http($url){
+		$this->setURL($url);
+		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
+	}
+
+	function setURL($url) {
 		$this->url = $url;
-		
+
 		$u = parse_url($url);
 		foreach($u as $k => $v){
 			$this->debug("$k = $v");
@@ -1681,8 +1694,6 @@ class soap_transport_http extends nusoap_base {
 		$this->digest_uri = $this->uri;
 		
 		// build headers
-		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
-		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;
 		} else {
@@ -2311,9 +2322,22 @@ class soap_transport_http extends nusoap_base {
 		}
 	  }
 
+		$arr = explode(' ', $header_array[0], 3);
+		$http_version = $arr[0];
+		$http_status = intval($arr[1]);
+		$http_reason = count($arr) > 2 ? $arr[2] : '';
+
  		// see if we need to resend the request with http digest authentication
- 		if (isset($this->incoming_headers['www-authenticate']) && strstr($header_array[0], '401 Unauthorized')) {
- 			$this->debug('Got 401 Unauthorized with WWW-Authenticate: ' . $this->incoming_headers['www-authenticate']);
+ 		if (isset($this->incoming_headers['location']) && $http_status == 301) {
+ 			$this->debug("Got 301 $http_reason with Location: " . $this->incoming_headers['location']);
+ 			$this->setURL($this->incoming_headers['location']);
+			$this->tryagain = true;
+			return false;
+		}
+
+ 		// see if we need to resend the request with http digest authentication
+ 		if (isset($this->incoming_headers['www-authenticate']) && $http_status == 401) {
+ 			$this->debug("Got 401 $http_reason with WWW-Authenticate: " . $this->incoming_headers['www-authenticate']);
  			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
  				$this->debug('Server wants digest authentication');
  				// remove "Digest " from our elements
@@ -2338,6 +2362,15 @@ class soap_transport_http extends nusoap_base {
 			return false;
  		}
 		
+		if (
+			($http_status >= 300 && $http_status <= 307) ||
+			($http_status >= 400 && $http_status <= 417) ||
+			($http_status >= 501 && $http_status <= 505)
+		   ) {
+			$this->setError("Unsupported HTTP response status $http_status $http_reason (soapclient->response has contents of the response)");
+			return false;
+		}
+
 		// decode content-encoding
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
@@ -2447,6 +2480,7 @@ class soap_server extends nusoap_base {
 	var $methodparams = array();	// method parameters from request
 	var $xml_encoding = '';			// character set encoding of incoming (request) messages
 	var $SOAPAction = '';			// SOAP Action from request
+    var $decode_utf8 = true;		// toggles whether the parser decodes element content w/ utf8_decode()
 
 	var $outgoing_headers = array();// HTTP headers of response
 	var $response = '';				// HTTP response
@@ -2461,7 +2495,8 @@ class soap_server extends nusoap_base {
 	var $wsdl = false;				// wsdl instance
 	var $externalWSDLURL = false;	// URL for WSDL
 	var $debug_flag = false;		// whether to append debug to response as XML comment
-	
+
+
 	/**
 	* constructor
     * the optional parameter is a path to a WSDL file that you'd like to bind the server instance to.
@@ -2691,7 +2726,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function parse_request($data='') {
-		$this->debug('entering parse_request() on '.date('H:i Y-m-d'));
+		$this->debug('entering parse_request()');
 		$this->parse_http_headers();
 		$this->debug('got character encoding: '.$this->xml_encoding);
 		// uncompress if necessary
@@ -2729,7 +2764,7 @@ class soap_server extends nusoap_base {
 			// get/set methodname
 			$this->methodURI = $parser->root_struct_namespace;
 			$this->methodname = $parser->root_struct_name;
-			$this->debug('method name: '.$this->methodname);
+			$this->debug('methodname: '.$this->methodname.' methodURI: '.$this->methodURI);
 			$this->debug('calling parser->get_response()');
 			$this->methodparams = $parser->get_response();
 			// get SOAP headers
@@ -2737,7 +2772,7 @@ class soap_server extends nusoap_base {
             // add document for doclit support
             $this->document = $parser->document;
 		}
-		$this->debug('leaving parse_request() on '.date('H:i Y-m-d'));
+		$this->debug('leaving parse_request');
 	}
 
 	/**
@@ -2758,7 +2793,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function invoke_method() {
-		$this->debug('entering invoke_method');
+		$this->debug('entering invoke_method methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
 		// if a . is present in $this->methodname, we see if there is a class in scope,
 		// which could be referred to. We will also distinguish between two deliminators,
 		// to allow methods to be called a the class or an instance
@@ -2879,7 +2914,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function serialize_return() {
-		$this->debug("Entering serialize_return");
+		$this->debug('Entering serialize_return methodname: ' . $this->methodname . ' methodURI: ' . $this->methodURI);
 		// if we got nothing back. this might be ok (echoVoid)
 		if(isset($this->methodreturn) && ($this->methodreturn != '' || is_bool($this->methodreturn))) {
 			// if fault
@@ -2921,12 +2956,20 @@ class soap_server extends nusoap_base {
 		}
 		$this->debug('serializing response');
 		if ($this->wsdl) {
+			$this->debug('have WSDL for serialization: style is ' . $this->opData['style']);
 			if ($this->opData['style'] == 'rpc') {
-				$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+				$this->debug('style is rpc for serialization: use is ' . $this->opData['output']['use']);
+				if ($this->opData['output']['use'] == 'literal') {
+					$payload = '<'.$this->methodname.'Response xmlns="'.$this->methodURI.'">'.$return_val.'</'.$this->methodname."Response>";
+				} else {
+					$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+				}
 			} else {
+				$this->debug('style is not rpc for serialization: assume document');
 				$payload = $return_val;
 			}
 		} else {
+			$this->debug('do not have WSDL for serialization: assume rpc/encoded');
 			$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
 		}
 		$this->result = 'successful';
@@ -4868,6 +4911,9 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
+			}
+			if ($key == 'xmlns') {
+				$this->default_namespace = $value;
 			}
 			// log id
 			if($key == 'id'){

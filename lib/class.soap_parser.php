@@ -244,6 +244,9 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
 			}
+			if ($key == 'xmlns') {
+				$this->default_namespace = $value;
+			}
 			// log id
 			if($key == 'id'){
 				$this->ids[$value] = $pos;
