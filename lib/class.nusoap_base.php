@@ -54,13 +54,13 @@ require_once('class.soap_server.php');//
 * nusoap_base
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.3';
+	var $version = '0.6.4';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters
@@ -490,6 +490,17 @@ function iso8601_to_timestamp($datestr){
 	}
 }
 
-
+function usleepWindows($usec)
+{
+	$start = gettimeofday();
+	
+	do
+	{
+		$stop = gettimeofday();
+		$timePassed = 1000000 * ($stop['sec'] - $start['sec'])
+		+ $stop['usec'] - $start['usec'];
+	}
+	while ($timePassed < $usec);
+}
 
 ?>

@@ -6,7 +6,7 @@
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access public 
 */
 class wsdl extends XMLSchema {
@@ -76,8 +76,7 @@ class wsdl extends XMLSchema {
             $this->debug('no wsdl passed to parseWSDL()!!');
             $this->setError('no wsdl passed to parseWSDL()!!');
             return false;
-        } 
-
+        }
         $this->debug('getting ' . $wsdl);
         
         // parse $wsdl for url format
@@ -103,58 +102,6 @@ class wsdl extends XMLSchema {
 	            return false;
 			}
 			unset($tr);
-            /* $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
-            $fsockopen_timeout = 30; 
-            // check if a port value is supplied in url
-            if (isset($wsdl_props['port'])) {
-                // yes
-                $wsdl_url_port = $wsdl_props['port'];
-            } else {
-                // no, assign port number, based on url protocol (scheme)
-                switch ($wsdl_props['scheme']) {
-                    case ('https') :
-                    case ('ssl') :
-                    case ('tls') :
-                        $wsdl_url_port = 443;
-                        break;
-                    case ('http') :
-                    default :
-                        $wsdl_url_port = 80;
-                } 
-            } 
-            // FIXME: should implement SSL/TLS support here if CURL is available
-            if ($fp = fsockopen($wsdl_props['host'], $wsdl_url_port, $fsockopen_errnum, $fsockopen_errstr, $fsockopen_timeout)) {
-                // perform HTTP GET for WSDL file
-                // 10.9.02 - added poulter fix for doing this properly
-                $sHeader = "GET " . $wsdl_props['path'];
-                if (isset($wsdl_props['query'])) {
-                    $sHeader .= "?" . $wsdl_props['query'];
-                } 
-                $sHeader .= " HTTP/1.0\r\n";
-
-                if (isset($wsdl_props['user'])) {
-                    $base64auth = base64_encode($wsdl_props['user'] . ":" . $wsdl_props['pass']);
-                    $sHeader .= "Authorization: Basic $base64auth\r\n";
-                }
-				$sHeader .= "Host: " . $wsdl_props['host'] . ( isset($wsdl_props['port']) ? ":".$wsdl_props['port'] : "" ) . "\r\n\r\n";
-                fputs($fp, $sHeader);
-
-                while (fgets($fp, 1024) != "\r\n") {
-                    // do nothing, just read/skip past HTTP headers
-                    // FIXME: should actually detect HTTP response code, and act accordingly if error
-                    // HTTP headers end with extra CRLF before content body
-                } 
-                // read in WSDL just like regular fopen()
-                $wsdl_string = '';
-                while ($data = fread($fp, 32768)) {
-                    $wsdl_string .= $data;
-                } 
-                fclose($fp);
-            } else {
-                $this->setError('bad path to WSDL file.');
-                return false;
-            }
-            */
         } else {
             // $wsdl seems to be a non-url file path, do the regular fopen
             if ($fp = @fopen($wsdl, 'r')) {
@@ -603,6 +550,9 @@ class wsdl extends XMLSchema {
 					    $portType_xml .= ' parameterOrder="' . $opParts['parameterOrder'] . '"';
 					} 
 					$portType_xml .= '>';
+					if(isset($opParts['documentation']) && $opParts['documentation'] != '') {
+						$portType_xml .= '<documentation>' . htmlspecialchars($opParts['documentation']) . '</documentation>';
+					}
 					$portType_xml .= '<input message="tns:' . $opParts['input']['message'] . '"/>';
 					$portType_xml .= '<output message="tns:' . $opParts['output']['message'] . '"/>';
 					$portType_xml .= '</operation>';
@@ -639,6 +589,57 @@ class wsdl extends XMLSchema {
 	function serializeRPCParameters($operation, $direction, $parameters)
 	{
 		$this->debug('in serializeRPCParameters with operation '.$operation.', direction '.$direction.' and '.count($parameters).' param(s), and xml schema version ' . $this->XMLSchemaVersion); 
+		
+		if ($direction != 'input' && $direction != 'output') {
+			$this->debug('The value of the \$direction argument needs to be either "input" or "output"');
+			$this->setError('The value of the \$direction argument needs to be either "input" or "output"');
+			return false;
+		} 
+		if (!$opData = $this->getOperationData($operation)) {
+			$this->debug('Unable to retrieve WSDL data for operation: ' . $operation);
+			$this->setError('Unable to retrieve WSDL data for operation: ' . $operation);
+			return false;
+		}
+		$this->debug($this->varDump($opData));
+		// set input params
+		$xml = '';
+		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
+			
+			$use = $opData[$direction]['use'];
+			$this->debug("use=$use");
+			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
+			foreach($opData[$direction]['parts'] as $name => $type) {
+				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+				// NOTE: add error handling here
+				// if serializeType returns false, then catch global error and fault
+				if (isset($parameters[$name])) {
+					$this->debug('calling serializeType w/ named param');
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
+				} elseif(is_array($parameters)) {
+					$this->debug('calling serializeType w/ unnamed param');
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+				} else {
+					$this->debug('no parameters passed.');
+				}
+			}
+		}
+		return $xml;
+	} 
+	
+	/**
+	 * serialize a PHP value according to a WSDL message definition
+	 * 
+	 * TODO
+	 * - multi-ref serialization
+	 * - validate PHP values against type definitions, return errors if invalid
+	 * 
+	 * @param string $ type name
+	 * @param mixed $ param value
+	 * @return mixed new param or false if initial value didn't validate
+	 */
+	function serializeParameters($operation, $direction, $parameters)
+	{
+		$this->debug('in serializeParameters with operation '.$operation.', direction '.$direction.' and '.count($parameters).' param(s), and xml schema version ' . $this->XMLSchemaVersion); 
 		
 		if ($direction != 'input' && $direction != 'output') {
 			$this->debug('The value of the \$direction argument needs to be either "input" or "output"');
@@ -745,7 +746,6 @@ class wsdl extends XMLSchema {
 			
 			if (isset($this->complexTypes[$uqType]['elements']) && is_array($this->complexTypes[$uqType]['elements'])) {
 			
-			//if (is_array($this->complexTypes[$uqType]['elements'])) {
 				// toggle whether all elements are present - ideally should validate against schema
 				if(count($this->complexTypes[$uqType]['elements']) != count($value)){
 					$optionals = true;
@@ -763,7 +763,7 @@ class wsdl extends XMLSchema {
 						}
 						// serialize schema-defined type
 						if (!isset($attrs['type'])) {
-						    $xml .= $this->serializeType($eName, $attrs['name'], $v, $use);
+						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use);
 						// serialize generic type
 						} else {
 						    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);
@@ -771,6 +771,8 @@ class wsdl extends XMLSchema {
 						}
 					}
 				} 
+			} else {
+				//echo 'got here';
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
@@ -829,38 +831,37 @@ class wsdl extends XMLSchema {
 	* @param string $style (rpc|literal)
 	* @access public 
 	*/
-	function addOperation($name, $in = false, $out = false, $namespace = false, $soapaction = false, $style = 'rpc', $use = 'encoded', $documentation = '')
-	{
-	if ($style == 'rpc' && $use == 'encoded') {
-		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-	} else {
-		$encodingStyle = '';
-	} 
-	// get binding
-	$this->bindings[ $this->serviceName . 'Binding' ]['operations'][$name] =
-	array(
-	'name' => $name,
-	'binding' => $this->serviceName . 'Binding',
-	'endpoint' => $this->endpoint,
-	'soapAction' => $soapaction,
-	'style' => $style,
-	'input' => array(
-		'use' => $use,
+	function addOperation($name, $in = false, $out = false, $namespace = false, $soapaction = false, $style = 'rpc', $use = 'encoded', $documentation = ''){
+		if ($style == 'rpc' && $use == 'encoded') {
+			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+		} else {
+			$encodingStyle = '';
+		} 
+		// get binding
+		$this->bindings[ $this->serviceName . 'Binding' ]['operations'][$name] =
+		array(
+		'name' => $name,
+		'binding' => $this->serviceName . 'Binding',
+		'endpoint' => $this->endpoint,
+		'soapAction' => $soapaction,
+		'style' => $style,
+		'input' => array(
+			'use' => $use,
+			'namespace' => $namespace,
+			'encodingStyle' => $encodingStyle,
+			'message' => $name . 'Request',
+			'parts' => $in),
+		'output' => array(
+			'use' => $use,
+			'namespace' => $namespace,
+			'encodingStyle' => $encodingStyle,
+			'message' => $name . 'Response',
+			'parts' => $out),
 		'namespace' => $namespace,
-		'encodingStyle' => $encodingStyle,
-		'message' => $name . 'Request',
-		'parts' => $in),
-	'output' => array(
-		'use' => $use,
-		'namespace' => $namespace,
-		'encodingStyle' => $encodingStyle,
-		'message' => $name . 'Response',
-		'parts' => $out),
-	'namespace' => $namespace,
-	'transport' => 'http://schemas.xmlsoap.org/soap/http',
-	'documentation' => $documentation); 
-	// add portTypes
-	// add messages
+		'transport' => 'http://schemas.xmlsoap.org/soap/http',
+		'documentation' => $documentation); 
+		// add portTypes
+		// add messages
 		if($in)
 		{
 			foreach($in as $pName => $pType)
@@ -882,10 +883,7 @@ class wsdl extends XMLSchema {
 				$this->messages[$name.'Response'][$pName] = $pType;
 			}
 		}
-	return true;
+		return true;
 	} 
-} 
-
-
-
+}
 ?>

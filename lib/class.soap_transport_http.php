@@ -7,7 +7,7 @@
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access public
 */
 class soap_transport_http extends nusoap_base {
@@ -26,57 +26,70 @@ class soap_transport_http extends nusoap_base {
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
+	var $persistentConnection = 0;
 	
 	/**
 	* constructor
 	*/
 	function soap_transport_http($url){
 		$this->url = $url;
+		
 		$u = parse_url($url);
 		foreach($u as $k => $v){
 			$this->debug("$k = $v");
 			$this->$k = $v;
 		}
+		
+		// add any GET params to path
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-		if(!isset($u['port']) && $u['scheme'] == 'http'){
-			$this->port = 80;
+		
+		// alter host if ssl
+		if($u['scheme'] == 'https'){
+			$this->host = 'ssl://'.$this->host;
 		}
+		
+		// set default port
+		if(!isset($u['port'])){
+			if($u['scheme'] == 'https'){
+				$this->port = 443;
+			} else {
+				$this->port = 80;
+			}
+		}
+		
+		// build headers
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
+		$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
+		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 	}
 	
-	function connect($timeout){
+	function connect($connection_timeout=0,$response_timeout=30){
 		
-		// proxy
-		if($this->proxyhost != '' && $this->proxyport != ''){
-			$host = $this->proxyhost;
-			$port = $this->proxyport;
-			$this->debug("using http proxy: $host, $port");
-		} else {
-			$host = $this->host;
-			$port = $this->port;
-		}
-		// ssl
-		if($this->scheme == 'https'){
-			$host = 'ssl://'.$host;
-			$port = 443;
+		// use persistent connection
+		if($this->persistentConnection == 1 && is_resource($this->fp)){
+			return true;
 		}
 		
-		$this->debug("connection params: $host, $port");
-		// timeout
-		if($timeout > 0){
-			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
+		// set timeout
+		if($connection_timeout > 0){
+			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str, $connection_timeout);
 		} else {
-			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
+			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
-		if(!$fp) {
+		if(!$this->fp) {
 			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
 			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
-		return $fp;
+		
+		// set response timeout
+		socket_set_timeout( $this->fp, $response_timeout);
+		
+		return true;
 	}
 	
 	/**
@@ -88,145 +101,25 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function send($data, $timeout=0) {
+		
 		$this->debug('entered send() with data of length: '.strlen($data));
-		// get connnection
-		if(!$fp = $this->connect($timeout)){
+		
+		// make connnection
+		if(!$this->connect($timeout)){
 			return false;
 		}
 		$this->debug('socket connected');
 		
-		// start building outgoing payload:
-		// swap url for path if going through a proxy
-		if($this->proxyhost != '' && $this->proxyport != ''){
-			$this->outgoing_payload = "$this->request_method $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
-		} else {
-			$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+		// send request
+		if(!$this->sendRequest($data)){
+			return false;
 		}
-		// make payload
-		$this->outgoing_payload .=
-			"User-Agent: $this->title/$this->version\r\n".
-			'Host: '.$this->host.':'.$this->port."\r\n";
-		// http auth
-		$credentials = '';
-		if($this->username != '') {
-			$this->debug('setting http auth credentials');
-			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password")."\r\n";
-		}
-		// set content type
-		$this->outgoing_payload .= 'Content-Type: text/xml; charset='.$this->soap_defencoding."\r\nContent-Length: ".strlen($data)."\r\n";
-		// http encoding
-		if($this->encoding != '' && function_exists('gzdeflate')){
-			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
-			"Connection: close\r\n";
-			set_magic_quotes_runtime(0);
-		}
-		// set soapaction
-		if($this->useSOAPAction){
-			$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n";
-		}
-		$this->outgoing_payload .= "\r\n";
-		// add data
-		$this->outgoing_payload .= $data;
-		
-		// send payload
-		if(!fputs($fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
-			$this->setError('couldn\'t write message data to socket');
-			$this->debug('Write error');
-		}
-		$this->debug('wrote data to socket');
 		
 		// get response
-	    $this->incoming_payload = '';
-		//$strlen = 0;
-		while( $data = fread($fp, 32768) ){
-			$this->incoming_payload .= $data;
-			//$strlen += strlen($data);
-	    }
-		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
-		
-		// close filepointer
-		fclose($fp);
-		$this->debug('closed socket');
-		
-		// connection was closed unexpectedly
-		if($this->incoming_payload == ''){
-			$this->setError('no response from server');
+		if(!$data = $this->getResponse()){
 			return false;
 		}
 		
-		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
-		$data = $this->incoming_payload."\r\n\r\n\r\n\r\n";
-		
-		// remove 100 header
-		if(ereg('^HTTP/1.1 100',$data)){
-			if($pos = strpos($data,"\r\n\r\n") ){
-				$data = ltrim(substr($data,$pos));
-			} elseif($pos = strpos($data,"\n\n") ){
-				$data = ltrim(substr($data,$pos));
-			}
-		}//
-		
-		// separate content from HTTP headers
-		if( $pos = strpos($data,"\r\n\r\n") ){
-			$lb = "\r\n";
-		} elseif( $pos = strpos($data,"\n\n") ){
-			$lb = "\n";
-		} else {
-			$this->setError('no proper separation of headers and document');
-			return false;
-		}
-		$header_data = trim(substr($data,0,$pos));
-		$header_array = explode($lb,$header_data);
-		$data = ltrim(substr($data,$pos));
-		$this->debug('found proper separation of headers and document');
-		$this->debug('cleaned data, stringlen: '.strlen($data));
-		// clean headers
-		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			if(count($arr) >= 2){
-				$headers[trim($arr[0])] = trim($arr[1]);
-			}
-		}
-		//print "headers: <pre>$header_data</pre><br>";
-		//print "data: <pre>$data</pre><br>";
-		
-		// decode transfer-encoding
-		if(isset($headers['Transfer-Encoding']) && $headers['Transfer-Encoding'] == 'chunked'){
-			//$timer->setMarker('starting to decode chunked content');
-			if(!$data = $this->decodeChunked($data)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
-			//$timer->setMarker('finished decoding of chunked content');
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
-		}
-		
-		// decode content-encoding
-		if(isset($headers['Content-Encoding']) && $headers['Content-Encoding'] != ''){
-			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
-    			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
-					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
-    					$data = $degzdata;
-					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
-						$data = $degzdata;
-					} else {
-						$this->setError('Errors occurred when trying to decode the data');
-					}
-					//$timer->setMarker('finished decoding of gzip/deflated content');
-					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
-    			} else {
-					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
-				}
-			}
-		}
-		
-		if(strlen($data) == 0){
-			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers');
-			return false;
-		}
 		$this->debug('end of send()');
 		return $data;
 	}
@@ -402,8 +295,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setCredentials($username, $password) {
-		$this->username = $username;
-		$this->password = $password;
+		$this->outgoing_headers['Authorization'] = ' Basic '.base64_encode($this->username.':'.$this->password);
 	}
 	
 	/**
@@ -413,7 +305,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setSOAPAction($soapaction) {
-		$this->soapaction = $soapaction;
+		$this->outgoing_headers['SOAPAction'] = $soapaction;
 	}
 	
 	/**
@@ -423,8 +315,12 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setEncoding($enc='gzip, deflate'){
-		$this->encoding = $enc;
 		$this->protocol_version = '1.1';
+		$this->outgoing_headers['Accept-Encoding'] = $this->encoding;
+		$this->outgoing_headers['Connection'] = 'close';
+		set_magic_quotes_runtime(0);
+		// deprecated
+		$this->encoding = $enc;
 	}
 	
 	/**
@@ -435,8 +331,9 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setProxy($proxyhost, $proxyport) {
-		$this->proxyhost = $proxyhost;
-		$this->proxyport = $proxyport;
+		$this->path = $this->url;
+		$this->host = $proxyhost;
+		$this->port = $proxyport;
 	}
 	
 	/**
@@ -489,14 +386,151 @@ class soap_transport_http extends nusoap_base {
 			$chunk_size = hexdec( trim($temp) );
 			$chunkstart = $chunkend;
 		}
-        // Update headers
-        //$this->Header['content-length'] = $length;
-        //unset($this->Header['transfer-encoding']);
 		return $new;
 	}
 	
+	function sendRequest($data){
+		// add content-length header
+		$this->outgoing_headers['Content-Length'] = strlen($data);
+		
+		// start building outgoing payload:
+		$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+		
+		// loop thru headers, serializing
+		foreach($this->outgoing_headers as $k => $v){
+			$this->outgoing_payload .= $k.': '.$v."\r\n";
+		}
+		
+		// header/body separator
+		$this->outgoing_payload .= "\r\n";
+		
+		// add data
+		$this->outgoing_payload .= $data;
+		
+		// send payload
+		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
+			$this->setError('couldn\'t write message data to socket');
+			$this->debug('couldn\'t write message data to socket');
+			return false;
+		}
+		$this->debug('wrote data to socket');
+		return true;
+	}
+	
+	function getResponse(){
+		$this->incoming_payload = '';
+	    
+	    // loop until headers have been retrieved
+	    $data = '';
+	    while (!isset($lb)){
+			$data .= fread($this->fp, 256);
+			$pos = strpos($data,"\r\n\r\n");
+			if($pos > 1){
+				$lb = "\r\n";
+			} else {
+				$pos = strpos($data,"\n\n");
+				if($pos > 1){
+					$lb = "\n";
+				}
+			}
+			// remove 100 header
+			if(isset($lb) && ereg('^HTTP/1.1 100',$data)){
+				unset($lb);
+				$data = '';
+			}//
+		}
+		// store header data
+		$this->incoming_payload .= $data;
+		// process headers
+		$header_data = trim(substr($data,0,$pos));
+		$header_array = explode($lb,$header_data);
+		$data = substr($data,$pos);
+		$this->debug('cleaned data, stringlen: '.strlen($data));
+		foreach($header_array as $header_line){
+			$arr = explode(':',$header_line);
+			if(count($arr) >= 2){
+				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			}
+		}
+		
+		// throw error if no content-length header
+		if(!isset($this->incoming_headers['content-length'])){
+			$this->setError('No HTTP Content-length header found');
+			return false;
+		}
+		
+		// loop until msg has been received
+		$strlen = 0;
+	    while ($strlen < $this->incoming_headers['content-length'] && !feof($this->fp)){
+			$tmp = fread($this->fp, 4096);
+			$strlen += strlen($tmp);
+			$data .= $tmp;
+		}
+		$data = trim($data);
+		$this->incoming_payload .= $data;
+		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
+		
+		// close filepointer
+		if(
+			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
+			!isset($this->persistentConnection)){
+			fclose($this->fp);
+			$this->fp = false;
+			$this->debug('closed socket');
+		}
+		
+		// connection was closed unexpectedly
+		if($this->incoming_payload == ''){
+			$this->setError('no response from server');
+			return false;
+		}
+		
+		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+		
+		// decode transfer-encoding
+		if(isset($headers['transfer-encoding']) && $headers['transfer-encoding'] == 'chunked'){
+			if(!$data = $this->decodeChunked($data)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+		}
+		
+		// decode content-encoding
+		if(isset($headers['content-encoding']) && $headers['content-encoding'] != ''){
+			if($headers['content-encoding'] == 'deflate' || $headers['content-encoding'] == 'gzip'){
+    			// if decoding works, use it. else assume data wasn't gzencoded
+    			if(function_exists('gzinflate')){
+					//$timer->setMarker('starting decoding of gzip/deflated content');
+					if($headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    					$data = $degzdata;
+					} elseif($headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+						$data = $degzdata;
+					} else {
+						$this->setError('Errors occurred when trying to decode the data');
+					}
+					//$timer->setMarker('finished decoding of gzip/deflated content');
+					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+    			} else {
+					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
+				}
+			}
+		}
+		
+		if(strlen($data) == 0){
+			$this->debug('no data after headers!');
+			$this->setError('no data present after HTTP headers');
+			return false;
+		}
+		
+		return $data;
+	}
+	
+	function usePersistentConnection(){
+		$this->protocol_version = '1.1';
+		$this->persistentConnection = 1;
+		$this->outgoing_headers['Connection'] = 'Keep-Alive';
+	}
 }
-
-
 
 ?>

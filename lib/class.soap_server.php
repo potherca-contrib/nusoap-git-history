@@ -10,7 +10,7 @@
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soap_server extends nusoap_base {
@@ -310,7 +310,7 @@ class soap_server extends nusoap_base {
 	* @param	string $style (rpc|literal)
 	* @access   public
 	*/
-	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false){
+	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
 		if($this->externalWSDLURL){
 			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
 		}
@@ -339,7 +339,7 @@ class soap_server extends nusoap_base {
 	    'soapaction' => $soapaction,
 	    'style' => $style);
         if($this->wsdl){
-        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use);
+        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use,$documentation);
 	    }
 		return true;
 	}

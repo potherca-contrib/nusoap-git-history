@@ -7,7 +7,7 @@
 * soap_parser class parses SOAP XML messages into native PHP values
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soap_parser extends nusoap_base {
@@ -254,7 +254,7 @@ class soap_parser extends nusoap_base {
 			// get unqualified name
 			$name = substr(strstr($name,':'),1);
 		}
-
+		
 		// build to native type
 		if(isset($this->body_position) && $pos > $this->body_position){
 			// deal w/ multirefs
@@ -270,15 +270,7 @@ class soap_parser extends nusoap_base {
 				$this->message[$pos]['result'] = $this->buildVal($pos);
 			} else {
             	$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-				if(is_numeric($this->message[$pos]['cdata']) ){
-                	if( strpos($this->message[$pos]['cdata'],'.') ){
-                		$this->message[$pos]['result'] = doubleval($this->message[$pos]['cdata']);
-                    } else {
-                    	$this->message[$pos]['result'] = intval($this->message[$pos]['cdata']);
-                    }
-                } else {
-                	$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
-                }
+				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 			}
 		}
 

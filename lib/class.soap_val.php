@@ -7,7 +7,7 @@
 * NOTE: this is only really used when WSDL is not available.
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soapval extends nusoap_base {

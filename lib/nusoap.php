@@ -54,13 +54,13 @@ require_once('class.soap_server.php');*/
 * nusoap_base
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.3';
+	var $version = '0.6.4';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters
@@ -490,7 +490,18 @@ function iso8601_to_timestamp($datestr){
 	}
 }
 
-
+function usleepWindows($usec)
+{
+	$start = gettimeofday();
+	
+	do
+	{
+		$stop = gettimeofday();
+		$timePassed = 1000000 * ($stop['sec'] - $start['sec'])
+		+ $stop['usec'] - $start['usec'];
+	}
+	while ($timePassed < $usec);
+}
 
 ?><?php
 
@@ -501,7 +512,7 @@ function iso8601_to_timestamp($datestr){
 * mainly used for returning faults from deployed functions
 * in a server instance.
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access public
 */
 class soap_fault extends nusoap_base {
@@ -566,7 +577,7 @@ class soap_fault extends nusoap_base {
 * tutorials I refer to :)
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class XMLSchema extends nusoap_base  {
@@ -829,9 +840,14 @@ class XMLSchema extends nusoap_base  {
 				$this->schema['schemaVersion'] = $this->getNamespaceFromPrefix($prefix);
 			break;
 			case 'simpleType':
-				$this->currentElement = $attrs['name'];
-				$this->elements[ $attrs['name'] ] = $attrs;
-				$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+				if(isset($attrs['name'])){
+					$this->currentElement = $attrs['name'];
+					$this->elements[ $attrs['name'] ] = $attrs;
+					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+				} else {
+					//echo 'not parsing: '.$name;
+					//var_dump($attrs);
+				}
 			break;
 		}
 	}
@@ -1234,7 +1250,7 @@ class XMLSchema extends nusoap_base  {
 * NOTE: this is only really used when WSDL is not available.
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soapval extends nusoap_base {
@@ -1291,7 +1307,7 @@ class soapval extends nusoap_base {
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access public
 */
 class soap_transport_http extends nusoap_base {
@@ -1310,57 +1326,70 @@ class soap_transport_http extends nusoap_base {
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
+	var $persistentConnection = 0;
 	
 	/**
 	* constructor
 	*/
 	function soap_transport_http($url){
 		$this->url = $url;
+		
 		$u = parse_url($url);
 		foreach($u as $k => $v){
 			$this->debug("$k = $v");
 			$this->$k = $v;
 		}
+		
+		// add any GET params to path
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-		if(!isset($u['port']) && $u['scheme'] == 'http'){
-			$this->port = 80;
+		
+		// alter host if ssl
+		if($u['scheme'] == 'https'){
+			$this->host = 'ssl://'.$this->host;
 		}
+		
+		// set default port
+		if(!isset($u['port'])){
+			if($u['scheme'] == 'https'){
+				$this->port = 443;
+			} else {
+				$this->port = 80;
+			}
+		}
+		
+		// build headers
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
+		$this->outgoing_headers['Host'] = $this->host.':'.$this->port;
+		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 	}
 	
-	function connect($timeout){
+	function connect($connection_timeout=0,$response_timeout=30){
 		
-		// proxy
-		if($this->proxyhost != '' && $this->proxyport != ''){
-			$host = $this->proxyhost;
-			$port = $this->proxyport;
-			$this->debug("using http proxy: $host, $port");
-		} else {
-			$host = $this->host;
-			$port = $this->port;
-		}
-		// ssl
-		if($this->scheme == 'https'){
-			$host = 'ssl://'.$host;
-			$port = 443;
+		// use persistent connection
+		if($this->persistentConnection == 1 && is_resource($this->fp)){
+			return true;
 		}
 		
-		$this->debug("connection params: $host, $port");
-		// timeout
-		if($timeout > 0){
-			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
+		// set timeout
+		if($connection_timeout > 0){
+			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str, $connection_timeout);
 		} else {
-			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
+			$this->fp = fsockopen( $this->host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
-		if(!$fp) {
+		if(!$this->fp) {
 			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);
 			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
-		return $fp;
+		
+		// set response timeout
+		socket_set_timeout( $this->fp, $response_timeout);
+		
+		return true;
 	}
 	
 	/**
@@ -1372,145 +1401,25 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function send($data, $timeout=0) {
+		
 		$this->debug('entered send() with data of length: '.strlen($data));
-		// get connnection
-		if(!$fp = $this->connect($timeout)){
+		
+		// make connnection
+		if(!$this->connect($timeout)){
 			return false;
 		}
 		$this->debug('socket connected');
 		
-		// start building outgoing payload:
-		// swap url for path if going through a proxy
-		if($this->proxyhost != '' && $this->proxyport != ''){
-			$this->outgoing_payload = "$this->request_method $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
-		} else {
-			$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+		// send request
+		if(!$this->sendRequest($data)){
+			return false;
 		}
-		// make payload
-		$this->outgoing_payload .=
-			"User-Agent: $this->title/$this->version\r\n".
-			'Host: '.$this->host.':'.$this->port."\r\n";
-		// http auth
-		$credentials = '';
-		if($this->username != '') {
-			$this->debug('setting http auth credentials');
-			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password")."\r\n";
-		}
-		// set content type
-		$this->outgoing_payload .= 'Content-Type: text/xml; charset='.$this->soap_defencoding."\r\nContent-Length: ".strlen($data)."\r\n";
-		// http encoding
-		if($this->encoding != '' && function_exists('gzdeflate')){
-			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
-			"Connection: close\r\n";
-			set_magic_quotes_runtime(0);
-		}
-		// set soapaction
-		if($this->useSOAPAction){
-			$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n";
-		}
-		$this->outgoing_payload .= "\r\n";
-		// add data
-		$this->outgoing_payload .= $data;
-		
-		// send payload
-		if(!fputs($fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
-			$this->setError('couldn\'t write message data to socket');
-			$this->debug('Write error');
-		}
-		$this->debug('wrote data to socket');
 		
 		// get response
-	    $this->incoming_payload = '';
-		//$strlen = 0;
-		while( $data = fread($fp, 32768) ){
-			$this->incoming_payload .= $data;
-			//$strlen += strlen($data);
-	    }
-		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
-		
-		// close filepointer
-		fclose($fp);
-		$this->debug('closed socket');
-		
-		// connection was closed unexpectedly
-		if($this->incoming_payload == ''){
-			$this->setError('no response from server');
+		if(!$data = $this->getResponse()){
 			return false;
 		}
 		
-		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
-		$data = $this->incoming_payload."\r\n\r\n\r\n\r\n";
-		
-		// remove 100 header
-		if(ereg('^HTTP/1.1 100',$data)){
-			if($pos = strpos($data,"\r\n\r\n") ){
-				$data = ltrim(substr($data,$pos));
-			} elseif($pos = strpos($data,"\n\n") ){
-				$data = ltrim(substr($data,$pos));
-			}
-		}//
-		
-		// separate content from HTTP headers
-		if( $pos = strpos($data,"\r\n\r\n") ){
-			$lb = "\r\n";
-		} elseif( $pos = strpos($data,"\n\n") ){
-			$lb = "\n";
-		} else {
-			$this->setError('no proper separation of headers and document');
-			return false;
-		}
-		$header_data = trim(substr($data,0,$pos));
-		$header_array = explode($lb,$header_data);
-		$data = ltrim(substr($data,$pos));
-		$this->debug('found proper separation of headers and document');
-		$this->debug('cleaned data, stringlen: '.strlen($data));
-		// clean headers
-		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			if(count($arr) >= 2){
-				$headers[trim($arr[0])] = trim($arr[1]);
-			}
-		}
-		//print "headers: <pre>$header_data</pre><br>";
-		//print "data: <pre>$data</pre><br>";
-		
-		// decode transfer-encoding
-		if(isset($headers['Transfer-Encoding']) && $headers['Transfer-Encoding'] == 'chunked'){
-			//$timer->setMarker('starting to decode chunked content');
-			if(!$data = $this->decodeChunked($data)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
-			//$timer->setMarker('finished decoding of chunked content');
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
-		}
-		
-		// decode content-encoding
-		if(isset($headers['Content-Encoding']) && $headers['Content-Encoding'] != ''){
-			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
-    			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
-					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
-    					$data = $degzdata;
-					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
-						$data = $degzdata;
-					} else {
-						$this->setError('Errors occurred when trying to decode the data');
-					}
-					//$timer->setMarker('finished decoding of gzip/deflated content');
-					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
-    			} else {
-					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
-				}
-			}
-		}
-		
-		if(strlen($data) == 0){
-			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers');
-			return false;
-		}
 		$this->debug('end of send()');
 		return $data;
 	}
@@ -1686,8 +1595,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setCredentials($username, $password) {
-		$this->username = $username;
-		$this->password = $password;
+		$this->outgoing_headers['Authorization'] = ' Basic '.base64_encode($this->username.':'.$this->password);
 	}
 	
 	/**
@@ -1697,7 +1605,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setSOAPAction($soapaction) {
-		$this->soapaction = $soapaction;
+		$this->outgoing_headers['SOAPAction'] = $soapaction;
 	}
 	
 	/**
@@ -1707,8 +1615,12 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setEncoding($enc='gzip, deflate'){
-		$this->encoding = $enc;
 		$this->protocol_version = '1.1';
+		$this->outgoing_headers['Accept-Encoding'] = $this->encoding;
+		$this->outgoing_headers['Connection'] = 'close';
+		set_magic_quotes_runtime(0);
+		// deprecated
+		$this->encoding = $enc;
 	}
 	
 	/**
@@ -1719,8 +1631,9 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function setProxy($proxyhost, $proxyport) {
-		$this->proxyhost = $proxyhost;
-		$this->proxyport = $proxyport;
+		$this->path = $this->url;
+		$this->host = $proxyhost;
+		$this->port = $proxyport;
 	}
 	
 	/**
@@ -1773,15 +1686,152 @@ class soap_transport_http extends nusoap_base {
 			$chunk_size = hexdec( trim($temp) );
 			$chunkstart = $chunkend;
 		}
-        // Update headers
-        //$this->Header['content-length'] = $length;
-        //unset($this->Header['transfer-encoding']);
 		return $new;
 	}
 	
+	function sendRequest($data){
+		// add content-length header
+		$this->outgoing_headers['Content-Length'] = strlen($data);
+		
+		// start building outgoing payload:
+		$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+		
+		// loop thru headers, serializing
+		foreach($this->outgoing_headers as $k => $v){
+			$this->outgoing_payload .= $k.': '.$v."\r\n";
+		}
+		
+		// header/body separator
+		$this->outgoing_payload .= "\r\n";
+		
+		// add data
+		$this->outgoing_payload .= $data;
+		
+		// send payload
+		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
+			$this->setError('couldn\'t write message data to socket');
+			$this->debug('couldn\'t write message data to socket');
+			return false;
+		}
+		$this->debug('wrote data to socket');
+		return true;
+	}
+	
+	function getResponse(){
+		$this->incoming_payload = '';
+	    
+	    // loop until headers have been retrieved
+	    $data = '';
+	    while (!isset($lb)){
+			$data .= fread($this->fp, 256);
+			$pos = strpos($data,"\r\n\r\n");
+			if($pos > 1){
+				$lb = "\r\n";
+			} else {
+				$pos = strpos($data,"\n\n");
+				if($pos > 1){
+					$lb = "\n";
+				}
+			}
+			// remove 100 header
+			if(isset($lb) && ereg('^HTTP/1.1 100',$data)){
+				unset($lb);
+				$data = '';
+			}//
+		}
+		// store header data
+		$this->incoming_payload .= $data;
+		// process headers
+		$header_data = trim(substr($data,0,$pos));
+		$header_array = explode($lb,$header_data);
+		$data = substr($data,$pos);
+		$this->debug('cleaned data, stringlen: '.strlen($data));
+		foreach($header_array as $header_line){
+			$arr = explode(':',$header_line);
+			if(count($arr) >= 2){
+				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			}
+		}
+		
+		// throw error if no content-length header
+		if(!isset($this->incoming_headers['content-length'])){
+			$this->setError('No HTTP Content-length header found');
+			return false;
+		}
+		
+		// loop until msg has been received
+		$strlen = 0;
+	    while ($strlen < $this->incoming_headers['content-length'] && !feof($this->fp)){
+			$tmp = fread($this->fp, 4096);
+			$strlen += strlen($tmp);
+			$data .= $tmp;
+		}
+		$data = trim($data);
+		$this->incoming_payload .= $data;
+		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
+		
+		// close filepointer
+		if(
+			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
+			!isset($this->persistentConnection)){
+			fclose($this->fp);
+			$this->fp = false;
+			$this->debug('closed socket');
+		}
+		
+		// connection was closed unexpectedly
+		if($this->incoming_payload == ''){
+			$this->setError('no response from server');
+			return false;
+		}
+		
+		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+		
+		// decode transfer-encoding
+		if(isset($headers['transfer-encoding']) && $headers['transfer-encoding'] == 'chunked'){
+			if(!$data = $this->decodeChunked($data)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+		}
+		
+		// decode content-encoding
+		if(isset($headers['content-encoding']) && $headers['content-encoding'] != ''){
+			if($headers['content-encoding'] == 'deflate' || $headers['content-encoding'] == 'gzip'){
+    			// if decoding works, use it. else assume data wasn't gzencoded
+    			if(function_exists('gzinflate')){
+					//$timer->setMarker('starting decoding of gzip/deflated content');
+					if($headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    					$data = $degzdata;
+					} elseif($headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+						$data = $degzdata;
+					} else {
+						$this->setError('Errors occurred when trying to decode the data');
+					}
+					//$timer->setMarker('finished decoding of gzip/deflated content');
+					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+    			} else {
+					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
+				}
+			}
+		}
+		
+		if(strlen($data) == 0){
+			$this->debug('no data after headers!');
+			$this->setError('no data present after HTTP headers');
+			return false;
+		}
+		
+		return $data;
+	}
+	
+	function usePersistentConnection(){
+		$this->protocol_version = '1.1';
+		$this->persistentConnection = 1;
+		$this->outgoing_headers['Connection'] = 'Keep-Alive';
+	}
 }
-
-
 
 ?><?php
 
@@ -1795,7 +1845,7 @@ class soap_transport_http extends nusoap_base {
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soap_server extends nusoap_base {
@@ -2095,7 +2145,7 @@ class soap_server extends nusoap_base {
 	* @param	string $style (rpc|literal)
 	* @access   public
 	*/
-	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false){
+	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
 		if($this->externalWSDLURL){
 			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
 		}
@@ -2124,7 +2174,7 @@ class soap_server extends nusoap_base {
 	    'soapaction' => $soapaction,
 	    'style' => $style);
         if($this->wsdl){
-        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use);
+        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use,$documentation);
 	    }
 		return true;
 	}
@@ -2311,7 +2361,7 @@ class soap_server extends nusoap_base {
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access public 
 */
 class wsdl extends XMLSchema {
@@ -2381,8 +2431,7 @@ class wsdl extends XMLSchema {
             $this->debug('no wsdl passed to parseWSDL()!!');
             $this->setError('no wsdl passed to parseWSDL()!!');
             return false;
-        } 
-
+        }
         $this->debug('getting ' . $wsdl);
         
         // parse $wsdl for url format
@@ -2408,58 +2457,6 @@ class wsdl extends XMLSchema {
 	            return false;
 			}
 			unset($tr);
-            /* $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
-            $fsockopen_timeout = 30; 
-            // check if a port value is supplied in url
-            if (isset($wsdl_props['port'])) {
-                // yes
-                $wsdl_url_port = $wsdl_props['port'];
-            } else {
-                // no, assign port number, based on url protocol (scheme)
-                switch ($wsdl_props['scheme']) {
-                    case ('https') :
-                    case ('ssl') :
-                    case ('tls') :
-                        $wsdl_url_port = 443;
-                        break;
-                    case ('http') :
-                    default :
-                        $wsdl_url_port = 80;
-                } 
-            } 
-            // FIXME: should implement SSL/TLS support here if CURL is available
-            if ($fp = fsockopen($wsdl_props['host'], $wsdl_url_port, $fsockopen_errnum, $fsockopen_errstr, $fsockopen_timeout)) {
-                // perform HTTP GET for WSDL file
-                // 10.9.02 - added poulter fix for doing this properly
-                $sHeader = "GET " . $wsdl_props['path'];
-                if (isset($wsdl_props['query'])) {
-                    $sHeader .= "?" . $wsdl_props['query'];
-                } 
-                $sHeader .= " HTTP/1.0\r\n";
-
-                if (isset($wsdl_props['user'])) {
-                    $base64auth = base64_encode($wsdl_props['user'] . ":" . $wsdl_props['pass']);
-                    $sHeader .= "Authorization: Basic $base64auth\r\n";
-                }
-				$sHeader .= "Host: " . $wsdl_props['host'] . ( isset($wsdl_props['port']) ? ":".$wsdl_props['port'] : "" ) . "\r\n\r\n";
-                fputs($fp, $sHeader);
-
-                while (fgets($fp, 1024) != "\r\n") {
-                    // do nothing, just read/skip past HTTP headers
-                    // FIXME: should actually detect HTTP response code, and act accordingly if error
-                    // HTTP headers end with extra CRLF before content body
-                } 
-                // read in WSDL just like regular fopen()
-                $wsdl_string = '';
-                while ($data = fread($fp, 32768)) {
-                    $wsdl_string .= $data;
-                } 
-                fclose($fp);
-            } else {
-                $this->setError('bad path to WSDL file.');
-                return false;
-            }
-            */
         } else {
             // $wsdl seems to be a non-url file path, do the regular fopen
             if ($fp = @fopen($wsdl, 'r')) {
@@ -2908,6 +2905,9 @@ class wsdl extends XMLSchema {
 					    $portType_xml .= ' parameterOrder="' . $opParts['parameterOrder'] . '"';
 					} 
 					$portType_xml .= '>';
+					if(isset($opParts['documentation']) && $opParts['documentation'] != '') {
+						$portType_xml .= '<documentation>' . htmlspecialchars($opParts['documentation']) . '</documentation>';
+					}
 					$portType_xml .= '<input message="tns:' . $opParts['input']['message'] . '"/>';
 					$portType_xml .= '<output message="tns:' . $opParts['output']['message'] . '"/>';
 					$portType_xml .= '</operation>';
@@ -2944,6 +2944,57 @@ class wsdl extends XMLSchema {
 	function serializeRPCParameters($operation, $direction, $parameters)
 	{
 		$this->debug('in serializeRPCParameters with operation '.$operation.', direction '.$direction.' and '.count($parameters).' param(s), and xml schema version ' . $this->XMLSchemaVersion); 
+		
+		if ($direction != 'input' && $direction != 'output') {
+			$this->debug('The value of the \$direction argument needs to be either "input" or "output"');
+			$this->setError('The value of the \$direction argument needs to be either "input" or "output"');
+			return false;
+		} 
+		if (!$opData = $this->getOperationData($operation)) {
+			$this->debug('Unable to retrieve WSDL data for operation: ' . $operation);
+			$this->setError('Unable to retrieve WSDL data for operation: ' . $operation);
+			return false;
+		}
+		$this->debug($this->varDump($opData));
+		// set input params
+		$xml = '';
+		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
+			
+			$use = $opData[$direction]['use'];
+			$this->debug("use=$use");
+			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
+			foreach($opData[$direction]['parts'] as $name => $type) {
+				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+				// NOTE: add error handling here
+				// if serializeType returns false, then catch global error and fault
+				if (isset($parameters[$name])) {
+					$this->debug('calling serializeType w/ named param');
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
+				} elseif(is_array($parameters)) {
+					$this->debug('calling serializeType w/ unnamed param');
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+				} else {
+					$this->debug('no parameters passed.');
+				}
+			}
+		}
+		return $xml;
+	} 
+	
+	/**
+	 * serialize a PHP value according to a WSDL message definition
+	 * 
+	 * TODO
+	 * - multi-ref serialization
+	 * - validate PHP values against type definitions, return errors if invalid
+	 * 
+	 * @param string $ type name
+	 * @param mixed $ param value
+	 * @return mixed new param or false if initial value didn't validate
+	 */
+	function serializeParameters($operation, $direction, $parameters)
+	{
+		$this->debug('in serializeParameters with operation '.$operation.', direction '.$direction.' and '.count($parameters).' param(s), and xml schema version ' . $this->XMLSchemaVersion); 
 		
 		if ($direction != 'input' && $direction != 'output') {
 			$this->debug('The value of the \$direction argument needs to be either "input" or "output"');
@@ -3050,7 +3101,6 @@ class wsdl extends XMLSchema {
 			
 			if (isset($this->complexTypes[$uqType]['elements']) && is_array($this->complexTypes[$uqType]['elements'])) {
 			
-			//if (is_array($this->complexTypes[$uqType]['elements'])) {
 				// toggle whether all elements are present - ideally should validate against schema
 				if(count($this->complexTypes[$uqType]['elements']) != count($value)){
 					$optionals = true;
@@ -3068,7 +3118,7 @@ class wsdl extends XMLSchema {
 						}
 						// serialize schema-defined type
 						if (!isset($attrs['type'])) {
-						    $xml .= $this->serializeType($eName, $attrs['name'], $v, $use);
+						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use);
 						// serialize generic type
 						} else {
 						    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);
@@ -3076,6 +3126,8 @@ class wsdl extends XMLSchema {
 						}
 					}
 				} 
+			} else {
+				//echo 'got here';
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
@@ -3134,38 +3186,37 @@ class wsdl extends XMLSchema {
 	* @param string $style (rpc|literal)
 	* @access public 
 	*/
-	function addOperation($name, $in = false, $out = false, $namespace = false, $soapaction = false, $style = 'rpc', $use = 'encoded', $documentation = '')
-	{
-	if ($style == 'rpc' && $use == 'encoded') {
-		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-	} else {
-		$encodingStyle = '';
-	} 
-	// get binding
-	$this->bindings[ $this->serviceName . 'Binding' ]['operations'][$name] =
-	array(
-	'name' => $name,
-	'binding' => $this->serviceName . 'Binding',
-	'endpoint' => $this->endpoint,
-	'soapAction' => $soapaction,
-	'style' => $style,
-	'input' => array(
-		'use' => $use,
+	function addOperation($name, $in = false, $out = false, $namespace = false, $soapaction = false, $style = 'rpc', $use = 'encoded', $documentation = ''){
+		if ($style == 'rpc' && $use == 'encoded') {
+			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+		} else {
+			$encodingStyle = '';
+		} 
+		// get binding
+		$this->bindings[ $this->serviceName . 'Binding' ]['operations'][$name] =
+		array(
+		'name' => $name,
+		'binding' => $this->serviceName . 'Binding',
+		'endpoint' => $this->endpoint,
+		'soapAction' => $soapaction,
+		'style' => $style,
+		'input' => array(
+			'use' => $use,
+			'namespace' => $namespace,
+			'encodingStyle' => $encodingStyle,
+			'message' => $name . 'Request',
+			'parts' => $in),
+		'output' => array(
+			'use' => $use,
+			'namespace' => $namespace,
+			'encodingStyle' => $encodingStyle,
+			'message' => $name . 'Response',
+			'parts' => $out),
 		'namespace' => $namespace,
-		'encodingStyle' => $encodingStyle,
-		'message' => $name . 'Request',
-		'parts' => $in),
-	'output' => array(
-		'use' => $use,
-		'namespace' => $namespace,
-		'encodingStyle' => $encodingStyle,
-		'message' => $name . 'Response',
-		'parts' => $out),
-	'namespace' => $namespace,
-	'transport' => 'http://schemas.xmlsoap.org/soap/http',
-	'documentation' => $documentation); 
-	// add portTypes
-	// add messages
+		'transport' => 'http://schemas.xmlsoap.org/soap/http',
+		'documentation' => $documentation); 
+		// add portTypes
+		// add messages
 		if($in)
 		{
 			foreach($in as $pName => $pType)
@@ -3187,12 +3238,9 @@ class wsdl extends XMLSchema {
 				$this->messages[$name.'Response'][$pName] = $pType;
 			}
 		}
-	return true;
+		return true;
 	} 
-} 
-
-
-
+}
 ?><?php
 
 
@@ -3202,7 +3250,7 @@ class wsdl extends XMLSchema {
 * soap_parser class parses SOAP XML messages into native PHP values
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soap_parser extends nusoap_base {
@@ -3449,7 +3497,7 @@ class soap_parser extends nusoap_base {
 			// get unqualified name
 			$name = substr(strstr($name,':'),1);
 		}
-
+		
 		// build to native type
 		if(isset($this->body_position) && $pos > $this->body_position){
 			// deal w/ multirefs
@@ -3465,15 +3513,7 @@ class soap_parser extends nusoap_base {
 				$this->message[$pos]['result'] = $this->buildVal($pos);
 			} else {
             	$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-				if(is_numeric($this->message[$pos]['cdata']) ){
-                	if( strpos($this->message[$pos]['cdata'],'.') ){
-                		$this->message[$pos]['result'] = doubleval($this->message[$pos]['cdata']);
-                    } else {
-                    	$this->message[$pos]['result'] = intval($this->message[$pos]['cdata']);
-                    }
-                } else {
-                	$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
-                }
+				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 			}
 		}
 
@@ -3645,7 +3685,7 @@ class soap_parser extends nusoap_base {
 * unset($soapclient);
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soapclient extends nusoap_base  {
@@ -3762,7 +3802,8 @@ class soapclient extends nusoap_base  {
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
 				} else {
 					$this->debug("serializing literal document for operation $operation");
-					$payload = is_array($params) ? array_shift($params) : $params;
+					//$payload = is_array($params) ? array_shift($params) : $params;
+					$payload = $this->wsdl->serializeParameters($operation,'input',$params);
 				}
 			} else {
 				$this->debug("serializing encoded params for operation $operation");
@@ -3869,7 +3910,7 @@ class soapclient extends nusoap_base  {
 			// http(s)
 			case ereg('^http',$this->endpoint):
 				$this->debug('transporting via HTTP');
-				if($this->persistentConnection && is_object($this->persistentConnection)){
+				if($this->persistentConnection == true && is_object($this->persistentConnection)){
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
@@ -3908,10 +3949,13 @@ class soapclient extends nusoap_base  {
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
 				$this->debug("transport debug data...\n".$http->debug_str);
+				
 				// save transport object if using persistent connections
 				if($this->persistentConnection && !is_object($this->persistentConnection)){
+					$http->usePersistentConnection();
 					$this->persistentConnection = $http;
 				}
+				
 				if($err = $http->getError()){
 					$this->setError('HTTP Error: '.$err);
 					return false;

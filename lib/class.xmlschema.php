@@ -10,7 +10,7 @@
 * tutorials I refer to :)
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class XMLSchema extends nusoap_base  {
@@ -273,9 +273,14 @@ class XMLSchema extends nusoap_base  {
 				$this->schema['schemaVersion'] = $this->getNamespaceFromPrefix($prefix);
 			break;
 			case 'simpleType':
-				$this->currentElement = $attrs['name'];
-				$this->elements[ $attrs['name'] ] = $attrs;
-				$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+				if(isset($attrs['name'])){
+					$this->currentElement = $attrs['name'];
+					$this->elements[ $attrs['name'] ] = $attrs;
+					$this->elements[ $attrs['name'] ]['typeClass'] = 'element';
+				} else {
+					//echo 'not parsing: '.$name;
+					//var_dump($attrs);
+				}
 			break;
 		}
 	}

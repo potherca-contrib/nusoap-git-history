@@ -18,7 +18,7 @@
 * unset($soapclient);
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.3
+* @version  v 0.6.4
 * @access   public
 */
 class soapclient extends nusoap_base  {
@@ -135,7 +135,8 @@ class soapclient extends nusoap_base  {
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
 				} else {
 					$this->debug("serializing literal document for operation $operation");
-					$payload = is_array($params) ? array_shift($params) : $params;
+					//$payload = is_array($params) ? array_shift($params) : $params;
+					$payload = $this->wsdl->serializeParameters($operation,'input',$params);
 				}
 			} else {
 				$this->debug("serializing encoded params for operation $operation");
@@ -242,7 +243,7 @@ class soapclient extends nusoap_base  {
 			// http(s)
 			case ereg('^http',$this->endpoint):
 				$this->debug('transporting via HTTP');
-				if($this->persistentConnection && is_object($this->persistentConnection)){
+				if($this->persistentConnection == true && is_object($this->persistentConnection)){
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
@@ -281,10 +282,13 @@ class soapclient extends nusoap_base  {
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
 				$this->debug("transport debug data...\n".$http->debug_str);
+				
 				// save transport object if using persistent connections
 				if($this->persistentConnection && !is_object($this->persistentConnection)){
+					$http->usePersistentConnection();
 					$this->persistentConnection = $http;
 				}
+				
 				if($err = $http->getError()){
 					$this->setError('HTTP Error: '.$err);
 					return false;
