@@ -286,11 +286,7 @@ class nusoap_base {
 	                        }
 							$array_types[$tt] = 1;
 							$xml .= $this->serialize_val($v,'item',false,false,false,false,$use);
-							if(is_array($v) && is_numeric(key($v))){
-								$i += sizeof($v);
-							} else {
-								++$i;
-							}
+							++$i;
 						}
 						if(count($array_types) > 1){
 							$array_typename = 'xsd:ur-type';
@@ -310,11 +306,7 @@ class nusoap_base {
 								$array_typename = $tt;
 							}
 						}
-						if(isset($array_types['array'])){
-							$array_type = $i.",".$i;
-						} else {
-							$array_type = $i;
-						}
+						$array_type = $i;
 						if ($use == 'literal') {
 							$xml = "<$name $atts>".$xml."</$name>";
 						} else {
