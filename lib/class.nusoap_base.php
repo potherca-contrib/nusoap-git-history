@@ -204,6 +204,14 @@ class nusoap_base {
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
         	if(is_bool($val) && !$val){
         		$val = 0;
+			} else if (is_string($val)) {
+				if($this->charencoding){
+			    	$val = str_replace('&', '&amp;', $val);
+			    	$val = str_replace("'", '&apos;', $val);
+			    	$val = str_replace('"', '&quot;', $val);
+			    	$val = str_replace('<', '&lt;', $val);
+			    	$val = str_replace('>', '&gt;', $val);
+			    }
 			}
 			if ($use == 'literal') {
 	        	return "<$name$xmlns>$val</$name>";
@@ -249,6 +257,8 @@ class nusoap_base {
 			case (is_string($val) || $type == 'string'):
 				if($this->charencoding){
 			    	$val = str_replace('&', '&amp;', $val);
+			    	$val = str_replace("'", '&apos;', $val);
+			    	$val = str_replace('"', '&quot;', $val);
 			    	$val = str_replace('<', '&lt;', $val);
 			    	$val = str_replace('>', '&gt;', $val);
 			    }

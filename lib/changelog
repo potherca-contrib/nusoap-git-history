@@ -33,3 +33,4 @@
 - soap_transport_http: update the Content-Type header in sendRequest, since soap_defencoding could be changed after ctor is called
 - soap_server: use soap_defencoding instead of charset_encoding
 - soap_server: read encoding from _SERVER if available
+- nusoap_base: do entity translation for string parameters with an xsd type specified (thanks David Derr)
