@@ -1337,6 +1337,7 @@ class soapval extends nusoap_base {
 
 
 
+
 /**
 * transport class for sending/receiving data via HTTP and HTTPS
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
@@ -1892,7 +1893,9 @@ class soap_transport_http extends nusoap_base {
 	}
 }
 
+
 ?><?php
+
 
 
 
@@ -2544,7 +2547,9 @@ class soap_server extends nusoap_base {
 
 
 
+
 ?><?php
+
 
 
 
@@ -3563,7 +3568,9 @@ class wsdl extends XMLSchema {
 		return true;
 	} 
 }
+
 ?><?php
+
 
 
 
@@ -3606,7 +3613,9 @@ class soap_parser extends nusoap_base {
 	var $ids = array();
 	// array of id => hrefs => pos
 	var $multirefs = array();
-
+	// toggle for auto-decoding element content
+	var $decode_utf8 = true;
+	
 	/**
 	* constructor
 	*
@@ -3615,11 +3624,12 @@ class soap_parser extends nusoap_base {
 	* @param    string $method
 	* @access   public
 	*/
-	function soap_parser($xml,$encoding='UTF-8',$method=''){
+	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
 		$this->xml = $xml;
 		$this->xml_encoding = $encoding;
 		$this->method = $method;
-
+		$this->decode_utf8 = $decode_utf8;
+		
 		// Check whether content has been read.
 		if(!empty($xml)){
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
@@ -3628,7 +3638,7 @@ class soap_parser extends nusoap_base {
 			// Set the options for parsing the XML data.
 			//xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
 			xml_parser_set_option($this->parser, XML_OPTION_CASE_FOLDING, 0);
-			//xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
+			xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, $this->xml_encoding);
 			// Set the object for the parser.
 			xml_set_object($this->parser, $this);
 			// Set the element handlers for the parser.
@@ -3907,7 +3917,9 @@ class soap_parser extends nusoap_base {
 			// TODO: add an option to disable this for folks who want
 			// raw UTF-8 that, e.g., might not map to iso-8859-1
 			// TODO: this can also be handled with xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
-			$data = utf8_decode($data);
+			if($this->decode_utf8){
+				$data = utf8_decode($data);
+			}
 		}
         $this->message[$pos]['cdata'] .= $data;
         // for doclit
@@ -4070,7 +4082,9 @@ class soap_parser extends nusoap_base {
 
 
 
+
 ?><?php
+
 
 
 
@@ -4114,6 +4128,8 @@ class soapclient extends nusoap_base  {
 	var $request = '';
 	var $response = '';
 	var $responseData = '';
+	// toggles whether the parser decodes element content w/ utf8_decode()
+    var $decode_utf8 = true;
 	
 	/**
 	* fault related variables
@@ -4432,7 +4448,7 @@ class soapclient extends nusoap_base  {
 	*/
     function parseResponse($data) {
 		$this->debug('Entering parseResponse(), about to create soap_parser instance');
-		$parser = new soap_parser($data,$this->xml_encoding,$this->operation);
+		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -4623,6 +4639,17 @@ class soapclient extends nusoap_base  {
 	function getHTTPContentTypeCharset() {
 		return $this->soap_defencoding;
 	}
+	
+	/*
+	* whether or not parser should decode utf8 element content
+    *
+    * @return   always returns true
+    * @access   public
+    */
+    function decodeUTF8($bool){
+		$this->decode_utf8 = $bool;
+		return true;
+    }
 }
 
 ?>

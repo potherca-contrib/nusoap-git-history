@@ -42,7 +42,9 @@ class soap_parser extends nusoap_base {
 	var $ids = array();
 	// array of id => hrefs => pos
 	var $multirefs = array();
-
+	// toggle for auto-decoding element content
+	var $decode_utf8 = true;
+	
 	/**
 	* constructor
 	*
@@ -51,11 +53,12 @@ class soap_parser extends nusoap_base {
 	* @param    string $method
 	* @access   public
 	*/
-	function soap_parser($xml,$encoding='UTF-8',$method=''){
+	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
 		$this->xml = $xml;
 		$this->xml_encoding = $encoding;
 		$this->method = $method;
-
+		$this->decode_utf8 = $decode_utf8;
+		
 		// Check whether content has been read.
 		if(!empty($xml)){
 			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
@@ -64,7 +67,7 @@ class soap_parser extends nusoap_base {
 			// Set the options for parsing the XML data.
 			//xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
 			xml_parser_set_option($this->parser, XML_OPTION_CASE_FOLDING, 0);
-			//xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
+			xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, $this->xml_encoding);
 			// Set the object for the parser.
 			xml_set_object($this->parser, $this);
 			// Set the element handlers for the parser.
@@ -343,7 +346,9 @@ class soap_parser extends nusoap_base {
 			// TODO: add an option to disable this for folks who want
 			// raw UTF-8 that, e.g., might not map to iso-8859-1
 			// TODO: this can also be handled with xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
-			$data = utf8_decode($data);
+			if($this->decode_utf8){
+				$data = utf8_decode($data);
+			}
 		}
         $this->message[$pos]['cdata'] .= $data;
         // for doclit

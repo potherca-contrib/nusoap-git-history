@@ -43,6 +43,8 @@ class soapclient extends nusoap_base  {
 	var $request = '';
 	var $response = '';
 	var $responseData = '';
+	// toggles whether the parser decodes element content w/ utf8_decode()
+    var $decode_utf8 = true;
 	
 	/**
 	* fault related variables
@@ -361,7 +363,7 @@ class soapclient extends nusoap_base  {
 	*/
     function parseResponse($data) {
 		$this->debug('Entering parseResponse(), about to create soap_parser instance');
-		$parser = new soap_parser($data,$this->xml_encoding,$this->operation);
+		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -552,6 +554,17 @@ class soapclient extends nusoap_base  {
 	function getHTTPContentTypeCharset() {
 		return $this->soap_defencoding;
 	}
+	
+	/*
+	* whether or not parser should decode utf8 element content
+    *
+    * @return   always returns true
+    * @access   public
+    */
+    function decodeUTF8($bool){
+		$this->decode_utf8 = $bool;
+		return true;
+    }
 }
 
 ?>
