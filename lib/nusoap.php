@@ -1723,7 +1723,7 @@ class soap_transport_http extends nusoap_base {
 	    // loop until headers have been retrieved
 	    $data = '';
 	    while (!isset($lb)){
-			$data .= fread($this->fp, 256);
+			$data .= fgets($this->fp, 256);
 			$pos = strpos($data,"\r\n\r\n");
 			if($pos > 1){
 				$lb = "\r\n";
@@ -1753,19 +1753,14 @@ class soap_transport_http extends nusoap_base {
 			}
 		}
 		
-		// throw error if no content-length header
-		if(!isset($this->incoming_headers['content-length'])){
-			$this->setError('No HTTP Content-length header found');
-			return false;
-		}
-		
 		// loop until msg has been received
 		$strlen = 0;
-	    while ($strlen < $this->incoming_headers['content-length'] && !feof($this->fp)){
-			$tmp = fread($this->fp, 4096);
+	    while ($strlen < $this->incoming_headers['content-length'] || !feof($this->fp)){
+			$tmp = fread($this->fp, 8192);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
 		}
+		
 		$data = trim($data);
 		$this->incoming_payload .= $data;
 		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
