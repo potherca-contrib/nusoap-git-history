@@ -343,6 +343,10 @@ class XMLSchema extends nusoap_base  {
 					$contentStr .= '/>';
 				}
 			}
+			// if restriction
+			if( isset($attrs['restrictionBase']) && $attrs['restrictionBase'] != ''){
+				$contentStr = "<$schemaPrefix:restriction base=\"".$attrs['restrictionBase']."\">".$contentStr."</$schemaPrefix:restriction>";
+			}
 			// "all" compositor obviates complex/simple content
 			if(isset($attrs['compositor']) && $attrs['compositor'] == 'all'){
 				$contentStr = "<$schemaPrefix:$attrs[compositor]>".$contentStr."</$schemaPrefix:$attrs[compositor]>";
@@ -354,10 +358,6 @@ class XMLSchema extends nusoap_base  {
 			// compositors
 			if(isset($attrs['compositor']) && $attrs['compositor'] != '' && $attrs['compositor'] != 'all'){
 				$contentStr = "<$schemaPrefix:$attrs[compositor]>".$contentStr."</$schemaPrefix:$attrs[compositor]>";
-			}
-			// if restriction
-			if( isset($attrs['restrictionBase']) && $attrs['restrictionBase'] != ''){
-				$contentStr = "<$schemaPrefix:restriction base=\"".$attrs['restrictionBase']."\">".$contentStr."</$schemaPrefix:restriction>";
 			}
 			// finalize complex type
 			if($contentStr != ''){
