@@ -219,3 +219,7 @@
 - wsdl: serialize multiple elements when maxOccurs="unbounded" and value is an array
 - wsdl: serialize soapval values (used to force an XML type, e.g. when WSDL uses an abstract type)
 - nusoapmime: do not require nusoap.php (it is now the programmer's responsibility)
+
+2004-04-21, version 0.6.7
+- soap_parser: parse repeated element name into an array (de-serializes doc/lit array into a PHP array when there is more than 1 array element)
+- soap_server: do not wrap response in a response element for a document style service

@@ -350,6 +350,7 @@ class soap_server extends nusoap_base {
 		    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
 		    }
+		    $this->debug('opData is ' . $this->varDump($this->opData));
 		}
 		$this->debug("method '$this->methodname' exists");
 		// evaluate message, getting back parameters
@@ -441,7 +442,15 @@ class soap_server extends nusoap_base {
 			$this->debug('got no response from method');
 		}
 		$this->debug('serializing response');
-		$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+		if ($this->wsdl) {
+			if ($this->opData['style'] == 'rpc') {
+				$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+			} else {
+				$payload = $return_val;
+			}
+		} else {
+			$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+		}
 		$this->result = 'successful';
 		if($this->wsdl){
 			//if($this->debug_flag){

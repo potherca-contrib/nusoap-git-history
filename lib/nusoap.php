@@ -2554,6 +2554,7 @@ class soap_server extends nusoap_base {
 		    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
 		    }
+		    $this->debug('opData is ' . $this->varDump($this->opData));
 		}
 		$this->debug("method '$this->methodname' exists");
 		// evaluate message, getting back parameters
@@ -2645,7 +2646,15 @@ class soap_server extends nusoap_base {
 			$this->debug('got no response from method');
 		}
 		$this->debug('serializing response');
-		$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+		if ($this->wsdl) {
+			if ($this->opData['style'] == 'rpc') {
+				$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+			} else {
+				$payload = $return_val;
+			}
+		} else {
+			$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+		}
 		$this->result = 'successful';
 		if($this->wsdl){
 			//if($this->debug_flag){
@@ -4797,8 +4806,7 @@ class soap_parser extends nusoap_base {
 				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
 					$notstruct = 1;
 				} else {
-	            	// is array or struct? better way to do this probably
-	            	// treat repeated element name as an array
+	            	// is array or struct?
 	            	foreach($children as $child_pos){
 	            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
 	            			$notstruct = 1;
@@ -4812,7 +4820,15 @@ class soap_parser extends nusoap_base {
             		if(isset($notstruct)){
             			$params[] = &$this->message[$child_pos]['result'];
             		} else {
-				    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+            			if (isset($params[$this->message[$child_pos]['name']])) {
+            				// de-serialize repeated element name into an array
+            				if (!is_array($params[$this->message[$child_pos]['name']])) {
+            					$params[$this->message[$child_pos]['name']] = array($params[$this->message[$child_pos]['name']]);
+            				}
+            				$params[$this->message[$child_pos]['name']][] = &$this->message[$child_pos]['result'];
+            			} else {
+					    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+					    }
                 	}
                 }
 			}
