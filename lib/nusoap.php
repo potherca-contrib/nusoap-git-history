@@ -186,6 +186,23 @@ class nusoap_base {
 	}
 
 	/**
+	* detect if array is a simple array or a struct (associative array)
+	*
+	* @param	$val	The PHP array
+	* @return	string	(arraySimple|arrayStruct)
+	* @access	private
+	*/
+	function isArraySimpleOrStruct($val) {
+        $keyList = array_keys($val);
+		foreach ($keyList as $keyListValue) {
+			if (!is_int($keyListValue)) {
+				return 'arrayStruct';
+			}
+		}
+		return 'arraySimple';
+	}
+
+	/**
 	* serializes PHP values in accordance w/ section 5. Type information is
 	* not serialized if $use == 'literal'.
 	*
@@ -288,14 +305,7 @@ class nusoap_base {
 			break;
 			case (is_array($val) || $type):
 				// detect if struct or array
-                $keyList = array_keys($val);
-				$valueType = 'arraySimple';
-				foreach($keyList as $keyListValue){
-					if(!is_int($keyListValue)){
-						$valueType = 'arrayStruct';
-						break;
-					}
-				}
+				$valueType = $this->isArraySimpleOrStruct($val);
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
 					$i = 0;
 					if(is_array($val) && count($val)> 0){
@@ -827,13 +837,13 @@ class XMLSchema extends nusoap_base  {
 		    // Parse the XML file.
 		    if(!xml_parse($this->parser,$xml,true)){
 			// Display an error message.
-				$errstr = sprintf('XML error on line %d: %s',
+				$errstr = sprintf('XML error parsing XML schema on line %d: %s',
 				xml_get_current_line_number($this->parser),
 				xml_error_string(xml_get_error_code($this->parser))
 				);
-				$this->debug('XML parse error: '.$errstr);
+				$this->debug($errstr);
 				$this->debug("XML payload:\n" . $xml);
-				$this->setError('Parser error: '.$errstr);
+				$this->setError($errstr);
 	    	}
             
 			xml_parser_free($this->parser);
@@ -1956,10 +1966,13 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
+		// TODO: handle chunking in this loop to allow persistent connections with chunking
+		$content_length = isset($this->incoming_headers['content-length']) ? $this->incoming_headers['content-length'] : 2147483647;
 		$data = '';
 		$strlen = 0;
-	    while ((isset($this->incoming_headers['content-length'])&&$strlen < $this->incoming_headers['content-length']) || !feof($this->fp)){
-			$tmp = fread($this->fp, 8192);
+	    while (($strlen < $content_length) && (!feof($this->fp))) {
+	    	$readlen = min(8192, $content_length - $strlen);
+			$tmp = fread($this->fp, $readlen);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
 		}
@@ -2119,18 +2132,29 @@ class soap_transport_http extends nusoap_base {
 * @access   public
 */
 class soap_server extends nusoap_base {
+	var $headers = array();			// HTTP headers of request
+	var $request = '';				// HTTP request
+	var $requestHeaders = '';		// SOAP headers from request (incomplete namespace resolution) (text)
+	var $document = '';				// SOAP body request portion (incomplete namespace resolution) (text)
+	var $requestSOAP = '';			// SOAP payload for request (text)
+	var $methodURI = '';			// requested method namespace URI
+	var $methodname = '';			// name of method requested
+	var $methodparams = array();	// method parameters from request
+	var $xml_encoding = '';			// character set encoding of incoming (request) messages
+	var $SOAPAction = '';			// SOAP Action from request
 
-	var $service = '';				// service name
-    var $operations = array();		// assoc array of operations => opData
-    var $responseHeaders = false;
-	var $headers = '';
-	var $request = '';
-	var $fault = false;
-	var $result = 'successful';
-	var $wsdl = false;
-	var $externalWSDLURL = false;
-    var $debug_flag = false;
-    var $xml_encoding = '';			// character set encoding of incoming (request) messages
+	var $outgoing_headers = array();// HTTP headers of response
+	var $response = '';				// HTTP response
+	var $responseHeaders = '';		// SOAP headers for response (text)
+	var $responseSOAP = '';			// SOAP payload for response (text)
+	var $methodreturn = false;		// method return to place in response
+	var $fault = false;				// SOAP fault for response
+	var $result = 'successful';		// text indication of result (for debugging)
+
+	var $operations = array();		// assoc array of operations => opData
+	var $wsdl = false;				// wsdl instance
+	var $externalWSDLURL = false;	// URL for WSDL
+	var $debug_flag = false;		// whether to append debug to response as XML comment
 	
 	/**
 	* constructor
@@ -2193,7 +2217,6 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function service($data){
-		// print wsdl
 		global $QUERY_STRING;
 		if(isset($_SERVER['QUERY_STRING'])){
 			$qs = $_SERVER['QUERY_STRING'];
@@ -2202,8 +2225,9 @@ class soap_server extends nusoap_base {
 		} elseif(isset($QUERY_STRING) && $QUERY_STRING != ''){
 			$qs = $QUERY_STRING;
 		}
-		// gen wsdl
+
 		if(isset($qs) && ereg('wsdl', $qs) ){
+			// This is a request for WSDL
 			if($this->externalWSDLURL){
               if (strpos($this->externalWSDLURL,"://")!==false) { // assume URL
 				header('Location: '.$this->externalWSDLURL);
@@ -2216,97 +2240,43 @@ class soap_server extends nusoap_base {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize();
 			}
-			exit();
-		}
-		
-		// print web interface
-		if($data == '' && $this->wsdl){
+		} elseif($data == '' && $this->wsdl){
+			// print web interface
 			print $this->webDescription();
 		} else {
-			
-			// $response is the serialized response message
-			$response = $this->parse_request($data);
-			$this->debug('server sending...');
-			$payload = $response;
-            // add debug data if in debug mode
-			if(isset($this->debug_flag) && $this->debug_flag == 1){
-				while (strpos($this->debug_str, '--')) {
-					$this->debug_str = str_replace('--', '- -', $this->debug_str);
-				}
-            	$payload .= "<!--\n" . $this->debug_str . "\n-->";
-            }
-			// print headers
-			if($this->fault){
-				$header[] = "HTTP/1.0 500 Internal Server Error";
-				$header[] = "Status: 500 Internal Server Error";
-			} else {
-				// Some combinations of PHP+Web server allow the Status
-				// to come through as a header.  Since OK is the default
-				// just do nothing.
-				// $header[] = "HTTP/1.0 200 OK";
-				// $header[] = "Status: 200 OK";
+			// handle the request
+			$this->parse_request($data);
+			if (! $this->fault) {
+				$this->invoke_method();
 			}
-			$header[] = "Server: $this->title Server v$this->version";
-			ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
-			$header[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
-			// Let the Web server decide about this
-			//$header[] = "Connection: Close\r\n";
-			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
-			//begin code to compress payload - by John
-			if (isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
-			   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
-					if (function_exists('gzcompress')) {
-						if (isset($this->debug_flag) && $this->debug_flag) {
-							$payload .= "<!-- Content being deflated -->";
-						}
-						$header[] = "Content-Encoding: deflate";
-						$payload = gzcompress($payload);
-					} else {
-						if (isset($this->debug_flag) && $this->debug_flag) {
-							$payload .= "<!-- Content will not be deflated: no gzcompress -->";
-						}
-					}
-			   } else if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
-					if (function_exists('gzencode')) {
-						if (isset($this->debug_flag) && $this->debug_flag) {
-							$payload .= "<!-- Content being gzipped -->";
-						}
-						$header[] = "Content-Encoding: gzip";
-						$payload = gzencode($payload);
-					} else {
-						if (isset($this->debug_flag) && $this->debug_flag) {
-							$payload .= "<!-- Content will not be gzipped: no gzencode -->";
-						}
-					}
-				}
+			if (! $this->fault) {
+				$this->serialize_return();
 			}
-			//end code
-			$header[] = "Content-Length: ".strlen($payload);
-			reset($header);
-			foreach($header as $hdr){
-				header($hdr, false);
-			}
-			$this->response = join("\r\n",$header)."\r\n".$payload;
-			print $payload;
+			$this->send_response();
 		}
 	}
 
 	/**
-	* parses request and posts response
+	* parses HTTP request headers.
 	*
-	* @param    string $data XML string
-	* @return	string XML response msg
+	* The following fields are set by this function (when successful)
+	*
+	* headers
+	* request
+	* xml_encoding
+	* SOAPAction
+	*
 	* @access   private
 	*/
-	function parse_request($data='') {
+	function parse_http_headers() {
 		global $HTTP_SERVER_VARS;
-		$this->debug('entering parseRequest() on '.date('H:i Y-m-d'));
-        $dump = '';
-		// get headers
+		global $_SERVER;
+
+		$this->request = '';
 		if(function_exists('getallheaders')){
 			$this->headers = getallheaders();
 			foreach($this->headers as $k=>$v){
-				$dump .= "$k: $v\r\n";
+				$this->request .= "$k: $v\r\n";
 				$this->debug("$k: $v");
 			}
 			// get SOAPAction header
@@ -2337,6 +2307,7 @@ class soap_server extends nusoap_base {
 					$k = 'SOAPAction';
 					$v = str_replace('"', '', $v);
 					$v = str_replace('\\', '', $v);
+					$this->SOAPAction = $v;
 				} else if ($k == 'Content-Type') {
 					// get the character encoding of the incoming request
 					if (strpos($v, '=')) {
@@ -2354,7 +2325,7 @@ class soap_server extends nusoap_base {
 					}
 				}
 				$this->headers[$k] = $v;
-				$dump .= "$k: $v\r\n";
+				$this->request .= "$k: $v\r\n";
 				$this->debug("$k: $v");
 			}
 		} elseif (is_array($HTTP_SERVER_VARS)) {
@@ -2366,6 +2337,7 @@ class soap_server extends nusoap_base {
 						$k = 'SOAPAction';
 						$v = str_replace('"', '', $v);
 						$v = str_replace('\\', '', $v);
+						$this->SOAPAction = $v;
 					} else if ($k == 'Content-Type') {
 						// get the character encoding of the incoming request
 						if (strpos($v, '=')) {
@@ -2383,12 +2355,40 @@ class soap_server extends nusoap_base {
 						}
 					}
 					$this->headers[$k] = $v;
-					$dump .= "$k: $v\r\n";
+					$this->request .= "$k: $v\r\n";
 					$this->debug("$k: $v");
 				}
 			}
 		}
+	}
+
+	/**
+	* parses a request
+	*
+	* The following fields are set by this function (when successful)
+	*
+	* headers
+	* request
+	* xml_encoding
+	* SOAPAction
+	* request
+	* requestSOAP
+	* methodURI
+	* methodname
+	* methodparams
+	* requestHeaders
+	* document
+	*
+	* This sets the fault field on error
+	*
+	* @param    string $data XML string
+	* @access   private
+	*/
+	function parse_request($data='') {
+		$this->debug('entering parse_request() on '.date('H:i Y-m-d'));
+		$this->parse_http_headers();
 		$this->debug('got character encoding: '.$this->xml_encoding);
+		// uncompress if necessary
 		if (isset($this->headers['Content-Encoding']) && $this->headers['Content-Encoding'] != '') {
 			$this->debug('got content encoding: ' . $this->headers['Content-Encoding']);
 			if ($this->headers['Content-Encoding'] == 'deflate' || $this->headers['Content-Encoding'] == 'gzip') {
@@ -2400,137 +2400,251 @@ class soap_server extends nusoap_base {
 						$data = $degzdata;
 					} else {
 						$this->fault('Server', 'Errors occurred when trying to decode the data');
-						return $this->fault->serialize();
+						return;
 					}
 				} else {
 					$this->fault('Server', 'This Server does not support compressed data');
-					return $this->fault->serialize();
+					return;
 				}
 			}
 		}
-		$this->request = $dump."\r\n\r\n".$data;
+		$this->request .= "\r\n".$data;
+		$this->requestSOAP = $data;
 		// parse response, get soap parser obj
 		$parser = new soap_parser($data,$this->xml_encoding);
+		// parser debug
+		$this->debug("parser debug: \n".$parser->debug_str);
 		// if fault occurred during message parsing
 		if($err = $parser->getError()){
-			// parser debug
-			$this->debug("parser debug: \n".$parser->debug_str);
 			$this->result = 'fault: error in msg parsing: '.$err;
 			$this->fault('Server',"error in msg parsing:\n".$err);
-			// return soapresp
-			return $this->fault->serialize();
 		// else successfully parsed request into soapval object
 		} else {
 			// get/set methodname
+			$this->methodURI = $parser->root_struct_namespace;
 			$this->methodname = $parser->root_struct_name;
 			$this->debug('method name: '.$this->methodname);
-			// does method exist?
-			if(!function_exists($this->methodname)){
-				// "method not found" fault here
-				$this->debug("method '$this->methodname' not found!");
-				$this->debug("parser debug: \n".$parser->debug_str);
-				$this->result = 'fault: method not found';
-				$this->fault('Server',"method '$this->methodname' not defined in service '$this->service'");
-				return $this->fault->serialize();
-			}
-			if($this->wsdl){
-				if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
-				//if(
-			    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
-					return $this->fault->serialize();
-			    }
-			}
-			$this->debug("method '$this->methodname' exists");
-			// evaluate message, getting back parameters
 			$this->debug('calling parser->get_response()');
-			$request_data = $parser->get_response();
-			// parser debug
-			$this->debug("parser debug: \n".$parser->debug_str);
-			// verify that request parameters match the method's signature
-			if($this->verify_method($this->methodname,$request_data)){
-				// if there are parameters to pass
-	            $this->debug('params var dump '.$this->varDump($request_data));
-				if($request_data){
-					$this->debug("calling '$this->methodname' with params");
-					if (! function_exists('call_user_func_array')) {
-						$this->debug('calling method using eval()');
-						$funcCall = $this->methodname.'(';
-						foreach($request_data as $param) {
-							$funcCall .= "\"$param\",";
-						}
-						$funcCall = substr($funcCall, 0, -1).')';
-						$this->debug('function call:<br>'.$funcCall);
-						@eval("\$method_response = $funcCall;");
-					} else {
-						$this->debug('calling method using call_user_func_array()');
-						$method_response = call_user_func_array("$this->methodname",$request_data);
-					}
-	                $this->debug('response var dump'.$this->varDump($method_response));
-				} else {
-					// call method w/ no parameters
-					$this->debug("calling $this->methodname w/ no params");
-					$m = $this->methodname;
-					$method_response = @$m();
+			$this->methodparams = $parser->get_response();
+			// get SOAP headers
+			$this->requestHeaders = $parser->getHeaders();
+            // add document for doclit support
+            $this->document = $parser->document;
+		}
+		$this->debug('leaving parse_request() on '.date('H:i Y-m-d'));
+	}
+
+	/**
+	* invokes a PHP function for the requested SOAP method
+	*
+	* The following fields are set by this function (when successful)
+	*
+	* methodreturn
+	*
+	* Note that the PHP function that is called may also set the following
+	* fields to affect the response sent to the client
+	*
+	* responseHeaders
+	* outgoing_headers
+	*
+	* This sets the fault field on error
+	*
+	* @access   private
+	*/
+	function invoke_method() {
+		$this->debug('entering invoke_method');
+		// does method exist?
+		if(!function_exists($this->methodname)){
+			// "method not found" fault here
+			$this->debug("method '$this->methodname' not found!");
+			$this->result = 'fault: method not found';
+			$this->fault('Server',"method '$this->methodname' not defined in service");
+			return;
+		}
+		if($this->wsdl){
+			if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
+			//if(
+		    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
+				return;
+		    }
+		}
+		$this->debug("method '$this->methodname' exists");
+		// evaluate message, getting back parameters
+		// verify that request parameters match the method's signature
+		if(! $this->verify_method($this->methodname,$this->methodparams)){
+			// debug
+			$this->debug('ERROR: request not verified against method signature');
+			$this->result = 'fault: request failed validation against method signature';
+			// return fault
+			$this->fault('Server',"Operation '$this->methodname' not defined in service.");
+			return;
+		}
+
+		// if there are parameters to pass
+        $this->debug('params var dump '.$this->varDump($this->methodparams));
+		if($this->methodparams){
+			$this->debug("calling '$this->methodname' with params");
+			if (! function_exists('call_user_func_array')) {
+				$this->debug('calling method using eval()');
+				$funcCall = $this->methodname.'(';
+				foreach($this->methodparams as $param) {
+					$funcCall .= "\"$param\",";
 				}
-				$this->debug("done calling method: $this->methodname, received $method_response of type".gettype($method_response));
-				// if we got nothing back. this might be ok (echoVoid)
-				if(isset($method_response) && $method_response != '' || is_bool($method_response)) {
-					// if fault
-					if(get_class($method_response) == 'soap_fault'){
-						$this->debug('got a fault object from method');
-						$this->fault = $method_response;
-						return $method_response->serialize();
-					// if return val is soapval object
-					} elseif(get_class($method_response) == 'soapval'){
-						$this->debug('got a soapval object from method');
-						$return_val = $method_response->serialize();
-					// returned other
-					} else {
-						$this->debug('got a(n) '.gettype($method_response).' from method');
-						$this->debug('serializing return value');
-						if($this->wsdl){
-							// weak attempt at supporting multiple output params
-							if(sizeof($this->opData['output']['parts']) > 1){
-						    	$opParams = $method_response;
-						    } else {
-						    	$opParams = array($method_response);
-						    }
-						    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
-							if($errstr = $this->wsdl->getError()){
-								$this->debug('got wsdl error: '.$errstr);
-								$this->fault('Server', 'got wsdl error: '.$errstr);
-								return $this->fault->serialize();
-							}
-						} else {
-						    $return_val = $this->serialize_val($method_response);
-						}
-					}
-					$this->debug('return val: '.$this->varDump($return_val));
-				} else {
-					$return_val = '';
-					$this->debug('got no response from method');
-				}
-				$this->debug('serializing response');
-				$payload = '<'.$this->methodname."Response>".$return_val.'</'.$this->methodname."Response>";
-				$this->result = 'successful';
-				if($this->wsdl){
-					//if($this->debug_flag){
-	                	$this->debug("WSDL debug data:\n".$this->wsdl->debug_str);
-	                //	}
-					// Added: In case we use a WSDL, return a serialized env. WITH the usedNamespaces.
-					return $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces,$this->opData['style']);
-				} else {
-					return $this->serializeEnvelope($payload,$this->responseHeaders);
-				}
+				$funcCall = substr($funcCall, 0, -1).')';
+				$this->debug('function call:<br>'.$funcCall);
+				@eval("\$this->methodreturn = $funcCall;");
 			} else {
-				// debug
-				$this->debug('ERROR: request not verified against method signature');
-				$this->result = 'fault: request failed validation against method signature';
-				// return fault
-				$this->fault('Server',"Operation '$this->methodname' not defined in service.");
-				return $this->fault->serialize();
+				$this->debug('calling method using call_user_func_array()');
+				$this->methodreturn = call_user_func_array("$this->methodname",$this->methodparams);
+			}
+            $this->debug('response var dump'.$this->varDump($this->methodreturn));
+		} else {
+			// call method w/ no parameters
+			$this->debug("calling $this->methodname w/ no params");
+			$m = $this->methodname;
+			$this->methodreturn = @$m();
+		}
+		$this->debug("leaving invoke_method: called method $this->methodname, received $this->methodreturn of type".gettype($this->methodreturn));
+	}
+
+	/**
+	* serializes the return value from a PHP function into a full SOAP Envelope
+	*
+	* The following fields are set by this function (when successful)
+	*
+	* responseSOAP
+	*
+	* This sets the fault field on error
+	*
+	* @access   private
+	*/
+	function serialize_return() {
+		$this->debug("Entering serialize_return");
+		// if we got nothing back. this might be ok (echoVoid)
+		if(isset($this->methodreturn) && ($this->methodreturn != '' || is_bool($this->methodreturn))) {
+			// if fault
+			if(get_class($this->methodreturn) == 'soap_fault'){
+				$this->debug('got a fault object from method');
+				$this->fault = $this->methodreturn;
+				return;
+			// if return val is soapval object
+			} elseif(get_class($this->methodreturn) == 'soapval'){
+				$this->debug('got a soapval object from method');
+				$return_val = $this->methodreturn->serialize();
+			// returned other
+			} else {
+				$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
+				$this->debug('serializing return value');
+				if($this->wsdl){
+					// weak attempt at supporting multiple output params
+					if(sizeof($this->opData['output']['parts']) > 1){
+				    	$opParams = $this->methodreturn;
+				    } else {
+				    	$opParams = array($this->methodreturn);
+				    }
+				    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
+					if($errstr = $this->wsdl->getError()){
+						$this->debug('got wsdl error: '.$errstr);
+						$this->fault('Server', 'got wsdl error: '.$errstr);
+						return;
+					}
+				} else {
+				    $return_val = $this->serialize_val($this->methodreturn, 'return');
+				}
+			}
+			$this->debug('return val: '.$this->varDump($return_val));
+		} else {
+			$return_val = '';
+			$this->debug('got no response from method');
+		}
+		$this->debug('serializing response');
+		$payload = '<ns1:'.$this->methodname.'Response xmlns:ns1="'.$this->methodURI.'">'.$return_val.'</ns1:'.$this->methodname."Response>";
+		$this->result = 'successful';
+		if($this->wsdl){
+			//if($this->debug_flag){
+            	$this->debug("WSDL debug data:\n".$this->wsdl->debug_str);
+            //	}
+			// Added: In case we use a WSDL, return a serialized env. WITH the usedNamespaces.
+			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces,$this->opData['style']);
+		} else {
+			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders);
+		}
+		$this->debug("Leaving serialize_return");
+	}
+
+	/**
+	* sends an HTTP response
+	*
+	* The following fields are set by this function (when successful)
+	*
+	* outgoing_headers
+	* response
+	*
+	* @access   private
+	*/
+	function send_response() {
+		$this->debug('Enter send_response');
+		if ($this->fault) {
+			$payload = $this->fault->serialize();
+			$this->outgoing_headers[] = "HTTP/1.0 500 Internal Server Error";
+			$this->outgoing_headers[] = "Status: 500 Internal Server Error";
+		} else {
+			$payload = $this->responseSOAP;
+			// Some combinations of PHP+Web server allow the Status
+			// to come through as a header.  Since OK is the default
+			// just do nothing.
+			// $this->outgoing_headers[] = "HTTP/1.0 200 OK";
+			// $this->outgoing_headers[] = "Status: 200 OK";
+		}
+        // add debug data if in debug mode
+		if(isset($this->debug_flag) && $this->debug_flag){
+			while (strpos($this->debug_str, '--')) {
+				$this->debug_str = str_replace('--', '- -', $this->debug_str);
+			}
+        	$payload .= "<!--\n" . $this->debug_str . "\n-->";
+        }
+		$this->outgoing_headers[] = "Server: $this->title Server v$this->version";
+		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
+		$this->outgoing_headers[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
+		// Let the Web server decide about this
+		//$this->outgoing_headers[] = "Connection: Close\r\n";
+		$this->outgoing_headers[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
+		//begin code to compress payload - by John
+		if (strlen($payload) > 1024 && isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
+		   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
+				if (function_exists('gzcompress')) {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content being deflated -->";
+					}
+					$this->outgoing_headers[] = "Content-Encoding: deflate";
+					$payload = gzcompress($payload);
+				} else {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content will not be deflated: no gzcompress -->";
+					}
+				}
+		   } else if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
+				if (function_exists('gzencode')) {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content being gzipped -->";
+					}
+					$this->outgoing_headers[] = "Content-Encoding: gzip";
+					$payload = gzencode($payload);
+				} else {
+					if (isset($this->debug_flag) && $this->debug_flag) {
+						$payload .= "<!-- Content will not be gzipped: no gzencode -->";
+					}
+				}
 			}
 		}
+		//end code
+		$this->outgoing_headers[] = "Content-Length: ".strlen($payload);
+		reset($this->outgoing_headers);
+		foreach($this->outgoing_headers as $hdr){
+			header($hdr, false);
+		}
+		$this->response = join("\r\n",$this->outgoing_headers)."\r\n".$payload;
+		print $payload;
 	}
 
 	/**
@@ -2616,12 +2730,12 @@ class soap_server extends nusoap_base {
 	* create a fault. this also acts as a flag to the server that a fault has occured.
 	*
 	* @param	string faultcode
-	* @param	string faultactor
 	* @param	string faultstring
+	* @param	string faultactor
 	* @param	string faultdetail
 	* @access   public
 	*/
-	function fault($faultcode,$faultactor,$faultstring='',$faultdetail=''){
+	function fault($faultcode,$faultstring,$faultactor='',$faultdetail=''){
 		$this->fault = new soap_fault($faultcode,$faultactor,$faultstring,$faultdetail);
 	}
 
@@ -2749,7 +2863,6 @@ class soap_server extends nusoap_base {
     /**
     * sets up wsdl object
     * this acts as a flag to enable internal WSDL generation
-    * NOTE: NOT FUNCTIONAL
     *
     * @param string $serviceName, name of the service
     * @param string $namespace optional tns namespace
@@ -2778,9 +2891,13 @@ class soap_server extends nusoap_base {
         	} elseif (isset($GLOBALS['HTTPS'])) {
         		$HTTPS = $GLOBALS['HTTPS'];
         	} else {
-        		$HTTPS = 0;
+        		$HTTPS = '0';
         	}
-        	$SCHEME = $HTTPS ? 'https' : 'http';
+        	if ($HTTPS == '1' || $HTTPS == 'on') {
+        		$SCHEME = 'https';
+        	} else {
+        		$SCHEME = 'http';
+        	}
             $endpoint = "$SCHEME://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
         }
         
@@ -3049,14 +3166,14 @@ class wsdl extends nusoap_base {
         if (!xml_parse($this->parser, $wsdl_string, true)) {
             // Display an error message.
             $errstr = sprintf(
-				'XML error in %s on line %d: %s',
+				'XML error parsing WSDL from %s on line %d: %s',
 				$wsdl,
                 xml_get_current_line_number($this->parser),
                 xml_error_string(xml_get_error_code($this->parser))
                 );
-            $this->debug('XML parse error: ' . $errstr);
+            $this->debug($errstr);
 			$this->debug("XML payload:\n" . $wsdl_string);
-            $this->setError('Parser error: ' . $errstr);
+            $this->setError($errstr);
             return false;
         } 
 		// free the parser
@@ -3587,26 +3704,35 @@ class wsdl extends nusoap_base {
 			$use = $opData[$direction]['use'];
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
-			foreach($opData[$direction]['parts'] as $name => $type) {
-				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
-				// Track encoding style
-				if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
-					$encodingStyle = $opData[$direction]['encodingStyle'];			
-					$enc_style = $encodingStyle;
-				} else {
-					$enc_style = false;
+			if (is_array($parameters)) {
+				$parametersArrayType = $this->isArraySimpleOrStruct($parameters);
+				$this->debug('have ' . $parametersArrayType . ' parameters');
+				foreach($opData[$direction]['parts'] as $name => $type) {
+					$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+					// Track encoding style
+					if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
+						$encodingStyle = $opData[$direction]['encodingStyle'];			
+						$enc_style = $encodingStyle;
+					} else {
+						$enc_style = false;
+					}
+					// NOTE: add error handling here
+					// if serializeType returns false, then catch global error and fault
+					if ($parametersArrayType == 'arraySimple') {
+						$p = array_shift($parameters);
+						$this->debug('calling serializeType w/indexed param');
+						$xml .= $this->serializeType($name, $type, $p, $use, $enc_style);
+					} elseif (isset($parameters[$name])) {
+						$this->debug('calling serializeType w/named param');
+						$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
+					} else {
+						// TODO: only send nillable
+						$this->debug('calling serializeType w/null param');
+						$xml .= $this->serializeType($name, $type, null, $use, $enc_style);
+					}
 				}
-				// NOTE: add error handling here
-				// if serializeType returns false, then catch global error and fault
-				if (isset($parameters[$name])) {
-					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
-				} elseif(is_array($parameters)) {
-					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
-				} else {
-					$this->debug('no parameters passed.');
-				}
+			} else {
+				$this->debug('no parameters passed.');
 			}
 		}
 		return $xml;
@@ -3653,26 +3779,35 @@ class wsdl extends nusoap_base {
 			$use = $opData[$direction]['use'];
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
-			foreach($opData[$direction]['parts'] as $name => $type) {
-				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
-				// Track encoding style
-				if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
-					$encodingStyle = $opData[$direction]['encodingStyle'];			
-					$enc_style = $encodingStyle;
-				} else {
-					$enc_style = false;
+			if (is_array($parameters)) {
+				$parametersArrayType = $this->isArraySimpleOrStruct($parameters);
+				$this->debug('have ' . $parametersArrayType . ' parameters');
+				foreach($opData[$direction]['parts'] as $name => $type) {
+					$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+					// Track encoding style
+					if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
+						$encodingStyle = $opData[$direction]['encodingStyle'];			
+						$enc_style = $encodingStyle;
+					} else {
+						$enc_style = false;
+					}
+					// NOTE: add error handling here
+					// if serializeType returns false, then catch global error and fault
+					if ($parametersArrayType == 'arraySimple') {
+						$p = array_shift($parameters);
+						$this->debug('calling serializeType w/indexed param');
+						$xml .= $this->serializeType($name, $type, $p, $use, $enc_style);
+					} elseif (isset($parameters[$name])) {
+						$this->debug('calling serializeType w/named param');
+						$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
+					} else {
+						// TODO: only send nillable
+						$this->debug('calling serializeType w/null param');
+						$xml .= $this->serializeType($name, $type, null, $use, $enc_style);
+					}
 				}
-				// NOTE: add error handling here
-				// if serializeType returns false, then catch global error and fault
-				if (isset($parameters[$name])) {
-					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
-				} elseif(is_array($parameters)) {
-					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
-				} else {
-					$this->debug('no parameters passed.');
-				}
+			} else {
+				$this->debug('no parameters passed.');
 			}
 		}
 		return $xml;
@@ -4055,8 +4190,9 @@ class soap_parser extends nusoap_base {
 	var $method = '';
 	var $root_struct = '';
 	var $root_struct_name = '';
+	var $root_struct_namespace = '';
 	var $root_header = '';
-    var $document = '';
+    var $document = '';			// incoming SOAP body (text)
 	// determines where in the message we are (envelope,header,body,method)
 	var $status = '';
 	var $position = 0;
@@ -4072,7 +4208,7 @@ class soap_parser extends nusoap_base {
 	var $depth_array = array();
 	var $debug_flag = true;
 	var $soapresponse = NULL;
-	var $responseHeaders = '';
+	var $responseHeaders = '';	// incoming SOAP headers (text)
 	var $body_position = 0;
 	// for multiref parsing:
 	// array of id => pos
@@ -4115,19 +4251,20 @@ class soap_parser extends nusoap_base {
 			// Parse the XML file.
 			if(!xml_parse($this->parser,$xml,true)){
 			    // Display an error message.
-			    $err = sprintf('XML error on line %d: %s',
+			    $err = sprintf('XML error parsing SOAP payload on line %d: %s',
 			    xml_get_current_line_number($this->parser),
 			    xml_error_string(xml_get_error_code($this->parser)));
-				$this->debug('parse error: '.$err);
+				$this->debug($err);
+				$this->debug("XML payload:\n" . $xml);
 				$this->setError($err);
 			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
-				// get header value
-				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
-					$this->responseHeaders = $this->message[$this->root_header]['result'];
-				}
+				// get header value: no, because this is documented as XML string
+//				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
+//					$this->responseHeaders = $this->message[$this->root_header]['result'];
+//				}
 				// resolve hrefs/ids
 				if(sizeof($this->multirefs) > 0){
 					foreach($this->multirefs as $id => $hrefs){
@@ -4281,9 +4418,11 @@ class soap_parser extends nusoap_base {
 			$this->message[$pos]['namespace'] = $this->default_namespace;
 		}
         if($this->status == 'header'){
-        	$this->responseHeaders .= "<$name$attstr>";
+        	if ($this->root_header != $pos) {
+	        	$this->responseHeaders .= "<" . (isset($prefix) ? $prefix . ':' : '') . "$name$attstr>";
+	        }
         } elseif($this->root_struct_name != ''){
-        	$this->document .= "<$name$attstr>";
+        	$this->document .= "<" . (isset($prefix) ? $prefix . ':' : '') . "$name$attstr>";
         }
 	}
 
@@ -4351,11 +4490,20 @@ class soap_parser extends nusoap_base {
 			}
 		}
 		
+        // for doclit
+        if($this->status == 'header'){
+        	if ($this->root_header != $pos) {
+	        	$this->responseHeaders .= "</" . (isset($prefix) ? $prefix . ':' : '') . "$name>";
+	        }
+        } elseif($pos >= $this->root_struct){
+        	$this->document .= "</" . (isset($prefix) ? $prefix . ':' : '') . "$name>";
+        }
 		// switch status
 		if($pos == $this->root_struct){
 			$this->status = 'body';
+			$this->root_struct_namespace = $this->message[$pos]['namespace'];
 		} elseif($name == 'Body'){
-			$this->status = 'header';
+			$this->status = 'envelope';
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
@@ -4363,12 +4511,6 @@ class soap_parser extends nusoap_base {
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
-        // for doclit
-        if($this->status == 'header'){
-        	$this->responseHeaders .= "</$name>";
-        } elseif($pos >= $this->root_struct){
-        	$this->document .= "</$name>";
-        }
 	}
 
 	/**
@@ -4576,8 +4718,9 @@ class soapclient extends nusoap_base  {
 
 	var $username = '';
 	var $password = '';
-	var $requestHeaders = false;	// SOAP headers
-	var $responseHeaders;			// SOAP headers
+	var $requestHeaders = false;	// SOAP headers in request (text)
+	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
+	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
 	var $endpoint;
 	var $error_str = false;
     var $proxyhost = '';
@@ -4591,9 +4734,9 @@ class soapclient extends nusoap_base  {
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
-	var $request = '';
-	var $response = '';
-	var $responseData = '';
+	var $request = '';				// HTTP request
+	var $response = '';				// HTTP response
+	var $responseData = '';			// SOAP payload of response
 	// toggles whether the parser decodes element content w/ utf8_decode()
     var $decode_utf8 = true;
 	
@@ -4897,8 +5040,11 @@ class soapclient extends nusoap_base  {
 				$this->debug("transport debug data...\n".$http->debug_str);
 				
 				// save transport object if using persistent connections
-				if($this->persistentConnection && !is_object($this->persistentConnection)){
-					$this->persistentConnection = $http;
+				if ($this->persistentConnection) {
+					$http->debug_str = '';
+					if (!is_object($this->persistentConnection)) {
+						$this->persistentConnection = $http;
+					}
 				}
 				
 				if($err = $http->getError()){
@@ -4946,6 +5092,8 @@ class soapclient extends nusoap_base  {
 		}
 		$this->debug('Use encoding: ' . $this->xml_encoding . ' when creating soap_parser');
 		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
+		// add parser debug data to our debug
+		$this->debug($parser->debug_str);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -4957,8 +5105,6 @@ class soapclient extends nusoap_base  {
 			$this->responseHeaders = $parser->getHeaders();
 			// get decoded message
 			$return = $parser->get_response();
-			// add parser debug data to our debug
-			$this->debug($parser->debug_str);
             // add document for doclit support
             $this->document = $parser->document;
 			// destroy the parser object

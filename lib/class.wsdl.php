@@ -233,14 +233,14 @@ class wsdl extends nusoap_base {
         if (!xml_parse($this->parser, $wsdl_string, true)) {
             // Display an error message.
             $errstr = sprintf(
-				'XML error in %s on line %d: %s',
+				'XML error parsing WSDL from %s on line %d: %s',
 				$wsdl,
                 xml_get_current_line_number($this->parser),
                 xml_error_string(xml_get_error_code($this->parser))
                 );
-            $this->debug('XML parse error: ' . $errstr);
+            $this->debug($errstr);
 			$this->debug("XML payload:\n" . $wsdl_string);
-            $this->setError('Parser error: ' . $errstr);
+            $this->setError($errstr);
             return false;
         } 
 		// free the parser
@@ -771,26 +771,35 @@ class wsdl extends nusoap_base {
 			$use = $opData[$direction]['use'];
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
-			foreach($opData[$direction]['parts'] as $name => $type) {
-				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
-				// Track encoding style
-				if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
-					$encodingStyle = $opData[$direction]['encodingStyle'];			
-					$enc_style = $encodingStyle;
-				} else {
-					$enc_style = false;
+			if (is_array($parameters)) {
+				$parametersArrayType = $this->isArraySimpleOrStruct($parameters);
+				$this->debug('have ' . $parametersArrayType . ' parameters');
+				foreach($opData[$direction]['parts'] as $name => $type) {
+					$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+					// Track encoding style
+					if (isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
+						$encodingStyle = $opData[$direction]['encodingStyle'];			
+						$enc_style = $encodingStyle;
+					} else {
+						$enc_style = false;
+					}
+					// NOTE: add error handling here
+					// if serializeType returns false, then catch global error and fault
+					if ($parametersArrayType == 'arraySimple') {
+						$p = array_shift($parameters);
+						$this->debug('calling serializeType w/indexed param');
+						$xml .= $this->serializeType($name, $type, $p, $use, $enc_style);
+					} elseif (isset($parameters[$name])) {
+						$this->debug('calling serializeType w/named param');
+						$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
+					} else {
+						// TODO: only send nillable
+						$this->debug('calling serializeType w/null param');
+						$xml .= $this->serializeType($name, $type, null, $use, $enc_style);
+					}
 				}
-				// NOTE: add error handling here
-				// if serializeType returns false, then catch global error and fault
-				if (isset($parameters[$name])) {
-					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
-				} elseif(is_array($parameters)) {
-					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
-				} else {
-					$this->debug('no parameters passed.');
-				}
+			} else {
+				$this->debug('no parameters passed.');
 			}
 		}
 		return $xml;
@@ -837,26 +846,35 @@ class wsdl extends nusoap_base {
 			$use = $opData[$direction]['use'];
 			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
-			foreach($opData[$direction]['parts'] as $name => $type) {
-				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
-				// Track encoding style
-				if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
-					$encodingStyle = $opData[$direction]['encodingStyle'];			
-					$enc_style = $encodingStyle;
-				} else {
-					$enc_style = false;
+			if (is_array($parameters)) {
+				$parametersArrayType = $this->isArraySimpleOrStruct($parameters);
+				$this->debug('have ' . $parametersArrayType . ' parameters');
+				foreach($opData[$direction]['parts'] as $name => $type) {
+					$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+					// Track encoding style
+					if(isset($opData[$direction]['encodingStyle']) && $encodingStyle != $opData[$direction]['encodingStyle']) {
+						$encodingStyle = $opData[$direction]['encodingStyle'];			
+						$enc_style = $encodingStyle;
+					} else {
+						$enc_style = false;
+					}
+					// NOTE: add error handling here
+					// if serializeType returns false, then catch global error and fault
+					if ($parametersArrayType == 'arraySimple') {
+						$p = array_shift($parameters);
+						$this->debug('calling serializeType w/indexed param');
+						$xml .= $this->serializeType($name, $type, $p, $use, $enc_style);
+					} elseif (isset($parameters[$name])) {
+						$this->debug('calling serializeType w/named param');
+						$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
+					} else {
+						// TODO: only send nillable
+						$this->debug('calling serializeType w/null param');
+						$xml .= $this->serializeType($name, $type, null, $use, $enc_style);
+					}
 				}
-				// NOTE: add error handling here
-				// if serializeType returns false, then catch global error and fault
-				if (isset($parameters[$name])) {
-					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
-				} elseif(is_array($parameters)) {
-					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
-				} else {
-					$this->debug('no parameters passed.');
-				}
+			} else {
+				$this->debug('no parameters passed.');
 			}
 		}
 		return $xml;

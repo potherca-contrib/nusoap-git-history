@@ -65,6 +65,8 @@ class wsdlcache {
 				if (file_exists($filename) && (time() - filemtime($filename) > $this->cache_lifetime)) {
 					unlink($filename);
 					$this->debug("Expired $wsdl ($filename) from cache");
+					$this->releaseMutex($filename);
+					return null;
   				}
 			}
 			// see what there is to return

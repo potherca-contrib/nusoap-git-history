@@ -18,8 +18,9 @@ class soap_parser extends nusoap_base {
 	var $method = '';
 	var $root_struct = '';
 	var $root_struct_name = '';
+	var $root_struct_namespace = '';
 	var $root_header = '';
-    var $document = '';
+    var $document = '';			// incoming SOAP body (text)
 	// determines where in the message we are (envelope,header,body,method)
 	var $status = '';
 	var $position = 0;
@@ -35,7 +36,7 @@ class soap_parser extends nusoap_base {
 	var $depth_array = array();
 	var $debug_flag = true;
 	var $soapresponse = NULL;
-	var $responseHeaders = '';
+	var $responseHeaders = '';	// incoming SOAP headers (text)
 	var $body_position = 0;
 	// for multiref parsing:
 	// array of id => pos
@@ -78,19 +79,20 @@ class soap_parser extends nusoap_base {
 			// Parse the XML file.
 			if(!xml_parse($this->parser,$xml,true)){
 			    // Display an error message.
-			    $err = sprintf('XML error on line %d: %s',
+			    $err = sprintf('XML error parsing SOAP payload on line %d: %s',
 			    xml_get_current_line_number($this->parser),
 			    xml_error_string(xml_get_error_code($this->parser)));
-				$this->debug('parse error: '.$err);
+				$this->debug($err);
+				$this->debug("XML payload:\n" . $xml);
 				$this->setError($err);
 			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
-				// get header value
-				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
-					$this->responseHeaders = $this->message[$this->root_header]['result'];
-				}
+				// get header value: no, because this is documented as XML string
+//				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
+//					$this->responseHeaders = $this->message[$this->root_header]['result'];
+//				}
 				// resolve hrefs/ids
 				if(sizeof($this->multirefs) > 0){
 					foreach($this->multirefs as $id => $hrefs){
@@ -244,9 +246,11 @@ class soap_parser extends nusoap_base {
 			$this->message[$pos]['namespace'] = $this->default_namespace;
 		}
         if($this->status == 'header'){
-        	$this->responseHeaders .= "<$name$attstr>";
+        	if ($this->root_header != $pos) {
+	        	$this->responseHeaders .= "<" . (isset($prefix) ? $prefix . ':' : '') . "$name$attstr>";
+	        }
         } elseif($this->root_struct_name != ''){
-        	$this->document .= "<$name$attstr>";
+        	$this->document .= "<" . (isset($prefix) ? $prefix . ':' : '') . "$name$attstr>";
         }
 	}
 
@@ -314,11 +318,20 @@ class soap_parser extends nusoap_base {
 			}
 		}
 		
+        // for doclit
+        if($this->status == 'header'){
+        	if ($this->root_header != $pos) {
+	        	$this->responseHeaders .= "</" . (isset($prefix) ? $prefix . ':' : '') . "$name>";
+	        }
+        } elseif($pos >= $this->root_struct){
+        	$this->document .= "</" . (isset($prefix) ? $prefix . ':' : '') . "$name>";
+        }
 		// switch status
 		if($pos == $this->root_struct){
 			$this->status = 'body';
+			$this->root_struct_namespace = $this->message[$pos]['namespace'];
 		} elseif($name == 'Body'){
-			$this->status = 'header';
+			$this->status = 'envelope';
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
@@ -326,12 +339,6 @@ class soap_parser extends nusoap_base {
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
-        // for doclit
-        if($this->status == 'header'){
-        	$this->responseHeaders .= "</$name>";
-        } elseif($pos >= $this->root_struct){
-        	$this->document .= "</$name>";
-        }
 	}
 
 	/**

@@ -191,3 +191,21 @@
 - nusoap_base: add (CVS) revision
 - wsdlcache: synchronize using a per-WSDL lock file (Thanks Ingo)
 - wsdlcache: add cache lifetime, after which cache contents are invalidated (Thanks Ingo)
+
+2003-03-15, version 0.6.6
+- nusoap_base: add isArraySimpleOrStruct method
+- soap_server: improve WSDL URL scheme determination
+- soap_server: only deflate/gzip payloads > 1024 bytes
+- soap_server: fix parameter order in fault method (always used as faultcode, faultstring)
+- soap_server: refactor parse_request into multiple functions (for sanity)
+- soap_server: set the namespace on the Response element to the same as the request
+- soap_server: name the return value element 'return' by default
+- soap_server: added and documented data fields, so that service programmers can use them if desired
+- soap_parser: standardize parsing error message
+- soap_parser: fix document and responseHeaders so they are the correct XML text (as documented)
+- soap_transport_http: fix read from persistent connection
+- soapclient: clean up debugging for persistent connection
+- wsdl: enforce correct naming of messages parts when an associative array is used for parameters
+- wsdl: better serialization of null values
+- wsdl: standardize parsing error message
+- xmlschema: standardize parsing error message

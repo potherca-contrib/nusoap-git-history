@@ -26,8 +26,9 @@ class soapclient extends nusoap_base  {
 
 	var $username = '';
 	var $password = '';
-	var $requestHeaders = false;	// SOAP headers
-	var $responseHeaders;			// SOAP headers
+	var $requestHeaders = false;	// SOAP headers in request (text)
+	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
+	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
 	var $endpoint;
 	var $error_str = false;
     var $proxyhost = '';
@@ -41,9 +42,9 @@ class soapclient extends nusoap_base  {
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
-	var $request = '';
-	var $response = '';
-	var $responseData = '';
+	var $request = '';				// HTTP request
+	var $response = '';				// HTTP response
+	var $responseData = '';			// SOAP payload of response
 	// toggles whether the parser decodes element content w/ utf8_decode()
     var $decode_utf8 = true;
 	
@@ -347,8 +348,11 @@ class soapclient extends nusoap_base  {
 				$this->debug("transport debug data...\n".$http->debug_str);
 				
 				// save transport object if using persistent connections
-				if($this->persistentConnection && !is_object($this->persistentConnection)){
-					$this->persistentConnection = $http;
+				if ($this->persistentConnection) {
+					$http->debug_str = '';
+					if (!is_object($this->persistentConnection)) {
+						$this->persistentConnection = $http;
+					}
 				}
 				
 				if($err = $http->getError()){
@@ -396,6 +400,8 @@ class soapclient extends nusoap_base  {
 		}
 		$this->debug('Use encoding: ' . $this->xml_encoding . ' when creating soap_parser');
 		$parser = new soap_parser($data,$this->xml_encoding,$this->operation,$this->decode_utf8);
+		// add parser debug data to our debug
+		$this->debug($parser->debug_str);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -407,8 +413,6 @@ class soapclient extends nusoap_base  {
 			$this->responseHeaders = $parser->getHeaders();
 			// get decoded message
 			$return = $parser->get_response();
-			// add parser debug data to our debug
-			$this->debug($parser->debug_str);
             // add document for doclit support
             $this->document = $parser->document;
 			// destroy the parser object

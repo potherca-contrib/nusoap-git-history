@@ -186,6 +186,23 @@ class nusoap_base {
 	}
 
 	/**
+	* detect if array is a simple array or a struct (associative array)
+	*
+	* @param	$val	The PHP array
+	* @return	string	(arraySimple|arrayStruct)
+	* @access	private
+	*/
+	function isArraySimpleOrStruct($val) {
+        $keyList = array_keys($val);
+		foreach ($keyList as $keyListValue) {
+			if (!is_int($keyListValue)) {
+				return 'arrayStruct';
+			}
+		}
+		return 'arraySimple';
+	}
+
+	/**
 	* serializes PHP values in accordance w/ section 5. Type information is
 	* not serialized if $use == 'literal'.
 	*
@@ -288,14 +305,7 @@ class nusoap_base {
 			break;
 			case (is_array($val) || $type):
 				// detect if struct or array
-                $keyList = array_keys($val);
-				$valueType = 'arraySimple';
-				foreach($keyList as $keyListValue){
-					if(!is_int($keyListValue)){
-						$valueType = 'arrayStruct';
-						break;
-					}
-				}
+				$valueType = $this->isArraySimpleOrStruct($val);
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
 					$i = 0;
 					if(is_array($val) && count($val)> 0){

@@ -133,13 +133,13 @@ class XMLSchema extends nusoap_base  {
 		    // Parse the XML file.
 		    if(!xml_parse($this->parser,$xml,true)){
 			// Display an error message.
-				$errstr = sprintf('XML error on line %d: %s',
+				$errstr = sprintf('XML error parsing XML schema on line %d: %s',
 				xml_get_current_line_number($this->parser),
 				xml_error_string(xml_get_error_code($this->parser))
 				);
-				$this->debug('XML parse error: '.$errstr);
+				$this->debug($errstr);
 				$this->debug("XML payload:\n" . $xml);
-				$this->setError('Parser error: '.$errstr);
+				$this->setError($errstr);
 	    	}
             
 			xml_parser_free($this->parser);

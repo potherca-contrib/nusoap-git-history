@@ -446,10 +446,13 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
+		// TODO: handle chunking in this loop to allow persistent connections with chunking
+		$content_length = isset($this->incoming_headers['content-length']) ? $this->incoming_headers['content-length'] : 2147483647;
 		$data = '';
 		$strlen = 0;
-	    while ((isset($this->incoming_headers['content-length'])&&$strlen < $this->incoming_headers['content-length']) || !feof($this->fp)){
-			$tmp = fread($this->fp, 8192);
+	    while (($strlen < $content_length) && (!feof($this->fp))) {
+	    	$readlen = min(8192, $content_length - $strlen);
+			$tmp = fread($this->fp, $readlen);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
 		}
