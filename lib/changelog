@@ -32,3 +32,4 @@
 - nusoap_base: only change &, <, > to entities, not all HTML entities
 - soap_transport_http: update the Content-Type header in sendRequest, since soap_defencoding could be changed after ctor is called
 - soap_server: use soap_defencoding instead of charset_encoding
+- soap_server: read encoding from _SERVER if available
