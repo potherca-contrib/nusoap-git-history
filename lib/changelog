@@ -65,3 +65,7 @@
 2003-08-07, version 0.6.5
 - nusoap_base: serialize specified type (e.g. ArrayOfString) even for simple array
 - wsdl: only specify encodingStyle in the input/output soap bindings when it is not empty (thanks Guillaume)
+
+2003-08-15, version 0.6.5
+- soap_parser: fix parsing of elements with no XSD type specified
+- soap_parser: use PHP string type for XSD long and unsignedLong types

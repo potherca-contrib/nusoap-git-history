@@ -3687,13 +3687,13 @@ class soap_parser extends nusoap_base {
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
             	if (isset($this->message[$pos]['type'])) {
-					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], $this->message[$pos]['type_namespace']);
+					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 				} else {
 					$parent = $this->message[$pos]['parent'];
-					if ($this->message[$parent]['type'] == 'array') {
-						if (isset($this->message[$parent]['arrayType'])) {
-							$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], $this->message[$pos]['arrayTypeNamespace']);
-						}
+					if ($this->message[$parent]['type'] == 'array' && isset($this->message[$parent]['arrayType'])) {
+						$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], $this->message[$parent]['arrayTypeNamespace']);
+					} else {
+						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 					}
 				}
 
@@ -3796,10 +3796,10 @@ class soap_parser extends nusoap_base {
 	*/
 	function decodeSimple($value, $type, $typens) {
 		// TODO: use the namespace!
-		if ((!isset($type)) || ($type == 'string')) {
+		if ((!isset($type)) || $type == 'string' || $type == 'long' || $type == 'unsignedLong') {
 			return (string) $value;
 		}
-		if ($type == 'int' || $type == 'integer' || $type == 'short' || $type == 'long' || $type == 'byte') {
+		if ($type == 'int' || $type == 'integer' || $type == 'short' || $type == 'byte') {
 			return (int) $value;
 		}
 		if ($type == 'float' || $type == 'double' || $type == 'decimal') {
@@ -3817,7 +3817,7 @@ class soap_parser extends nusoap_base {
 		// obscure numeric types
 		if ($type == 'nonPositiveInteger' || $type == 'negativeInteger'
 			|| $type == 'nonNegativeInteger' || $type == 'positiveInteger'
-			|| $type == 'unsignedLong' || $type == 'unsignedInt'
+			|| $type == 'unsignedInt'
 			|| $type == 'unsignedShort' || $type == 'unsignedByte') {
 			return (int) $value;
 		}
