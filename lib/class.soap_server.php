@@ -79,7 +79,7 @@ class soap_server extends nusoap_base {
 
 		// wsdl
 		if($wsdl){
-			if (is_object($wsdl) && is_a($wsdl, 'wsdl')) {
+			if (is_object($wsdl) && (get_class($wsdl) == 'wsdl')) {
 				$this->wsdl = $wsdl;
 				$this->externalWSDLURL = $this->wsdl->wsdl;
 				$this->debug('Use existing wsdl instance from ' . $this->externalWSDLURL);

@@ -35,11 +35,13 @@ class soap_transport_http extends nusoap_base {
 	var $password = '';
 	var $authtype = '';
 	var $digestRequest = array();
-	var $certRequest = array();	// keys must be cainfofile, sslcertfile, sslkeyfile, passphrase
+	var $certRequest = array();	// keys must be cainfofile (optional), sslcertfile, sslkeyfile, passphrase, verifypeer (optional), verifyhost (optional)
 								// cainfofile: certificate authority file, e.g. '$pathToPemFiles/rootca.pem'
 								// sslcertfile: SSL certificate file, e.g. '$pathToPemFiles/mycert.pem'
 								// sslkeyfile: SSL key file, e.g. '$pathToPemFiles/mykey.pem'
 								// passphrase: SSL key password/passphrase
+								// verifypeer: default is 1
+								// verifyhost: default is 1
 
 	/**
 	* constructor
@@ -190,14 +192,30 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 0);
 
-		// support client certificates (thanks Tobias Boes)
+		// support client certificates (thanks Tobias Boes, Doug Anarino, Eryan Ariobowo)
 		if ($this->authtype == 'certificate') {
-	        curl_setopt($this->ch, CURLOPT_CAINFO, $certRequest['cainfofile']);
-	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
-	        curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
-	        curl_setopt($this->ch, CURLOPT_SSLCERT, $certRequest['sslcertfile']);
-	        curl_setopt($this->ch, CURLOPT_SSLKEY, $certRequest['sslkeyfile']);
-		    curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $certRequest['passphrase']);
+			if (isset($this->certRequest['cainfofile'])) {
+				curl_setopt($this->ch, CURLOPT_CAINFO, $this->certRequest['cainfofile']);
+			}
+			if (isset($this->certRequest['verifypeer'])) {
+				curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, $this->certRequest['verifypeer']);
+			} else {
+				curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 1);
+			}
+			if (isset($this->certRequest['verifyhost'])) {
+				curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, $this->certRequest['verifyhost']);
+			} else {
+				curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 1);
+			}
+			if (isset($this->certRequest['sslcertfile'])) {
+				curl_setopt($this->ch, CURLOPT_SSLCERT, $this->certRequest['sslcertfile']);
+			}
+			if (isset($this->certRequest['sslkeyfile'])) {
+				curl_setopt($this->ch, CURLOPT_SSLKEY, $this->certRequest['sslkeyfile']);
+			}
+			if (isset($this->certRequest['passphrase'])) {
+				curl_setopt($this->ch, CURLOPT_SSLKEYPASSWD , $this->certRequest['passphrase']);
+			}
 		}
 		$this->debug('cURL connection set up');
 		return true;
@@ -269,7 +287,7 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $password
 	* @param	string $authtype (basic, digest, certificate)
 	* @param	array $digestRequest (keys must be nonce, nc, realm, qop)
-	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase: see corresponding options in cURL docs)
+	* @param	array $certRequest (keys must be cainfofile (optional), sslcertfile, sslkeyfile, passphrase, verifypeer (optional), verifyhost (optional): see corresponding options in cURL docs)
 	* @access   public
 	*/
 	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array(), $certRequest = array()) {

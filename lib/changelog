@@ -337,3 +337,9 @@
 
 2005-02-10, version 0.6.9
 - soapclient: only set SOAP headers when they are specified in call params (so setHeaders still works)
+
+2005-04-04, version 0.6.9
+- soap_server: use get_class instead of is_a (thanks Thomas Noel)
+- soapclient: use get_class instead of is_a (thanks Thomas Noel)
+- soapclient: add setEndpoint method
+- soap_transport_http: fix client certificates (thanks Doug Anarino and Eryan Eriobowo)

@@ -32,6 +32,7 @@ class soapclient extends nusoap_base  {
 	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
 	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
 	var $endpoint;
+	var $forceEndpoint = '';		// overrides WSDL endpoint
     var $proxyhost = '';
     var $proxyport = '';
 	var $proxyusername = '';
@@ -86,7 +87,7 @@ class soapclient extends nusoap_base  {
 
 		// make values
 		if($wsdl){
-			if (is_object($endpoint) && is_a($endpoint, 'wsdl')) {
+			if (is_object($endpoint) && (get_class($endpoint) == 'wsdl')) {
 				$this->wsdl = $endpoint;
 				$this->endpoint = $this->wsdl->wsdl;
 				$this->wsdlFile = $this->endpoint;
@@ -165,7 +166,11 @@ class soapclient extends nusoap_base  {
 			if (isset($opData['soapAction'])) {
 				$soapAction = $opData['soapAction'];
 			}
-			$this->endpoint = $opData['endpoint'];
+			if (! $this->forceEndpoint) {
+				$this->endpoint = $opData['endpoint'];
+			} else {
+				$this->endpoint = $this->forceEndpoint;
+			}
 			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	$namespace;
 			$style = $opData['style'];
 			$use = $opData['input']['use'];
@@ -452,6 +457,16 @@ class soapclient extends nusoap_base  {
 	 }
 
 	/**
+	* sets the SOAP endpoint, which can override WSDL
+	*
+	* @param	$endpoint string The endpoint URL to use, or empty string or false to prevent override
+	* @access   public
+	*/
+	function setEndpoint($endpoint) {
+		$this->forceEndpoint = $endpoint;
+	}
+
+	/**
 	* set the SOAP headers
 	*
 	* @param	$headers string XML
@@ -493,7 +508,7 @@ class soapclient extends nusoap_base  {
 	* @param    string $username
 	* @param    string $password
 	* @param	string $authtype (basic|digest|certificate)
-	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase: see corresponding options in cURL docs)
+	* @param	array $certRequest (keys must be cainfofile (optional), sslcertfile, sslkeyfile, passphrase, verifypeer (optional), verifyhost (optional): see corresponding options in cURL docs)
 	* @access   public
 	*/
 	function setCredentials($username, $password, $authtype = 'basic', $certRequest = array()) {
@@ -611,6 +626,8 @@ class soapclient extends nusoap_base  {
 		$proxy->persistentConnection = $this->persistentConnection;
 		$proxy->requestHeaders = $this->requestHeaders;
 		$proxy->soap_defencoding = $this->soap_defencoding;
+		$proxy->endpoint = $this->endpoint;
+		$proxy->forceEndpoint = $this->forceEndpoint;
 		return $proxy;
 	}
 
