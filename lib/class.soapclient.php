@@ -108,6 +108,9 @@ class soapclient extends nusoap_base  {
 		
 		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $rpcParams");
 		$this->debug("endpointType: $this->endpointType");
+		if ($headers) {
+			$this->requestHeaders = $headers;
+		}
 		// if wsdl, get operation data and process parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 

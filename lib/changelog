@@ -15,3 +15,4 @@
 - soap_base: use arrays-of-arrays rather than attempting multi-dimensional in serialize_val
 - xmlschema: emit import statements and qualify all elements with prefix in serializeSchema (better interop with validation tools)
 - soapclient: get xml character encoding from HTTP Content-Type header if provided, e.g. text/xml;charset="UTF-8"
+- soapclient: use headers in call if provided (previously ignored this parameter)
