@@ -20,6 +20,8 @@ $err = $client->getError();
 if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
+$client->soap_defencoding = 'UTF-8';
+
 echo 'You must set your own Google key in the source code to run this client!'; exit();
 $params = array(
 	'Googlekey'=>'set your own Google key',

@@ -2,40 +2,26 @@
 /*
  *	$Id$
  *
- *	Client sample.
+ *	MIME client sample.
  *
  *	Service: SOAP endpoint
  *	Payload: rpc/encoded
  *	Transport: http
  *	Authentication: none
  */
-require_once('../lib/nusoap.php');
+require_once('../lib/nusoapmime.php');
 $proxyhost = isset($_POST['proxyhost']) ? $_POST['proxyhost'] : '';
 $proxyport = isset($_POST['proxyport']) ? $_POST['proxyport'] : '';
 $proxyusername = isset($_POST['proxyusername']) ? $_POST['proxyusername'] : '';
 $proxypassword = isset($_POST['proxypassword']) ? $_POST['proxypassword'] : '';
-$client = new soapclient("http://soap.amazon.com/onca/soap2", false,
-						$proxyhost, $proxyport, $proxyusername, $proxypassword);
+$client = new soapclientmime('http://www.scottnichol.com/samples/mimetest3.php', false,
+							$proxyhost, $proxyport, $proxyusername, $proxypassword);
 $err = $client->getError();
 if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
-$param = array(
-    'manufacturer' => "O'Reilly",
-    'page'         => '1',
-    'mode'         => 'books',
-    'tag'          => 'trachtenberg-20',
-    'type'         => 'lite',
-    'devtag'       => 'My tag goes here'
-);
-$params = array('ManufacturerSearchRequest' =>
-				new soapval('ManufacturerSearchRequest',
-				            'ManufacturerRequest',
-				            $param,
-				            false,
-				            'http://soap.amazon.com')
-				);
-$result = $client->call('ManufacturerSearchRequest', $params, 'http://soap.amazon.com', 'http://soap.amazon.com');
+$cid = $client->addAttachment('', 'mimeclient.php');
+$result = $client->call('hello', array('name' => 'Scott'));
 if ($client->fault) {
 	echo '<h2>Fault</h2><pre>'; print_r($result); echo '</pre>';
 } else {
@@ -44,6 +30,15 @@ if ($client->fault) {
 		echo '<h2>Error</h2><pre>' . $err . '</pre>';
 	} else {
 		echo '<h2>Result</h2><pre>'; print_r($result); echo '</pre>';
+		echo '<h2>Attachments</h2><pre>';
+		$attachments = $client->getAttachments();
+		foreach ($attachments as $a) {
+			echo 'Filename: ' . $a['filename'] . "\r\n";
+			echo 'Content-Type: ' . $a['contenttype'] . "\r\n";
+			echo 'cid: ' . htmlspecialchars($a['cid'], ENT_QUOTES) . "\r\n";
+			echo htmlspecialchars($a['data'], ENT_QUOTES);
+		}
+		echo '</pre>';
 	}
 }
 echo '<h2>Request</h2><pre>' . htmlspecialchars($client->request, ENT_QUOTES) . '</pre>';

@@ -21,10 +21,15 @@ if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
 $proxy = $client->getProxy();
-$params = array('browse_node' => 18,'page' => 1,'mode' => 'books',
-                'tag' =>'melonfire-20','type' => 'lite',
-                'devtag' => 'My token is here');
-$result = $proxy->BrowseNodeSearchRequest($params);
+$param = array(
+	'browse_node' => 18,
+	'page' => 1,
+	'mode' => 'books',
+	'tag' =>'melonfire-20',
+	'type' => 'lite',
+	'devtag' => 'My token is here'
+);
+$result = $proxy->BrowseNodeSearchRequest($param);
 // Check for a fault
 if ($proxy->fault) {
 	echo '<h2>Fault</h2><pre>';
