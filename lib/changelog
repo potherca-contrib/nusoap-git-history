@@ -223,3 +223,11 @@
 2004-04-21, version 0.6.7
 - soap_parser: parse repeated element name into an array (de-serializes doc/lit array into a PHP array when there is more than 1 array element)
 - soap_server: do not wrap response in a response element for a document style service
+
+2004-04-30, version 0.6.7
+- soap_transport_http: allow digest auth params to be separated by "," as well as ", "
+- soap_transport_http: re-initialize incoming headers for each response
+- soap_server: add methodreturnisliteralxml property to allow service function to return XML as a string
+- soapclient: improve rpc/literal support
+- soapclient: allow XML string as call params in addition to array
+- soapclient: support document style and literal encoding when not using WSDL

@@ -248,6 +248,7 @@ class soap_transport_http extends nusoap_base {
 	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array()) {
 		global $_SERVER;
 
+		$this->debug("Set credentials for authtype $authtype");
 		// cf. RFC 2617
 		if ($authtype == 'basic') {
 			$this->outgoing_headers['Authorization'] = 'Basic '.base64_encode($username.':'.$password);
@@ -298,6 +299,12 @@ class soap_transport_http extends nusoap_base {
 		$this->password = $password;
 		$this->authtype = $authtype;
 		$this->digestRequest = $digestRequest;
+		
+		if (isset($this->outgoing_headers['Authorization'])) {
+			$this->debug('Authorization header set: ' . substr($this->outgoing_headers['Authorization'], 0, 12) . '...');
+		} else {
+			$this->debug('Authorization header not set');
+		}
 	}
 	
 	/**
@@ -496,6 +503,7 @@ class soap_transport_http extends nusoap_base {
 		// process headers
 		$header_data = trim(substr($data,0,$pos));
 		$header_array = explode($lb,$header_data);
+		$this->incoming_headers = array();
 		foreach($header_array as $header_line){
 			$arr = explode(':',$header_line, 2);
 			if(count($arr) > 1){
@@ -516,6 +524,9 @@ class soap_transport_http extends nusoap_base {
 			$tmp = fread($this->fp, $readlen);
 			$strlen += strlen($tmp);
 			$data .= $tmp;
+		}
+		if (feof($this->fp)) {
+			$this->debug('read to EOF');
 		}
 		$this->debug('read body of length ' . strlen($data));
 		$this->incoming_payload .= $data;
@@ -607,20 +618,21 @@ class soap_transport_http extends nusoap_base {
 
  		// see if we need to resend the request with http digest authentication
  		if (isset($this->incoming_headers['www-authenticate']) && strstr($header_array[0], '401 Unauthorized')) {
+ 			$this->debug('Got 401 Unauthorized with WWW-Authenticate: ' . $this->incoming_headers['www-authenticate']);
  			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
+ 				$this->debug('Server wants digest authentication');
  				// remove "Digest " from our elements
  				$digestString = str_replace('Digest ', '', $this->incoming_headers['www-authenticate']);
  				
  				// parse elements into array
- 				$digestElements = explode(', ', $digestString);
- 				while (list($key, $val) = each($digestElements)) {
- 					$tempElement = explode('=', $val);
+ 				$digestElements = explode(',', $digestString);
+ 				foreach ($digestElements as $val) {
+ 					$tempElement = explode('=', trim($val));
  					$digestRequest[$tempElement[0]] = str_replace("\"", '', $tempElement[1]);
  				}
 
 				// should have (at least) qop, realm, nonce
  				if (isset($digestRequest['nonce'])) {
- 					$this->debug('found nonce in WWW-Authenticate: ' . $this->incoming_headers['www-authenticate']);
  					$this->setCredentials($this->username, $this->password, 'digest', $digestRequest);
  					$this->tryagain = true;
  					return false;

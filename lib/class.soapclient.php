@@ -26,6 +26,7 @@ class soapclient extends nusoap_base  {
 
 	var $username = '';
 	var $password = '';
+	var $authtype = '';
 	var $requestHeaders = false;	// SOAP headers in request (text)
 	var $responseHeaders = '';		// SOAP headers from response (incomplete namespace resolution) (text)
 	var $document = '';				// SOAP body response portion (incomplete namespace resolution) (text)
@@ -41,7 +42,7 @@ class soapclient extends nusoap_base  {
 	var $response_timeout = 30;
 	var $endpointType = '';
 	var $persistentConnection = false;
-	var $defaultRpcParams = false;
+	var $defaultRpcParams = false;	// This is no longer used
 	var $request = '';				// HTTP request
 	var $response = '';				// HTTP response
 	var $responseData = '';			// SOAP payload of response
@@ -116,13 +117,14 @@ class soapclient extends nusoap_base  {
 	* calls method, returns PHP native type
 	*
 	* @param    string $method SOAP server URL or path
-	* @param    array $params For RPC, array of parameters, can be associative or not.
-	*                         For literal, either the stringized XML for the body,
-	*                         or an array of parameters like the RPC case.  The
-	*                         $rpcParams parameter controls this treatment, or
-	*                         the $defaultRpcParams field if $rpcParams is not
-	*                         specified.  IMPORTANT: most services with literal
-	*                         parameters have document style, in which case there
+	* @param    array $params An array, associative or simple, of the parameters
+	*			              for the method call, or a string that is the XML
+	*			              for the call.  For rpc style, this call will
+	*			              wrap the XML in a tag named after the method, as
+	*			              well as the SOAP Envelope and Body.  For document
+	*			              style, this will only wrap with the Envelope and Body.
+	*			              IMPORTANT: when using an array with document style,
+	*			              in which case there
 	*                         is really one parameter, the root of the fragment
 	*                         used in the call, which encloses what programmers
 	*                         normally think of parameters.  A parameter array
@@ -130,8 +132,7 @@ class soapclient extends nusoap_base  {
 	* @param	string $namespace optional method namespace (WSDL can override)
 	* @param	string $soapAction optional SOAPAction value (WSDL can override)
 	* @param	boolean $headers optional array of soapval objects for headers
-	* @param	boolean $rpcParams optional treat params as RPC for use="literal"
-	*                   This can be used on a per-call basis to overrider defaultRpcParams.
+	* @param	boolean $rpcParams optional no longer used
 	* @param	string	$style optional (rpc|document) the style to use when serializing parameters (WSDL can override)
 	* @param	string	$use optional (encoded|literal) the use when serializing parameters (WSDL can override)
 	* @return	mixed
@@ -148,14 +149,13 @@ class soapclient extends nusoap_base  {
 		$this->faultcode = '';
 		$this->opData = array();
 		
-		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $rpcParams");
-		$this->debug("endpointType: $this->endpointType");
+		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $style, $use; endpointType: $this->endpointType");
 		if ($headers) {
 			$this->requestHeaders = $headers;
 		}
-		// if wsdl, get operation data and process parameters
+		// serialize parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
-
+			// use WSDL for operation
 			$this->opData = $opData;
 			foreach($opData as $key => $value){
 				$this->debug("$key -> $value");
@@ -166,42 +166,32 @@ class soapclient extends nusoap_base  {
 			$this->endpoint = $opData['endpoint'];
 			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	($namespace != '' ? $namespace : 'http://testuri.org');
 			$style = $opData['style'];
+			$use = $opData['input']['use'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
 				$this->wsdl->namespaces['nu'] = $namespace;
             }
+            $nsPrefix = $this->wsdl->getPrefixFromNamespace($namespace);
 			// serialize payload
-			
-			if($opData['input']['use'] == 'literal') {
-				if (is_null($rpcParams)) {
-					$rpcParams = $this->defaultRpcParams;
-				}
-				if ($rpcParams) {
-					$this->debug("serializing literal params for operation $operation");
-					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
-					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
-					//$this->debug($this->varDump($params));
-				} else {
-					// TODO: what?  We want to treat $params as a scalar....
-					$this->debug("serializing literal document for operation $operation");
-					//$payload = is_array($params) ? array_shift($params) : $params;
-					$payload = $this->wsdl->serializeParameters($operation,'input',$params);
-				}
+			if (is_string($params)) {
+				$this->debug("serializing param string for WSDL operation $operation");
+				$payload = $params;
+			} elseif (is_array($params)) {
+				$this->debug("serializing param array for WSDL operation $operation");
+				$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
 			} else {
-				$this->debug("serializing encoded params for operation $operation");
-			
-				// Partial fix for multiple encoding styles in the same function call
-				$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation";
-				if(isset($opData['output']['encodingStyle']) && $encodingStyle != $opData['output']['encodingStyle']) {
-					$payload .= (' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"');
-				}										
-				$payload .= ('>' . $this->wsdl->serializeRPCParameters($operation,'input',$params).
-							 '</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>");
+				$this->debug('params must be array or string');
+				$this->setError('params must be array or string');
+				return false;
 			}
-			$this->debug('payload size: '.strlen($payload));
-			// serialize envelope
-			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
+            $usedNamespaces = $this->wsdl->usedNamespaces;
+			// Partial fix for multiple encoding styles in the same function call
+			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+			if (isset($opData['output']['encodingStyle']) && $encodingStyle != $opData['output']['encodingStyle']) {
+				$methodEncodingStyle = ' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"';
+			} else {
+				$methodEncodingStyle = '';
+			}
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			if ($errstr = $this->wsdl->getError()) {
@@ -210,32 +200,54 @@ class soapclient extends nusoap_base  {
 				return false;
 			}
 		} elseif($this->endpointType == 'wsdl') {
+			// operation not in WSDL
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			return false;
-		// no wsdl
 		} else {
-			// make message
+			// no WSDL
             if($namespace == ''){
             	$namespace = 'http://testuri.org';
-                $this->wsdl->namespaces['ns1'] = $namespace;
             }
-			// serialize envelope
-			// note: 
+			//$this->namespaces['ns1'] = $namespace;
+			$nsPrefix = 'ns1';
+			// serialize 
 			$payload = '';
-			if(is_array($params)){
+			if (is_string($params)) {
+				$this->debug("serializing param string for operation $operation");
+				$payload = $params;
+			} elseif (is_array($params)) {
+				$this->debug("serializing param array for operation $operation");
 				foreach($params as $k => $v){
 					$payload .= $this->serialize_val($v,$k,false,false,false,false,$use);
 				}
+			} else {
+				$this->debug('params must be array or string');
+				$this->setError('params must be array or string');
+				return false;
 			}
-			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">".$payload."</ns1:$operation>";
-			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,array(),$style,$use);
+			$usedNamespaces = array();
+			$methodEncodingStyle = '';
 		}
-		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style");
+		// wrap RPC calls with method element
+		if ($style == 'rpc') {
+			if ($use == 'literal') {
+				$this->debug("wrapping RPC request with literal method element");
+				$payload = "<$operation xmlns=\"$namespace\">" . $payload . "</$operation>";
+			} else {
+				$this->debug("wrapping RPC request with encoded method element");
+				$payload = "<$nsPrefix:$operation$methodEncodingStyle xmlns:$nsPrefix=\"$namespace\">" .
+							$payload .
+							"</$nsPrefix:$operation>";
+			}
+		}
+		// serialize envelope
+		$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$usedNamespaces,$style,$use);
+		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style, use: $use");
+		$this->debug('SOAP message length: ' . strlen($soapmsg) . ' contents: ' . substr($soapmsg, 0, 1000));
 		// send
-		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
 		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout,$this->response_timeout);
 		if($errstr = $this->getError()){
 			$this->debug('Error: '.$errstr);
@@ -319,7 +331,7 @@ class soapclient extends nusoap_base  {
 					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 				}
                 if($this->username != '' && $this->password != '') {
-					$http->setCredentials($this->username,$this->password);
+					$http->setCredentials($this->username, $this->password, $this->authtype);
 				}
 				if($this->http_encoding != ''){
 					$http->setEncoding($this->http_encoding);
@@ -465,11 +477,13 @@ class soapclient extends nusoap_base  {
 	*
 	* @param    string $username
 	* @param    string $password
+	* @param	string $authtype (basic|digest)
 	* @access   public
 	*/
-	function setCredentials($username, $password) {
+	function setCredentials($username, $password, $authtype = 'basic') {
 		$this->username = $username;
 		$this->password = $password;
+		$this->authtype = $authtype;
 	}
 	
 	/**
@@ -496,7 +510,10 @@ class soapclient extends nusoap_base  {
 	* If true, default is that call params are like RPC even for document style.
 	* Each call() can override this value.
 	*
+	* This is no longer used.
+	*
 	* @access public
+	* @deprecated
 	*/
 	function getDefaultRpcParams() {
 		return $this->defaultRpcParams;

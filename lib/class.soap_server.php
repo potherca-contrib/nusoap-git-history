@@ -31,6 +31,7 @@ class soap_server extends nusoap_base {
 	var $responseHeaders = '';		// SOAP headers for response (text)
 	var $responseSOAP = '';			// SOAP payload for response (text)
 	var $methodreturn = false;		// method return to place in response
+	var $methodreturnisliteralxml = false;	// whether $methodreturn is a string of literal XML
 	var $fault = false;				// SOAP fault for response
 	var $result = 'successful';		// text indication of result (for debugging)
 
@@ -381,14 +382,14 @@ class soap_server extends nusoap_base {
 				$this->debug('calling method using call_user_func_array()');
 				$this->methodreturn = call_user_func_array("$this->methodname",$this->methodparams);
 			}
-            $this->debug('response var dump'.$this->varDump($this->methodreturn));
 		} else {
 			// call method w/ no parameters
 			$this->debug("calling $this->methodname w/ no params");
 			$m = $this->methodname;
 			$this->methodreturn = @$m();
 		}
-		$this->debug("leaving invoke_method: called method $this->methodname, received $this->methodreturn of type".gettype($this->methodreturn));
+        $this->debug('methodreturn var dump'.$this->varDump($this->methodreturn));
+		$this->debug("leaving invoke_method: called method $this->methodname, received $this->methodreturn of type ".gettype($this->methodreturn));
 	}
 
 	/**
@@ -411,11 +412,9 @@ class soap_server extends nusoap_base {
 				$this->debug('got a fault object from method');
 				$this->fault = $this->methodreturn;
 				return;
-			// if return val is soapval object
-			} elseif(get_class($this->methodreturn) == 'soapval'){
-				$this->debug('got a soapval object from method');
-				$return_val = $this->methodreturn->serialize();
-			// returned other
+			} elseif ($this->methodreturnisliteralxml) {
+				$return_val = $this->methodreturn;
+			// returned value(s)
 			} else {
 				$this->debug('got a(n) '.gettype($this->methodreturn).' from method');
 				$this->debug('serializing return value');
@@ -424,6 +423,7 @@ class soap_server extends nusoap_base {
 					if(sizeof($this->opData['output']['parts']) > 1){
 				    	$opParams = $this->methodreturn;
 				    } else {
+				    	// TODO: is this really necessary?
 				    	$opParams = array($this->methodreturn);
 				    }
 				    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);

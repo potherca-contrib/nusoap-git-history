@@ -61,7 +61,7 @@ require_once('class.soap_server.php');*/
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.6';
+	var $version = '0.6.7';
 	var $revision = '$Revision$';
 	var $error_str = false;
     var $debug_str = '';
@@ -409,7 +409,7 @@ class nusoap_base {
 	// serialize namespaces
     $ns_string = '';
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){
-		$ns_string .= "  xmlns:$k=\"$v\"";
+		$ns_string .= " xmlns:$k=\"$v\"";
 	}
 	if($style == 'rpc' && $use == 'encoded') {
 		$ns_string = ' SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"' . $ns_string;
