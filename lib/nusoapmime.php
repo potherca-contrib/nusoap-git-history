@@ -38,7 +38,8 @@ require_once('Mail/mimePart.php');
 
 /**
 *
-* soapclientmime client supporting MIME attachments.
+* soapclientmime client supporting 
+* <a href="http://www.w3.org/TR/SOAP-attachments">MIME attachments</a>.
 *
 * usage:
 *
@@ -55,6 +56,7 @@ require_once('Mail/mimePart.php');
 * unset($soapclient);
 *
 * @author   Scott Nichol <snichol@sourceforge.net>
+* @author	Thanks to Guillaume and Henning Reich for posting great attachment code to the mail list
 * @version  $Id$
 * @access   public
 */
@@ -125,7 +127,7 @@ class soapclientmime extends soapclient  {
 	*/
 	function getHTTPBody($soapmsg) {
 		if (count($this->requestAttachments) > 0) {
-			$params['content_type'] = 'multipart/mixed';
+			$params['content_type'] = 'multipart/related';
 			$mimeMessage =& new Mail_mimePart('', $params);
 			unset($params);
 
@@ -214,13 +216,10 @@ class soapclientmime extends soapclient  {
 	* @access   protected
 	*/
     function parseResponse($headers, $data) {
-    	foreach ($headers as $k => $v) {
-    		$this->debug("header $k: $v");
-    	}
 		$this->debug('Entering parseResponse() for payload of length ' . strlen($data) . ' and type of ' . $headers['content-type']);
 		$this->responseAttachments = array();
-		if (strstr($headers['content-type'], 'multipart/mixed')) {
-			$this->debug('Decode multipart/mixed');
+		if (strstr($headers['content-type'], 'multipart/related')) {
+			$this->debug('Decode multipart/related');
 			$input = '';
 			foreach ($headers as $k => $v) {
 				$input .= "$k: $v\r\n";
@@ -250,10 +249,10 @@ class soapclientmime extends soapclient  {
 				return $return;
 			}
 			
-			$this->setError('No root part found in multipart/mixed content');
+			$this->setError('No root part found in multipart/related content');
 			return;
 		}
-		$this->debug('Not multipart/mixed');
+		$this->debug('Not multipart/related');
 		return parent::parseResponse($headers, $data);
 	}
 }
