@@ -30,7 +30,7 @@ class soapclient extends nusoap_base  {
     var $proxyhost = '';
     var $proxyport = '';
     var $xml_encoding = '';
-	var $gzip = false;
+	var $http_encoding = false;
 	var $timeout = 0;
 	/**
 	* fault related variables
@@ -61,7 +61,7 @@ class soapclient extends nusoap_base  {
 
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl = & new wsdl($this->wsdlFile);
+			$this->wsdl =  new wsdl($this->wsdlFile);
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -219,8 +219,8 @@ class soapclient extends nusoap_base  {
                 if($this->username != '' && $this->password != '') {
 					$http->setCredentials($this->username,$this->password);
 				}
-				if($this->gzip){
-					$http->gzip = true;
+				if($this->http_encoding != ''){
+					$http->setEncoding($this->http_encoding);
 				}
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
@@ -260,7 +260,7 @@ class soapclient extends nusoap_base  {
 	*/
     function parseResponse($data) {
 		$this->debug('Entering parseResponse(), about to create soap_parser instance');
-		$parser = & new soap_parser($data,$this->xml_encoding,$this->operation);
+		$parser = new soap_parser($data,$this->xml_encoding,$this->operation);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -328,7 +328,17 @@ class soapclient extends nusoap_base  {
 		$this->username = $username;
 		$this->password = $password;
 	}
-
+	
+	/**
+	* use HTTP encoding
+	*
+	* @param    string $enc
+	* @access   public
+	*/
+	function setHTTPEncoding($enc='gzip, deflate'){
+		$this->http_encoding = $enc;
+	}
+	
 	/**
 	* dynamically creates proxy class, allowing user to directly call methods from wsdl
 	*

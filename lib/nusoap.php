@@ -1168,7 +1168,9 @@ class soap_transport_http extends nusoap_base {
 	var $url;
     var $proxyhost = '';
     var $proxyport = '';
-
+	
+	var $protocol_version = '1.0';
+	var $encoding;
 	/**
 	* constructor
 	*/
@@ -1269,18 +1271,17 @@ class soap_transport_http extends nusoap_base {
 		}
 
 		if($this->proxyhost && $this->proxyport){
-			$this-> outgoing_payload = "POST $this->url HTTP/1.0\r\n";
+			$this-> outgoing_payload = "POST $this->url HTTP/$this->protocol_version\r\n";
 		} else {
-			$this->outgoing_payload = "POST $this->path HTTP/1.0\r\n";
+			$this->outgoing_payload = "POST $this->path HTTP/$this->protocol_version\r\n";
 		}
 
-		if($this->gzip){
-			if(function_exists('gzdeflate') && $gzdata = gzdeflate($data)){
-				$gzip = "Accept-Encoding: gzip, deflate\r\n";
-				//set_socket_blocking($fp, 1); 
-				//"Content-Encoding: deflate\r\n";
-				//$data = $gzdata;
-			}//
+		if($this->encoding != ''){
+			if(function_exists('gzdeflate')){
+				$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
+				"Connection: close\r\n";
+				set_magic_quotes_runtime(0);
+			}
 		}
 		
 		$this->outgoing_payload .=
@@ -1289,7 +1290,7 @@ class soap_transport_http extends nusoap_base {
 			"Host: ".$this->host."\r\n".
 			$credentials.
 			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
-			$gzip.
+			$encoding_headers.
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 		
@@ -1300,66 +1301,98 @@ class soap_transport_http extends nusoap_base {
 		}
 		$this->debug('wrote data to socket');
 		
-		/* get response
+		// get response
 	    $this->incoming_payload = '';
-	    while ($data = fread($fp, 32768)) {
+		//$start = time();
+        //$timeout = $timeout + $start;*/
+		//while($data = fread($fp, 32768) && $t < $timeout){
+		while( $data = fread($fp, 32768) ){
 			$this->incoming_payload .= $data;
-	    }*/
-		//while(!feof($fp) && $t < $timeout) {
-		while(!feof($fp)){
-			$this->incoming_payload .= fgets($fp,32768);
 			//$t = time();
-		}
-		
-		/*if ($t>=$timeout){
-			$this->setError('Operation timed out');
+	    }
+		/*$end = time();
+		if ($t >= $timeout) {
+			$this->setError('server response timed out');
 			return false;
 		}*/
+
+		$this->debug('received '.strlen($this->incoming_payload).' bytes of data from server');
 		
-		//$s = socket_get_status($fp);
-		// connection was closed
+		// close filepointer
+		fclose($fp);
+		$this->debug('closed socket');
+		
+		// connection was closed unexpectedly
 		if($this->incoming_payload == ''){
 			$this->setError('no response from server');
 			return false;
 		}
+		
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+		$data = $this->incoming_payload."\r\n\r\n\r\n\r\n";
 		
-		// close filepointer
-		fclose($fp);
+		//$res = preg_split("/\r?\n\r?\n/s",$data);
 		
-		$data = $this->incoming_payload;
-		
-		/*if($this->gzip){
-			// if decoding works, use it. else assume data wasn't gzencoded
-			if($degzdata = @gzinflate($data)){
-				$data = $degzdata;
+		// remove 100 header
+		if(ereg('^HTTP/1.1 100',$data)){
+			if($pos = strpos($data,"\n\n")){
+				$data = ltrim(substr($data,$pos));
+			} elseif($pos = strpos($data,"\r\n\r\n")){
+				$data = ltrim(substr($data,$pos));
 			}
-		}*/
+		}//
+		//print 'w/o 100:-------------<pre>'.$data.'</pre><br>--------------<br>';
 		
-		//print "data: <xmp>$data</xmp>";
-		
-		// remove 100
-		if($this->gzip){
-			$data = ereg_replace("^([^<]*)\r?\n\r?\n",'',$data);
-		}
-		//print '<pre>'.$data.'</pre>';
 		// separate content from HTTP headers
-        if(preg_match("/([^<]*?)\r?\n\r?\n(<.*>)/s",$data,$result)) {
+        if(preg_match("/(.*?)\r?\n\r?\n(.*)/s",$data,$result)) {
 			$this->debug('found proper separation of headers and document');
 			$this->debug('getting rid of headers, stringlen: '.strlen($data));
-			$clean_data = $result[2];
+			$header_array = explode("\r\n",$result[1]);
+			$data = $result[2];
 			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
+			// clean headers
+			foreach($header_array as $header_line){
+				$arr = explode(':',$header_line);
+				$headers[trim($arr[0])] = trim($arr[1]);
+			}
+			//print "headers: $result[1]<br>";
+			//print "data: $result[2]<br>";
 		} else {
 			$this->setError('no proper separation of headers and document');
 			return false;
 		}
-		if(strlen($clean_data) == 0){
+		
+		// decode transfer-encoding
+		if($headers['Transfer-Encoding'] == 'chunked'){
+			$data = $this->decodeChunked($data);
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+		}
+		// decode content-encoding
+		if($headers['Content-Encoding'] != ''){
+			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
+    			// if decoding works, use it. else assume data wasn't gzencoded
+    			if(function_exists('gzinflate')){
+					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    					$data = $degzdata;
+					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+						$data = $degzdata;
+					} else {
+						$this->setError('Errors occurred when trying to decode the data');
+					}
+					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+    			} else {
+					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
+				}
+			}
+		}
+		
+		if(strlen($data) == 0){
 			$this->debug('no data after headers!');
 			$this->setError('no data present after HTTP headers');
 			return false;
 		}
 		$this->debug('end of send()');
-		return $clean_data;
+		return $data;
 	}
 
 
@@ -1457,6 +1490,38 @@ class soap_transport_http extends nusoap_base {
 
 		return $clean_data;
 	}
+	
+	function setEncoding($enc='gzip, deflate'){
+		$this->encoding = $enc;
+		$this->protocol_version = '1.1';
+	}
+	
+	function decodeChunked($message) {
+    
+    	//CHUNKED MESSAGES ARE FORMATTED LIKE THIS (Extension Not Supported)
+    	//HEXA_CHUNK_SIZE|CRLF|DATA|HEXA_CHUNK_SIZE|CRLF|HEXA_CHUNK_SIZE|CRLF|DATA|HEXA_CHUNK_SIZE|...|0
+    	//(0 means next CHUNK SIZE=0)
+    	//pipe are not in chunked message (just for your eyes...)
+    	$CRLF_LENGTH = 2;// equal to "\r\n"
+    	$chunk_pos = 0; //Start at position 0 of message
+    	$crlf_pos = strpos ($message , "\r\n" , $chunk_pos);//Look for first 
+    	$chunk_size = chop(substr($message,$chunk_pos,$crlf_pos));
+    	$octets_to_read = hexdec($chunk_size);
+    	$start_read = $crlf_pos + $CRLF_LENGTH;
+    	while($octets_to_read > 0){
+    		$buffer .= substr($message,$start_read,$octets_to_read);
+    		$chunk_pos = $start_read + $octets_to_read + $CRLF_LENGTH;
+    		if( strlen($message) > $chunk_pos ) {
+    			$crlf_pos = @strpos($message , "\r\n" , $chunk_pos);
+        		$chunk_size = chop(substr($message,$chunk_pos,$crlf_pos-$chunk_pos));
+        		$octets_to_read = hexdec($chunk_size);
+        		$start_read = $crlf_pos + $CRLF_LENGTH;
+    		} else {
+				$octets_to_read = 0;
+			}
+    	}
+    	return $buffer;
+    }
 }
 
 ?><?php
@@ -3140,7 +3205,7 @@ class soapclient extends nusoap_base  {
     var $proxyhost = '';
     var $proxyport = '';
     var $xml_encoding = '';
-	var $gzip = false;
+	var $http_encoding = false;
 	var $timeout = 0;
 	/**
 	* fault related variables
@@ -3171,7 +3236,7 @@ class soapclient extends nusoap_base  {
 
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl = & new wsdl($this->wsdlFile);
+			$this->wsdl =  new wsdl($this->wsdlFile);
 			// catch errors
 			if($errstr = $this->wsdl->getError()){
 				$this->debug('got wsdl error: '.$errstr);
@@ -3329,8 +3394,8 @@ class soapclient extends nusoap_base  {
                 if($this->username != '' && $this->password != '') {
 					$http->setCredentials($this->username,$this->password);
 				}
-				if($this->gzip){
-					$http->gzip = true;
+				if($this->http_encoding != ''){
+					$http->setEncoding($this->http_encoding);
 				}
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
@@ -3370,7 +3435,7 @@ class soapclient extends nusoap_base  {
 	*/
     function parseResponse($data) {
 		$this->debug('Entering parseResponse(), about to create soap_parser instance');
-		$parser = & new soap_parser($data,$this->xml_encoding,$this->operation);
+		$parser = new soap_parser($data,$this->xml_encoding,$this->operation);
 		// if parse errors
 		if($errstr = $parser->getError()){
 			$this->setError( $errstr);
@@ -3438,7 +3503,17 @@ class soapclient extends nusoap_base  {
 		$this->username = $username;
 		$this->password = $password;
 	}
-
+	
+	/**
+	* use HTTP encoding
+	*
+	* @param    string $enc
+	* @access   public
+	*/
+	function setHTTPEncoding($enc='gzip, deflate'){
+		$this->http_encoding = $enc;
+	}
+	
 	/**
 	* dynamically creates proxy class, allowing user to directly call methods from wsdl
 	*
