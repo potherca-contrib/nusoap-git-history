@@ -38,8 +38,8 @@ class soapclient extends nusoap_base  {
 	var $proxypassword = '';
     var $xml_encoding = '';			// character set encoding of incoming (response) messages
 	var $http_encoding = false;
-	var $timeout = 0;
-	var $response_timeout = 30;
+	var $timeout = 0;				// HTTP connection timeout
+	var $response_timeout = 30;		// HTTP response timeout
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;	// This is no longer used

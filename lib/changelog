@@ -231,3 +231,12 @@
 - soapclient: improve rpc/literal support
 - soapclient: allow XML string as call params in addition to array
 - soapclient: support document style and literal encoding when not using WSDL
+
+2004-05-05, version 0.6.7
+- wsdl: serialize PHP objects for WSDL XML Schema complexTypes, in addition to associative arrays
+- wsdl: fix WSDL generation when there is no encodingStyle
+- soap_transport_http: suppress fsockopen warnings
+- soap_transport_http: detect socket timeouts when reading (0 bytes returned)
+- soap_transport_http: read chunked content "in-line" so it works on a persistent connection
+- nusoap_base: serialize boolean as true|false, not 1|0, to agree with XML Schema
+- nusoap_base: serialize array of struct differently than array of array

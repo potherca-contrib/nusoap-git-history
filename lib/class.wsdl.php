@@ -694,17 +694,17 @@ class wsdl extends nusoap_base {
 					$binding_xml .= '<operation name="' . $opName . '">';
 					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
 					if (isset($opParts['input']['encodingStyle']) && $opParts['input']['encodingStyle'] != '') {
-						$enc_style = '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
+						$enc_style = ' encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
 					} else {
 						$enc_style = '';
 					}
-					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . $enc_style . '/></input>';
+					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . '"' . $enc_style . '/></input>';
 					if (isset($opParts['output']['encodingStyle']) && $opParts['output']['encodingStyle'] != '') {
-						$enc_style = '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
+						$enc_style = ' encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
 					} else {
 						$enc_style = '';
 					}
-					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . $enc_style . '/></output>';
+					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . '"' . $enc_style . '/></output>';
 					$binding_xml .= '</operation>';
 					$portType_xml .= '<operation name="' . $opParts['name'] . '"';
 					if (isset($opParts['parameterOrder'])) {
@@ -1028,23 +1028,30 @@ class wsdl extends nusoap_base {
 			}
 			
 			if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
-			
+				if (is_array($value)) {
+					$xvalue = $value;
+				} elseif (is_object($value)) {
+					$xvalue = get_object_vars($value);
+				} else {
+					$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+					$xvalue = array();
+				}
 				// toggle whether all elements are present - ideally should validate against schema
-				if(count($typeDef['elements']) != count($value)){
+				if(count($typeDef['elements']) != count($xvalue)){
 					$optionals = true;
 				}
 				foreach($typeDef['elements'] as $eName => $attrs) {
 					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if(isset($optionals) && !isset($value[$eName])){
+					if(isset($optionals) && !isset($xvalue[$eName])){
 						// do nothing
 					} else {
-						// TODO: if maxOccurs > 1, then allow serialization of an array
 						// get value
-						if (isset($value[$eName])) {
-						    $v = $value[$eName];
+						if (isset($xvalue[$eName])) {
+						    $v = $xvalue[$eName];
 						} else {
 						    $v = null;
 						}
+						// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
 						if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
 							$vv = $v;
 							foreach ($vv as $k => $v) {
@@ -1070,7 +1077,7 @@ class wsdl extends nusoap_base {
 					}
 				} 
 			} else {
-				//echo 'got here';
+				$this->debug("Expected elements for XML Schema type $ns:$uqType");
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {

@@ -241,8 +241,12 @@ class nusoap_base {
 		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
-        	if(is_bool($val) && !$val){
-        		$val = 0;
+        	if (is_bool($val)) {
+        		if ($type == 'boolean') {
+	        		$val = $val ? 'true' : 'false';
+	        	} elseif (! $val) {
+	        		$val = 0;
+	        	}
 			} else if (is_string($val)) {
 				$val = $this->expandEntities($val);
 			}
@@ -264,9 +268,11 @@ class nusoap_base {
 				}
 				break;
 			case (is_bool($val) || $type == 'boolean'):
-				if(!$val){
-			    	$val = 0;
-				}
+        		if ($type == 'boolean') {
+	        		$val = $val ? 'true' : 'false';
+	        	} elseif (! $val) {
+	        		$val = 0;
+	        	}
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";
 				} else {
@@ -313,6 +319,8 @@ class nusoap_base {
 	                    	if(is_object($v) && get_class($v) ==  'soapval'){
 								$tt_ns = $v->type_ns;
 								$tt = $v->type;
+							} elseif (is_array($v)) {
+								$tt = $this->isArraySimpleOrStruct($v);
 							} else {
 								$tt = gettype($v);
 	                        }
@@ -323,9 +331,14 @@ class nusoap_base {
 						if(count($array_types) > 1){
 							$array_typename = 'xsd:ur-type';
 						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
+							if ($tt == 'integer') {
+								$tt = 'int';
+							}
 							$array_typename = 'xsd:'.$tt;
-						} elseif($tt == 'array' || $tt == 'Array'){
+						} elseif(isset($tt) && $tt == 'arraySimple'){
 							$array_typename = 'SOAP-ENC:Array';
+						} elseif(isset($tt) && $tt == 'arrayStruct'){
+							$array_typename = 'unnamed_struct_use_soapval';
 						} else {
 							// if type is prefixed, create type prefix
 							if ($tt_ns != '' && $tt_ns == $this->namespaces['xsd']){
@@ -1612,6 +1625,7 @@ class soap_transport_http extends nusoap_base {
 //		  		}
 //		  	}
 //		}
+		$this->debug("connect connection_timeout $connection_timeout, response_timeout $response_timeout, scheme $this->scheme, host $this->host, port $this->port");
 	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// use persistent connection
 		if($this->persistentConnection && isset($this->fp) && is_resource($this->fp)){
@@ -1633,15 +1647,21 @@ class soap_transport_http extends nusoap_base {
 
 		// open socket
 		if($connection_timeout > 0){
-			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+			$this->fp = @fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
 		} else {
-			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str);
+			$this->fp = @fsockopen( $host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
 		if(!$this->fp) {
-			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
-			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
+			$msg = 'Couldn\'t open socket connection to server ' . $this->url;
+			if ($this->errno) {
+				$msg .= ', Error ('.$this->errno.'): '.$this->error_str;
+			} else {
+				$msg .= ' prior to connect().  This is often a problem looking up the host name.';
+			}
+			$this->debug($msg);
+			$this->setError($msg);
 			return false;
 		}
 		
@@ -1988,7 +2008,7 @@ class soap_transport_http extends nusoap_base {
 		return true;
 	  }
 	}
-	
+
 	function getResponse(){
 		$this->incoming_payload = '';
 	    
@@ -2006,7 +2026,19 @@ class soap_transport_http extends nusoap_base {
 				return false;
 			}
 
-			$data .= fgets($this->fp, 256);
+			$tmp = fgets($this->fp, 256);
+			$tmplen = strlen($tmp);
+			$this->debug("read line of $tmplen bytes: " . trim($tmp));
+
+			if ($tmplen == 0) {
+				$this->incoming_payload = $data;
+				$this->debug('socket read of headers timed out after length ' . strlen($data));
+				$this->debug("read before timeout:\n" . $data);
+				$this->setError('socket read of headers timed out');
+				return false;
+			}
+
+			$data .= $tmp;
 			$pos = strpos($data,"\r\n\r\n");
 			if($pos > 1){
 				$lb = "\r\n";
@@ -2040,16 +2072,65 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
-		// TODO: handle chunking in this loop to allow persistent connections with chunking
-		$content_length = isset($this->incoming_headers['content-length']) ? $this->incoming_headers['content-length'] : 2147483647;
-		$data = '';
-		$strlen = 0;
-	    while (($strlen < $content_length) && (!feof($this->fp))) {
-	    	$readlen = min(8192, $content_length - $strlen);
-			$tmp = fread($this->fp, $readlen);
-			$strlen += strlen($tmp);
-			$data .= $tmp;
+		if (isset($this->incoming_headers['content-length'])) {
+			$content_length = $this->incoming_headers['content-length'];
+			$chunked = false;
+			$this->debug("want to read content of length $content_length");
+		} else {
+			$content_length =  2147483647;
+			if (isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked') {
+				$chunked = true;
+				$this->debug("want to read chunked content");
+			} else {
+				$chunked = false;
+				$this->debug("want to read content to EOF");
+			}
 		}
+		$data = '';
+		do {
+			if ($chunked) {
+				$tmp = fgets($this->fp, 256);
+				$tmplen = strlen($tmp);
+				$this->debug("read chunk line of $tmplen bytes");
+				if ($tmplen == 0) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of chunk length timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of chunk length timed out');
+					return false;
+				}
+				$content_length = hexdec(trim($tmp));
+				$this->debug("chunk length $content_length");
+			}
+			$strlen = 0;
+		    while (($strlen < $content_length) && (!feof($this->fp))) {
+		    	$readlen = min(8192, $content_length - $strlen);
+				$tmp = fread($this->fp, $readlen);
+				$tmplen = strlen($tmp);
+				$this->debug("read buffer of $tmplen bytes");
+				if (($tmplen == 0) && (!feof($this->fp))) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of body timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of body timed out');
+					return false;
+				}
+				$strlen += $tmplen;
+				$data .= $tmp;
+			}
+			if ($chunked && ($content_length > 0)) {
+				$tmp = fgets($this->fp, 256);
+				$tmplen = strlen($tmp);
+				$this->debug("read chunk terminator of $tmplen bytes");
+				if ($tmplen == 0) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of chunk terminator timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of chunk terminator timed out');
+					return false;
+				}
+			}
+		} while ($chunked && ($content_length > 0) && (!feof($this->fp)));
 		if (feof($this->fp)) {
 			$this->debug('read to EOF');
 		}
@@ -2059,7 +2140,7 @@ class soap_transport_http extends nusoap_base {
 		
 		// close filepointer
 		if(
-			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
+			(isset($this->incoming_headers['connection']) && strtolower($this->incoming_headers['connection']) == 'close') || 
 			(! $this->persistentConnection) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
@@ -2073,16 +2154,16 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// decode transfer-encoding
-		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
-			if(!$data = $this->decodeChunked($data, $lb)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
+//		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
+//			if(!$data = $this->decodeChunked($data, $lb)){
+//				$this->setError('Decoding of chunked data failed');
+//				return false;
+//			}
 			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 			// set decoded payload
-			$this->incoming_payload = $header_data.$lb.$lb.$data;
-		}
-		
+//			$this->incoming_payload = $header_data.$lb.$lb.$data;
+//		}
+	
 	  } else if ($this->scheme == 'https') {
 		// send and receive
 		$this->debug('send and receive with cURL');
@@ -3735,17 +3816,17 @@ class wsdl extends nusoap_base {
 					$binding_xml .= '<operation name="' . $opName . '">';
 					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
 					if (isset($opParts['input']['encodingStyle']) && $opParts['input']['encodingStyle'] != '') {
-						$enc_style = '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
+						$enc_style = ' encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
 					} else {
 						$enc_style = '';
 					}
-					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . $enc_style . '/></input>';
+					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . '"' . $enc_style . '/></input>';
 					if (isset($opParts['output']['encodingStyle']) && $opParts['output']['encodingStyle'] != '') {
-						$enc_style = '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
+						$enc_style = ' encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
 					} else {
 						$enc_style = '';
 					}
-					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . $enc_style . '/></output>';
+					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . '"' . $enc_style . '/></output>';
 					$binding_xml .= '</operation>';
 					$portType_xml .= '<operation name="' . $opParts['name'] . '"';
 					if (isset($opParts['parameterOrder'])) {
@@ -4069,23 +4150,30 @@ class wsdl extends nusoap_base {
 			}
 			
 			if (isset($typeDef['elements']) && is_array($typeDef['elements'])) {
-				// TODO: this assumes an associative array, but should handle object, too
+				if (is_array($value)) {
+					$xvalue = $value;
+				} elseif (is_object($value)) {
+					$xvalue = get_object_vars($value);
+				} else {
+					$this->debug("value is neither an array nor an object for XML Schema type $ns:$uqType");
+					$xvalue = array();
+				}
 				// toggle whether all elements are present - ideally should validate against schema
-				if(count($typeDef['elements']) != count($value)){
+				if(count($typeDef['elements']) != count($xvalue)){
 					$optionals = true;
 				}
 				foreach($typeDef['elements'] as $eName => $attrs) {
 					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if(isset($optionals) && !isset($value[$eName])){
+					if(isset($optionals) && !isset($xvalue[$eName])){
 						// do nothing
 					} else {
-						// TODO: if maxOccurs > 1, then allow serialization of an array
 						// get value
-						if (isset($value[$eName])) {
-						    $v = $value[$eName];
+						if (isset($xvalue[$eName])) {
+						    $v = $xvalue[$eName];
 						} else {
 						    $v = null;
 						}
+						// TODO: if maxOccurs > 1 (not just unbounded), then allow serialization of an array
 						if (isset($attrs['maxOccurs']) && $attrs['maxOccurs'] == 'unbounded' && isset($v) && is_array($v) && $this->isArraySimpleOrStruct($v) == 'arraySimple') {
 							$vv = $v;
 							foreach ($vv as $k => $v) {
@@ -4111,7 +4199,7 @@ class wsdl extends nusoap_base {
 					}
 				} 
 			} else {
-				//echo 'got here';
+				$this->debug("Expected elements for XML Schema type $ns:$uqType");
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
@@ -4897,8 +4985,8 @@ class soapclient extends nusoap_base  {
 	var $proxypassword = '';
     var $xml_encoding = '';			// character set encoding of incoming (response) messages
 	var $http_encoding = false;
-	var $timeout = 0;
-	var $response_timeout = 30;
+	var $timeout = 0;				// HTTP connection timeout
+	var $response_timeout = 30;		// HTTP response timeout
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;	// This is no longer used

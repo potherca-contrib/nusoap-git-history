@@ -241,8 +241,12 @@ class nusoap_base {
 		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
-        	if(is_bool($val) && !$val){
-        		$val = 0;
+        	if (is_bool($val)) {
+        		if ($type == 'boolean') {
+	        		$val = $val ? 'true' : 'false';
+	        	} elseif (! $val) {
+	        		$val = 0;
+	        	}
 			} else if (is_string($val)) {
 				$val = $this->expandEntities($val);
 			}
@@ -264,9 +268,11 @@ class nusoap_base {
 				}
 				break;
 			case (is_bool($val) || $type == 'boolean'):
-				if(!$val){
-			    	$val = 0;
-				}
+        		if ($type == 'boolean') {
+	        		$val = $val ? 'true' : 'false';
+	        	} elseif (! $val) {
+	        		$val = 0;
+	        	}
 				if ($use == 'literal') {
 					$xml .= "<$name$xmlns $atts>$val</$name>";
 				} else {
@@ -313,6 +319,8 @@ class nusoap_base {
 	                    	if(is_object($v) && get_class($v) ==  'soapval'){
 								$tt_ns = $v->type_ns;
 								$tt = $v->type;
+							} elseif (is_array($v)) {
+								$tt = $this->isArraySimpleOrStruct($v);
 							} else {
 								$tt = gettype($v);
 	                        }
@@ -323,9 +331,14 @@ class nusoap_base {
 						if(count($array_types) > 1){
 							$array_typename = 'xsd:ur-type';
 						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
+							if ($tt == 'integer') {
+								$tt = 'int';
+							}
 							$array_typename = 'xsd:'.$tt;
-						} elseif($tt == 'array' || $tt == 'Array'){
+						} elseif(isset($tt) && $tt == 'arraySimple'){
 							$array_typename = 'SOAP-ENC:Array';
+						} elseif(isset($tt) && $tt == 'arrayStruct'){
+							$array_typename = 'unnamed_struct_use_soapval';
 						} else {
 							// if type is prefixed, create type prefix
 							if ($tt_ns != '' && $tt_ns == $this->namespaces['xsd']){

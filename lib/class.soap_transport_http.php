@@ -87,6 +87,7 @@ class soap_transport_http extends nusoap_base {
 //		  		}
 //		  	}
 //		}
+		$this->debug("connect connection_timeout $connection_timeout, response_timeout $response_timeout, scheme $this->scheme, host $this->host, port $this->port");
 	  if ($this->scheme == 'http' || $this->scheme == 'ssl') {
 		// use persistent connection
 		if($this->persistentConnection && isset($this->fp) && is_resource($this->fp)){
@@ -108,15 +109,21 @@ class soap_transport_http extends nusoap_base {
 
 		// open socket
 		if($connection_timeout > 0){
-			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
+			$this->fp = @fsockopen( $host, $this->port, $this->errno, $this->error_str, $connection_timeout);
 		} else {
-			$this->fp = fsockopen( $host, $this->port, $this->errno, $this->error_str);
+			$this->fp = @fsockopen( $host, $this->port, $this->errno, $this->error_str);
 		}
 		
 		// test pointer
 		if(!$this->fp) {
-			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
-			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error ('.$this->errno.'): '.$this->error_str);
+			$msg = 'Couldn\'t open socket connection to server ' . $this->url;
+			if ($this->errno) {
+				$msg .= ', Error ('.$this->errno.'): '.$this->error_str;
+			} else {
+				$msg .= ' prior to connect().  This is often a problem looking up the host name.';
+			}
+			$this->debug($msg);
+			$this->setError($msg);
 			return false;
 		}
 		
@@ -463,7 +470,7 @@ class soap_transport_http extends nusoap_base {
 		return true;
 	  }
 	}
-	
+
 	function getResponse(){
 		$this->incoming_payload = '';
 	    
@@ -481,7 +488,19 @@ class soap_transport_http extends nusoap_base {
 				return false;
 			}
 
-			$data .= fgets($this->fp, 256);
+			$tmp = fgets($this->fp, 256);
+			$tmplen = strlen($tmp);
+			$this->debug("read line of $tmplen bytes: " . trim($tmp));
+
+			if ($tmplen == 0) {
+				$this->incoming_payload = $data;
+				$this->debug('socket read of headers timed out after length ' . strlen($data));
+				$this->debug("read before timeout:\n" . $data);
+				$this->setError('socket read of headers timed out');
+				return false;
+			}
+
+			$data .= $tmp;
 			$pos = strpos($data,"\r\n\r\n");
 			if($pos > 1){
 				$lb = "\r\n";
@@ -515,16 +534,65 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// loop until msg has been received
-		// TODO: handle chunking in this loop to allow persistent connections with chunking
-		$content_length = isset($this->incoming_headers['content-length']) ? $this->incoming_headers['content-length'] : 2147483647;
-		$data = '';
-		$strlen = 0;
-	    while (($strlen < $content_length) && (!feof($this->fp))) {
-	    	$readlen = min(8192, $content_length - $strlen);
-			$tmp = fread($this->fp, $readlen);
-			$strlen += strlen($tmp);
-			$data .= $tmp;
+		if (isset($this->incoming_headers['content-length'])) {
+			$content_length = $this->incoming_headers['content-length'];
+			$chunked = false;
+			$this->debug("want to read content of length $content_length");
+		} else {
+			$content_length =  2147483647;
+			if (isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked') {
+				$chunked = true;
+				$this->debug("want to read chunked content");
+			} else {
+				$chunked = false;
+				$this->debug("want to read content to EOF");
+			}
 		}
+		$data = '';
+		do {
+			if ($chunked) {
+				$tmp = fgets($this->fp, 256);
+				$tmplen = strlen($tmp);
+				$this->debug("read chunk line of $tmplen bytes");
+				if ($tmplen == 0) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of chunk length timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of chunk length timed out');
+					return false;
+				}
+				$content_length = hexdec(trim($tmp));
+				$this->debug("chunk length $content_length");
+			}
+			$strlen = 0;
+		    while (($strlen < $content_length) && (!feof($this->fp))) {
+		    	$readlen = min(8192, $content_length - $strlen);
+				$tmp = fread($this->fp, $readlen);
+				$tmplen = strlen($tmp);
+				$this->debug("read buffer of $tmplen bytes");
+				if (($tmplen == 0) && (!feof($this->fp))) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of body timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of body timed out');
+					return false;
+				}
+				$strlen += $tmplen;
+				$data .= $tmp;
+			}
+			if ($chunked && ($content_length > 0)) {
+				$tmp = fgets($this->fp, 256);
+				$tmplen = strlen($tmp);
+				$this->debug("read chunk terminator of $tmplen bytes");
+				if ($tmplen == 0) {
+					$this->incoming_payload = $data;
+					$this->debug('socket read of chunk terminator timed out after length ' . strlen($data));
+					$this->debug("read before timeout:\n" . $data);
+					$this->setError('socket read of chunk terminator timed out');
+					return false;
+				}
+			}
+		} while ($chunked && ($content_length > 0) && (!feof($this->fp)));
 		if (feof($this->fp)) {
 			$this->debug('read to EOF');
 		}
@@ -534,7 +602,7 @@ class soap_transport_http extends nusoap_base {
 		
 		// close filepointer
 		if(
-			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
+			(isset($this->incoming_headers['connection']) && strtolower($this->incoming_headers['connection']) == 'close') || 
 			(! $this->persistentConnection) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
@@ -548,16 +616,16 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// decode transfer-encoding
-		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
-			if(!$data = $this->decodeChunked($data, $lb)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
+//		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
+//			if(!$data = $this->decodeChunked($data, $lb)){
+//				$this->setError('Decoding of chunked data failed');
+//				return false;
+//			}
 			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 			// set decoded payload
-			$this->incoming_payload = $header_data.$lb.$lb.$data;
-		}
-		
+//			$this->incoming_payload = $header_data.$lb.$lb.$data;
+//		}
+	
 	  } else if ($this->scheme == 'https') {
 		// send and receive
 		$this->debug('send and receive with cURL');
