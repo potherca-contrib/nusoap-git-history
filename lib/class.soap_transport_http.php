@@ -189,43 +189,57 @@ class soap_transport_http extends nusoap_base {
 		
 		// remove 100 header
 		if(ereg('^HTTP/1.1 100',$data)){
-			if($pos = strpos($data,"\n\n")){
+			
+			if($pos = strpos($data,"\r\n\r\n") ){
 				$data = ltrim(substr($data,$pos));
-			} elseif($pos = strpos($data,"\r\n\r\n")){
+			} elseif($pos = strpos($data,"\n\n") ){
 				$data = ltrim(substr($data,$pos));
 			}
 		}//
-		//print 'w/o 100:-------------<pre>'.$data.'</pre><br>--------------<br>';
 		
 		// separate content from HTTP headers
-        if(preg_match("/(.*?)\r?\n\r?\n(.*)/s",$data,$result)) {
-			$this->debug('found proper separation of headers and document');
-			$this->debug('getting rid of headers, stringlen: '.strlen($data));
-			$header_array = explode("\r\n",$result[1]);
-			$data = $result[2];
-			$this->debug('cleaned data, stringlen: '.strlen($clean_data));
-			// clean headers
-			foreach($header_array as $header_line){
-				$arr = explode(':',$header_line);
-				$headers[trim($arr[0])] = trim($arr[1]);
-			}
-			//print "headers: $result[1]<br>";
-			//print "data: $result[2]<br>";
+        //if(preg_match("/(.*?)\r?\n\r?\n(.*)/s",$data,$result)) {
+		if( $pos = strpos($data,"\r\n\r\n") ){
+			
+		} elseif( $pos = strpos($data,"\n\n") ){
+		
 		} else {
 			$this->setError('no proper separation of headers and document');
 			return false;
 		}
+		$header_data = trim(substr($data,0,$pos));
+		$header_array = explode("\r\n",$header_data);
+		$data = ltrim(substr($data,$pos));
+		$this->debug('found proper separation of headers and document');
+		//$header_array = explode("\r\n",$result[1]);
+		//$data = $result[2];
+		$this->debug('cleaned data, stringlen: '.strlen($data));
+		// clean headers
+		foreach($header_array as $header_line){
+			$arr = explode(':',$header_line);
+			$headers[trim($arr[0])] = trim($arr[1]);
+		}
+		//print "headers: <pre>$header_data</pre><br>";
+		//print "data: <pre>$data</pre><br>";
+
 		
 		// decode transfer-encoding
 		if($headers['Transfer-Encoding'] == 'chunked'){
-			$data = $this->decodeChunked($data);
+			//$timer->setMarker('starting to decode chunked content');
+			if(!$data = $this->decodeChunked2($data)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//$timer->setMarker('finished decoding of chunked content');
 			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 		}
+		
 		// decode content-encoding
 		if($headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){
+					//$timer->setMarker('starting decoding of gzip/deflated content');
 					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
     					$data = $degzdata;
 					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
@@ -233,6 +247,7 @@ class soap_transport_http extends nusoap_base {
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
 					}
+					//$timer->setMarker('finished decoding of gzip/deflated content');
 					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
     			} else {
 					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
@@ -357,9 +372,8 @@ class soap_transport_http extends nusoap_base {
     	//(0 means next CHUNK SIZE=0)
     	//pipe are not in chunked message (just for your eyes...)
     	$CRLF_LENGTH = 2;// equal to "\r\n"
-    	$chunk_pos = 0; //Start at position 0 of message
-    	$crlf_pos = strpos ($message , "\r\n" , $chunk_pos);//Look for first 
-    	$chunk_size = chop(substr($message,$chunk_pos,$crlf_pos));
+    	$crlf_pos = strpos ($message , "\r\n" , 0); //Look for first 
+    	$chunk_size = chop(substr($message,0,$crlf_pos));
     	$octets_to_read = hexdec($chunk_size);
     	$start_read = $crlf_pos + $CRLF_LENGTH;
     	while($octets_to_read > 0){
@@ -374,8 +388,62 @@ class soap_transport_http extends nusoap_base {
 				$octets_to_read = 0;
 			}
     	}
+		if($buffer == ''){
+			return false;
+		}
     	return $buffer;
     }
+	
+	// This function will decode "chunked' transfer encoding
+ 	// as defined in RFC2068 19.4.6
+	function decodeChunked2($buffer){
+		// length := 0
+		$length = 0;
+		$new = '';
+		
+		// read chunk-size, chunk-extension (if any) and CRLF
+		// get the position of the linebreak
+		$chunkend = strpos($buffer,"\r\n") + 2;
+		$temp = substr($buffer,0,$chunkend);
+		$chunk_size = hexdec( trim($temp) );
+		$chunkstart = $chunkend;
+		// while (chunk-size > 0) {
+		while ($chunk_size > 0) {
+			
+			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
+		  	
+			// Just in case we got a broken connection
+		  	if ($chunkend == FALSE) {
+		  	    $chunk = substr($buffer,$chunkstart);
+				// append chunk-data to entity-body
+		    	$new .= $chunk;
+		  	    $length += strlen($chunk);
+		  	    break;
+			}
+			
+		  	// read chunk-data and CRLF
+		  	$chunk = substr($buffer,$chunkstart,$chunkend-$chunkstart);
+		  	// append chunk-data to entity-body
+		  	$new .= $chunk;
+		  	// length := length + chunk-size
+		  	$length += strlen($chunk);
+		  	// read chunk-size and CRLF
+		  	$chunkstart = $chunkend + 2;
+			
+		  	$chunkend = strpos($buffer,"\r\n",$chunkstart)+2;
+			if ($chunkend == FALSE) {
+				break; //Just in case we got a broken connection
+			}
+			$temp = substr($buffer,$chunkstart,$chunkend-$chunkstart);
+			$chunk_size = hexdec( trim($temp) );
+			$chunkstart = $chunkend;
+		}
+        // Update headers
+        //$this->Header['content-length'] = $length;
+        //unset($this->Header['transfer-encoding']);
+		return $new;
+	}
+	
 }
 
 ?>

@@ -196,7 +196,7 @@ class wsdl extends XMLSchema {
 					}
 					$this->bindings[$binding]['operations'][$operation]['transport'] = $bindingData['transport'];
 					$this->bindings[$binding]['operations'][$operation]['documentation'] = isset($this->portTypes[ $bindingData['portType'] ][$operation]['documentation']) ? $this->portTypes[ $bindingData['portType'] ][$operation]['documentation'] : '';
-					$this->bindings[$binding]['operations'][$operation]['endpoint'] = $bindingData['endpoint'];
+					$this->bindings[$binding]['operations'][$operation]['endpoint'] = isset($bindingData['endpoint']) ? $bindingData['endpoint'] : '';
 				}
 			}
 		}
@@ -388,6 +388,7 @@ class wsdl extends XMLSchema {
 				case 'service':
 					$this->serviceName = $attrs['name'];
 					$this->status = 'service';
+					$this->debug('current service: '.$this->serviceName);
 				break;
 				case 'definitions':
 					foreach ($attrs as $name=>$value) {
