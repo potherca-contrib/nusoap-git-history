@@ -714,6 +714,7 @@ class wsdl extends XMLSchema {
 					$value = htmlspecialchars($value);
 				} 
 				// it's a scalar
+				// TODO: what about null/nil values?
 				if ($use == 'literal') {
 					return "<$name>$value</$name>";
 				} else {
@@ -768,7 +769,13 @@ class wsdl extends XMLSchema {
 						    $v = array_shift($value);
 						}
 						// serialize schema-defined type
-						if (!isset($attrs['type'])) {
+						//if (!isset($attrs['type'])) {
+						// Note: changing from the above "if" allows us to
+						// work around the problems with the case of having multiple
+						// schema, since types from all the schema will be associated
+						// here with a single namespace, which is correct for only
+						// some of the types.
+						if($this->getTypeDef($this->getLocalPart($attrs['type']))) {
 						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use);
 						// serialize generic type
 						} else {
@@ -782,7 +789,6 @@ class wsdl extends XMLSchema {
 			}
 			$xml .= "</$elementName>";
 		} elseif ($phpType == 'array') {
-			$rows = sizeof($value);
 			if (isset($typeDef['multidimensional'])) {
 				$nv = array();
 				foreach($value as $v) {
@@ -794,6 +800,7 @@ class wsdl extends XMLSchema {
 				$cols = '';
 			} 
 			if (is_array($value) && sizeof($value) >= 1) {
+				$rows = sizeof($value);
 				$contents = '';
 				foreach($value as $k => $v) {
 					$this->debug("serializing array element: $k, $v of type: $typeDef[arrayType]");
@@ -806,8 +813,11 @@ class wsdl extends XMLSchema {
 				}
 				$this->debug('contents: '.$this->varDump($contents));
 			} else {
+				$rows = 0;
 				$contents = null;
 			}
+			// TODO: for now, an empty value will be serialized as a zero element
+			// array.  Revisit this when coding the handling of null/nil values.
 			if ($use == 'literal') {
 				$xml = "<$name>"
 					.$contents

@@ -20,3 +20,7 @@
 
 2003-07-24, version 0.6.5
 - soap_transport_http: apply patch from Steven Brown "if the server closes connection prematurely, nusoap would spin trying to read data that isn't there"
+
+2003-07-25, version 0.6.5
+- wsdl: apply patch from Sven to workaround single schema limitation
+- wsdl: apply a variant of the patch from Holger to handle empty values for array by serializing an array with 0 elements
