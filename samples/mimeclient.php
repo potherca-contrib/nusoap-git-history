@@ -20,6 +20,7 @@ $err = $client->getError();
 if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
+$client->setHTTPEncoding('deflate, gzip');
 $cid = $client->addAttachment('', 'mimeclient.php');
 $result = $client->call('hello', array('name' => 'Scott'));
 if ($client->fault) {

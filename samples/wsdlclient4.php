@@ -73,6 +73,7 @@ $err = $client->getError();
 if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
+$client->useHTTPPersistentConnection();
 echo '<h2>Execute ' . $method . '</h2>';
 $result = $client->call($method, $params);
 // Check for a fault
@@ -91,6 +92,13 @@ if ($client->fault) {
 		echo '<h2>Result</h2><pre>';
 		print_r((!is_bool($result)) ? $result : ($result ? 'true' : 'false'));
 		echo '</pre>';
+		// And execute again to test persistent connection
+		echo '<h2>Execute ' . $method . ' again to test persistent connection (see debug)</h2>';
+		$client->debug("*** execute again to test persistent connection ***");
+		$result = $client->call($method, $params);
+		// And again...
+		$client->debug("*** execute again ... ***");
+		$result = $client->call($method, $params);
 	}
 }
 echo '<h2>Request</h2><pre>' . htmlspecialchars($client->request, ENT_QUOTES) . '</pre>';

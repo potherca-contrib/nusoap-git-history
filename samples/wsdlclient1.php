@@ -22,7 +22,7 @@ if ($err) {
 }
 // Doc/lit parameters get wrapped
 $param = array('Symbol' => 'IBM');
-$result = $client->call('GetQuickQuotes', array('GetQuickQuotes' => $param), '', '', false, true);
+$result = $client->call('GetQuickQuotes', array('parameters' => $param), '', '', false, true);
 // Check for a fault
 if ($client->fault) {
 	echo '<h2>Fault</h2><pre>';

@@ -21,7 +21,7 @@ if ($err) {
 	echo '<h2>Constructor error</h2><pre>' . $err . '</pre>';
 }
 $person = array('firstname' => 'Willi', 'age' => 22, 'gender' => 'male');
-$result = $client->call('hello', array('name' => $person));
+$result = $client->call('hello', array('person' => $person));
 // Check for a fault
 if ($client->fault) {
 	echo '<h2>Fault</h2><pre>';
