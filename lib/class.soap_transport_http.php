@@ -189,7 +189,7 @@ class soap_transport_http extends nusoap_base {
 		
 		$this->outgoing_payload .=
 			"User-Agent: $this->title v$this->version\r\n".
-			"Host: ".$this->host."\r\n".
+			"Host: ".$this->host.':'.$this->port."\r\n".
 			$encoding_headers.
 			$credentials.
 			"Content-Type: text/xml; charset=\"$this->soap_defencoding\"\r\n".

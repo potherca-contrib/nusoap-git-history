@@ -295,6 +295,13 @@ class soapclient extends nusoap_base  {
 				} elseif($this->getError()){
 					return false;
 				} else {
+					if(strpos($http->incoming_headers['content-type'],'=')){
+						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
+						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+							$this->xml_encoding = $enc;
+						}
+						$this->debug('got response encoding: '.$enc);
+					}
 					$this->debug('got response, length: '.strlen($response));
 					return $this->parseResponse($response);
 				}

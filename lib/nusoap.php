@@ -1494,7 +1494,7 @@ class soap_transport_http extends nusoap_base {
 		
 		$this->outgoing_payload .=
 			"User-Agent: $this->title v$this->version\r\n".
-			"Host: ".$this->host."\r\n".
+			"Host: ".$this->host.':'.$this->port."\r\n".
 			$encoding_headers.
 			$credentials.
 			"Content-Type: text/xml; charset=\"$this->soap_defencoding\"\r\n".
@@ -4003,6 +4003,13 @@ class soapclient extends nusoap_base  {
 				} elseif($this->getError()){
 					return false;
 				} else {
+					if(strpos($http->incoming_headers['content-type'],'=')){
+						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
+						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+							$this->xml_encoding = $enc;
+						}
+						$this->debug('got response encoding: '.$enc);
+					}
 					$this->debug('got response, length: '.strlen($response));
 					return $this->parseResponse($response);
 				}
