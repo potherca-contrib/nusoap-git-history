@@ -157,9 +157,15 @@ class soapclient extends nusoap_base  {
 				}
 			} else {
 				$this->debug("serializing encoded params for operation $operation");
-				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
-				$this->wsdl->serializeRPCParameters($operation,'input',$params).
-				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
+			
+				// Partial fix for multiple encoding styles in the same function call
+				$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation";
+				if($encodingStyle != $opData['output']['encodingStyle']) {
+					$payload .= (' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"');
+				}										
+				$payload .= ('>' . $this->wsdl->serializeRPCParameters($operation,'input',$params).
+							 '</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>");
 			}
 			$this->debug('payload size: '.strlen($payload));
 			// serialize envelope

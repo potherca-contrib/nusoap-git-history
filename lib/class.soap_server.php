@@ -110,7 +110,10 @@ class soap_server extends nusoap_base {
 			$payload = $response;
             // add debug data if in debug mode
 			if(isset($this->debug_flag) && $this->debug_flag == 1){
-            	$payload .= "<!--\n".str_replace('--','- -',$this->debug_str)."\n-->";
+				while (strpos($this->debug_str, '--')) {
+					$this->debug_str = str_replace('--', '- -', $this->debug_str);
+				}
+            	$payload .= "<!--\n" . $this->debug_str . "\n-->";
             }
 			// print headers
 			if($this->fault){

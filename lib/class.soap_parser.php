@@ -62,6 +62,7 @@ class soap_parser extends nusoap_base {
 			// Set the options for parsing the XML data.
 			//xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
 			xml_parser_set_option($this->parser, XML_OPTION_CASE_FOLDING, 0);
+			//xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
 			// Set the object for the parser.
 			xml_set_object($this->parser, $this);
 			// Set the element handlers for the parser.
@@ -287,7 +288,7 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
 				} else {
 					$parent = $this->message[$pos]['parent'];
-					if ($this->message[$parent]['type'] == 'array' && isset($this->message[$parent]['arrayType'])) {
+					if (isset($this->message[$parent]['type']) && ($this->message[$parent]['type'] == 'array') && isset($this->message[$parent]['arrayType'])) {
 						$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], isset($this->message[$parent]['arrayTypeNamespace']) ? $this->message[$parent]['arrayTypeNamespace'] : '');
 					} else {
 						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
@@ -339,6 +340,7 @@ class soap_parser extends nusoap_base {
 		if ($this->xml_encoding=='UTF-8'){
 			// TODO: add an option to disable this for folks who want
 			// raw UTF-8 that, e.g., might not map to iso-8859-1
+			// TODO: this can also be handled with xml_parser_set_option($this->parser, XML_OPTION_TARGET_ENCODING, "ISO-8859-1");
 			$data = utf8_decode($data);
 		}
         $this->message[$pos]['cdata'] .= $data;

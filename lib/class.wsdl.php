@@ -65,12 +65,19 @@ class wsdl extends XMLSchema {
         } 
         // imports
         if (sizeof($this->import) > 0) {
-            foreach($this->import as $ns => $url) {
-                $this->debug('importing wsdl from ' . $url);
-				if($url != ''){
-                	$this->parseWSDL($url);
-				} else {
-					$this->namespaces['ns'.(count($this->namespaces)+1)] = $ns;
+			$wsdlparts = parse_url($this->wsdl);
+            foreach ($this->import as $ns => $list) {
+                foreach ($list as $url) {
+					if ($url != '') {
+						$urlparts = parse_url($url);
+						if (!isset($urlparts['host'])) {
+							$url = $wsdlparts['scheme'] . '://' . $wsdlparts['host'] . 
+									substr($wsdlparts['path'],0,strrpos($wsdlparts['path'],'/') + 1) .$urlparts['path'];
+						}
+	                	$this->parseWSDL($url);
+					} else {
+						$this->namespaces['ns'.(count($this->namespaces)+1)] = $ns;
+					}
 				}
             } 
         } 
@@ -95,7 +102,7 @@ class wsdl extends XMLSchema {
         $wsdl_props = parse_url($wsdl);
 
         if (isset($wsdl_props['host'])) {
-        	
+            $this->debug('getting URL ' . $wsdl);        	
         	// get wsdl
 	        $tr = new soap_transport_http($wsdl);
 			$tr->request_method = 'GET';
@@ -115,6 +122,7 @@ class wsdl extends XMLSchema {
 			}
 			unset($tr);
         } else {
+            $this->debug('getting FILE ' . $wsdl);
             // $wsdl seems to be a non-url file path, do the regular fopen
             if ($fp = @fopen($wsdl, 'r')) {
                 $wsdl_string = '';
@@ -338,7 +346,8 @@ class wsdl extends XMLSchema {
 		switch ($name) {
 			case "import":
 			    if (isset($attrs['location'])) {
-			    	$this->import[$attrs['namespace']] = $attrs['location'];
+                    $this->import[$attrs['namespace']][] = $attrs['location'];
+                    $this->debug('parsing import ' . $attrs['namespace']. ' - ' . $attrs['location'] . ' (' . count($this->import[$attrs['namespace']]).')');
 				} 
 				break;
 			case 'types':
@@ -625,6 +634,14 @@ class wsdl extends XMLSchema {
 			return false;
 		}
 		$this->debug($this->varDump($opData));
+
+		// Get encoding style for output and set to current
+		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+			$encodingStyle = $opData['output']['encodingStyle'];
+			$enc_style = $encodingStyle;
+		}
+
 		// set input params
 		$xml = '';
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
@@ -634,14 +651,21 @@ class wsdl extends XMLSchema {
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+				// Track encoding style
+				if($encodingStyle != $opData[$direction]['encodingStyle']) {
+					$encodingStyle = $opData[$direction]['encodingStyle'];			
+					$enc_style = $encodingStyle;
+				} else {
+					$enc_style = false;
+				}
 				// NOTE: add error handling here
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
 					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
 				} elseif(is_array($parameters)) {
 					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
 				} else {
 					$this->debug('no parameters passed.');
 				}
@@ -676,6 +700,14 @@ class wsdl extends XMLSchema {
 			return false;
 		}
 		$this->debug($this->varDump($opData));
+		
+		// Get encoding style for output and set to current
+		$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+		if(($direction == 'input') && ($opData['output']['encodingStyle'] != $encodingStyle)) {
+			$encodingStyle = $opData['output']['encodingStyle'];
+			$enc_style = $encodingStyle;
+		}
+		
 		// set input params
 		$xml = '';
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
@@ -685,14 +717,21 @@ class wsdl extends XMLSchema {
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				$this->debug('serializing part "'.$name.'" of type "'.$type.'"');
+				// Track encoding style
+				if($encodingStyle != $opData[$direction]['encodingStyle']) {
+					$encodingStyle = $opData[$direction]['encodingStyle'];			
+					$enc_style = $encodingStyle;
+				} else {
+					$enc_style = false;
+				}
 				// NOTE: add error handling here
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
 					$this->debug('calling serializeType w/ named param');
-					$xml .= $this->serializeType($name, $type, $parameters[$name], $use);
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $enc_style);
 				} elseif(is_array($parameters)) {
 					$this->debug('calling serializeType w/ unnamed param');
-					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use);
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $enc_style);
 				} else {
 					$this->debug('no parameters passed.');
 				}
@@ -708,12 +747,16 @@ class wsdl extends XMLSchema {
 	 * @param string $type , type of type, heh (type or element)
 	 * @param mixed $value , a native PHP value (parameter value)
 	 * @param string $use , use for part (encoded|literal)
+	 * @param string $encodingStyle , use to add encoding changes to serialisation
 	 * @return string serialization
 	 * @access public 
 	 */
-	function serializeType($name, $type, $value, $use='encoded')
+	function serializeType($name, $type, $value, $use='encoded', $encodingStyle=false)
 	{
-		$this->debug("in serializeType: $name, $type, $value, $use");
+		$this->debug("in serializeType: $name, $type, $value, $use, $encodingStyle");
+		if($use == 'encoded' && $encodingStyle) {
+			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
+		}
 		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -736,7 +779,7 @@ class wsdl extends XMLSchema {
 				if ($use == 'literal') {
 					return "<$name>$value</$name>";
 				} else {
-					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
 				}
 			} 
 		} else {
@@ -766,7 +809,7 @@ class wsdl extends XMLSchema {
 			if ($use == 'literal') {
 				$xml = "<$elementName$elementNS>";
 			} else {
-				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
+				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\"$encodingStyle>";
 			}
 			
 			if (isset($this->complexTypes[$uqType]['elements']) && is_array($this->complexTypes[$uqType]['elements'])) {
@@ -794,7 +837,7 @@ class wsdl extends XMLSchema {
 						// here with a single namespace, which is correct for only
 						// some of the types.
 						if($this->getTypeDef($this->getLocalPart($attrs['type']))) {
-						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use);
+						    $xml .= $this->serializeType($eName, $attrs['type'], $v, $use, $encodingStyle);
 						// serialize generic type
 						} else {
 						    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);

@@ -72,3 +72,17 @@
 
 2003-08-16, version 0.6.5
 - soap_parser: fix code generating warning (thanks Torsten)
+
+2003-08-19, version 0.6.5
+- soap_parser: fix another line of code generating a warning (thanks Torsten)
+
+2003-08-22, version 0.6.5
+- soap_server: remove all '--' from debug_str; previous code changed '---' to '- --'
+- wsdl, soapclient, soap_parser: patch submitted by Mark Spavin as described by
+                                 the following...
+> Changes for the multiple/nested imports from the wsdl file. This builds an
+> array of files not just the last one and also checks for relative paths to
+> the parent. This will then get the imported files from the remote site
+> instead of your local disk. Local wsdl files should still work (untested).
+>
+> Changes for multiple encoding sytles as previously posted
