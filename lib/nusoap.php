@@ -819,11 +819,14 @@ class XMLSchema extends nusoap_base  {
 	// types, elements, attributes defined by the schema
 	var $attributes = array();
 	var $complexTypes = array();
-	var $currentComplexType = false;
+	var $complexTypeStack = array();
+	var $currentComplexType = null;
 	var $elements = array();
-	var $currentElement = false;
+	var $elementStack = array();
+	var $currentElement = null;
 	var $simpleTypes = array();
-	var $currentSimpleType = false;
+	var $simpleTypeStack = array();
+	var $currentSimpleType = null;
 	// imports
 	var $imports = array();
 	// parser vars
@@ -1046,7 +1049,7 @@ class XMLSchema extends nusoap_base  {
                     $this->attributes[$attrs['ref']] = $attrs;
 				}
                 
-				if(isset($this->currentComplexType)){	// This should *always* be set
+				if($this->currentComplexType){	// This should *always* be
 					$this->complexTypes[$this->currentComplexType]['attrs'][$aname] = $attrs;
 				}
 				// arrayType attribute
@@ -1071,6 +1074,7 @@ class XMLSchema extends nusoap_base  {
 			case 'complexContent':	// (optional) content for a complexType
 			break;
 			case 'complexType':
+				array_push($this->complexTypeStack, $this->currentComplexType);
 				if(isset($attrs['name'])){
 					$this->xdebug('processing named complexType '.$attrs['name']);
 					//$this->currentElement = false;
@@ -1112,6 +1116,7 @@ class XMLSchema extends nusoap_base  {
 				}
 			break;
 			case 'element':
+				array_push($this->elementStack, $this->currentElement);
 				// elements defined as part of a complex type should
 				// not really be added to $this->elements, but for some
 				// reason, they are
@@ -1143,6 +1148,7 @@ class XMLSchema extends nusoap_base  {
 					$ename = $attrs['name'];
 				} elseif(isset($attrs['ref'])){
 					$this->xdebug("processing element as ref to ".$attrs['ref']);
+					$this->currentElement = "ref to ".$attrs['ref'];
 					$ename = $this->getLocalPart($attrs['ref']);
 				} else {
 					$this->xdebug("processing untyped element ".$attrs['name']);
@@ -1206,6 +1212,7 @@ class XMLSchema extends nusoap_base  {
 			case 'simpleContent':	// (optional) content for a complexType
 			break;
 			case 'simpleType':
+				array_push($this->simpleTypeStack, $this->currentSimpleType);
 				if(isset($attrs['name'])){
 					$this->xdebug("processing simpleType for name " . $attrs['name']);
 					$this->currentSimpleType = $attrs['name'];
@@ -1249,19 +1256,18 @@ class XMLSchema extends nusoap_base  {
         	$prefix = '';
         }
 		// move on...
-		// TODO: pop stacks here, since these things can be encapsulated recursively
 		if($name == 'complexType'){
 			$this->xdebug('done processing complexType ' . ($this->currentComplexType ? $this->currentComplexType : '(unknown)'));
-			$this->currentComplexType = false;
+			$this->currentComplexType = array_pop($this->complexTypeStack);
 			//$this->currentElement = false;
 		}
 		if($name == 'element'){
 			$this->xdebug('done processing element ' . ($this->currentElement ? $this->currentElement : '(unknown)'));
-			$this->currentElement = false;
+			$this->currentElement = array_pop($this->elementStack);
 		}
 		if($name == 'simpleType'){
 			$this->xdebug('done processing simpleType ' . ($this->currentSimpleType ? $this->currentSimpleType : '(unknown)'));
-			$this->currentSimpleType = false;
+			$this->currentSimpleType = array_pop($this->simpleTypeStack);
 		}
 	}
 

@@ -321,4 +321,7 @@
 - xmlschema: handle WSDL for SOAP Array that uses the base attribute plus a sequence of element
 
 2005-01-22, version 0.6.8
-- wsdl: Allow an element in one schema to have a type from another schema
+- wsdl: allow an element in one schema to have a type from another schema
+
+2005-01-24, version 0.6.8
+- xmlschema: correctly parse nested complexType definitions
