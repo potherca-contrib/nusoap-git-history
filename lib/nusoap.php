@@ -3029,19 +3029,30 @@ class wsdl extends XMLSchema {
 				$xml = "<$elementName$elementNS xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
 			}
 			if (is_array($this->complexTypes[$uqType]['elements'])) {
+				// toggle whether all elements are present - ideally should validate against schema
+				if(count($this->complexTypes[$uqType]['elements']) != count($value)){
+					$optionals = true;
+				}
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
-					// get value
-					if (isset($value[$eName])) {
-					    $v = $value[$eName];
-					} elseif (is_array($value)) {
-					    $v = array_shift($value);
-					} 
-					if (!isset($attrs['type'])) {
-					    $xml .= $this->serializeType($eName, $attrs['name'], $v, $use);
+					// if user took advantage of a minOccurs=0, then only serialize named parameters
+					if($optionals && !isset($value[$eName])){
+						// do nothing
 					} else {
-					    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);
-					    $xml .= $this->serialize_val($v, $eName, $this->getLocalPart($attrs['type']), null, $this->getNamespaceFromPrefix($this->getPrefix($attrs['type'])), false, $use);
-					} 
+						// get value
+						if (isset($value[$eName])) {
+						    $v = $value[$eName];
+						} elseif (is_array($value)) {
+						    $v = array_shift($value);
+						}
+						// serialize schema-defined type
+						if (!isset($attrs['type'])) {
+						    $xml .= $this->serializeType($eName, $attrs['name'], $v, $use);
+						// serialize generic type
+						} else {
+						    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);
+						    $xml .= $this->serialize_val($v, $eName, $this->getLocalPart($attrs['type']), null, $this->getNamespaceFromPrefix($this->getPrefix($attrs['type'])), false, $use);
+						}
+					}
 				} 
 			}
 			$xml .= "</$elementName>";
