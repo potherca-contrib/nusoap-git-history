@@ -509,7 +509,7 @@ class wsdl extends XMLSchema {
 				//foreach($this->bindings[ $portData['binding'] ]['operations'] as $bOperation => $opData) {
 				foreach(array_keys($this->bindings[ $portData['binding'] ]['operations']) as $bOperation) {
 					if ($operation == $bOperation) {
-						$opData =& $this->bindings[ $portData['binding'] ]['operations'][$operation];
+						$opData = $this->bindings[ $portData['binding'] ]['operations'][$operation];
 					    return $opData;
 					} 
 				} 

@@ -22,7 +22,8 @@ class soap_server extends nusoap_base {
 	var $fault = false;
 	var $result = 'successful';
 	var $wsdl = false;
-    var $debug_flag = 0;
+	var $externalWSDLURL = false;
+    var $debug_flag = 1;
 	
 	/**
 	* constructor
@@ -42,6 +43,7 @@ class soap_server extends nusoap_base {
 		// wsdl
 		if($wsdl){
 			$this->wsdl = new wsdl($wsdl);
+			$this->externalWSDLURL = $wsdl;
 			if($err = $this->wsdl->getError()){
 				die('WSDL ERROR: '.$err);
 			}
@@ -66,10 +68,18 @@ class soap_server extends nusoap_base {
 		}
 		// gen wsdl
 		if(isset($qs) && ereg('wsdl', $qs) ){
-			header("Content-Type: text/xml\r\n");
-			print $this->wsdl->serialize();
+			if($this->externalWSDLURL){
+				header('Location: '.$this->externalWSDLURL);
+				exit();
+			} else {
+				header("Content-Type: text/xml\r\n");
+				print $this->wsdl->serialize();
+				exit();
+			}
+		}
+		
 		// print web interface
-		} elseif($data == '' && $this->wsdl){
+		if($data == '' && $this->wsdl){
 			print $this->webDescription();
 		} else {
 			
@@ -162,8 +172,9 @@ class soap_server extends nusoap_base {
 			}
 			if($this->wsdl){
 				if(!$this->opData = $this->wsdl->getOperationData($this->methodname)){
+				//if(
 			    	$this->fault('Server',"Operation '$this->methodname' is not defined in the WSDL for this service");
-				return $this->fault->serialize();
+					return $this->fault->serialize();
 			    }
 			}
 			$this->debug("method '$this->methodname' exists");
@@ -262,7 +273,11 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function verify_method($operation,$request){
-	    if(isset($this->operations[$operation])){
+		if(isset($this->wsdl) && is_object($this->wsdl)){
+			if($this->wsdl->getOperationData($operation)){
+				return true;
+			}
+	    } elseif(isset($this->operations[$operation])){
 			return true;
 		}
 		return false;
