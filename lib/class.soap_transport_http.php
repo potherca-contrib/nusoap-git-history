@@ -18,6 +18,8 @@ class soap_transport_http extends nusoap_base {
 	var $scheme = '';
 	var $protocol_version = '1.0';
 	var $encoding = '';
+	var $outgoing_headers = array();
+	var $incoming_headers = array();
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	
@@ -38,52 +40,9 @@ class soap_transport_http extends nusoap_base {
 			$this->port = 80;
 		}
 	}
-
-	/**
-	* if authenticating, set user credentials here
-	*
-	* @param    string $user
-	* @param    string $pass
-	* @access   public
-	*/
-	function setCredentials($username, $password) {
-		$this->username = $username;
-		$this->password = $password;
-	}
-
-	/**
-	* set the soapaction value
-	*
-	* @param    string $soapaction
-	* @access   public
-	*/
-	function setSOAPAction($soapaction) {
-		$this->soapaction = $soapaction;
-	}
-
-	/**
-	* set proxy info here
-	*
-	* @param    string $proxyhost
-	* @param    string $proxyport
-	* @access   public
-	*/
-	function setProxy($proxyhost, $proxyport) {
-		$this->proxyhost = $proxyhost;
-		$this->proxyport = $proxyport;
-	}
-
-	/**
-	* send the SOAP message via HTTP
-	*
-	* @param    string $data message data
-	* @param    integer $timeout set timeout in seconds
-	* @return	string data
-	* @access   public
-	*/
-	function send($data, $timeout=0) {
 	
-		$this->debug('entered send() with data of length: '.strlen($data));
+	function connect($timeout){
+		
 		// proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
 			$host = $this->proxyhost;
@@ -113,37 +72,54 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
-		$this->debug('socket connected');
-		// http auth
-		$credentials = '';
-		if($this->username != '') {
-			$this->debug('setting http auth credentials');
-			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
+		return $fp;
+	}
+	
+	/**
+	* send the SOAP message via HTTP
+	*
+	* @param    string $data message data
+	* @param    integer $timeout set timeout in seconds
+	* @return	string data
+	* @access   public
+	*/
+	function send($data, $timeout=0) {
+		$this->debug('entered send() with data of length: '.strlen($data));
+		// get connnection
+		if(!$fp = $this->connect($timeout)){
+			return false;
 		}
+		$this->debug('socket connected');
+		
+		// start building outgoing payload:
 		// swap url for path if going through a proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
 			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
 			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
-		// set encoding headers
-		if($this->encoding != '' && function_exists('gzdeflate')){
-			$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
-			"Connection: close\r\n";
-			set_magic_quotes_runtime(0);
-		} else {
-			$encoding_headers = '';
-		}
 		// make payload
 		$this->outgoing_payload .=
 			"User-Agent: $this->title/$this->version\r\n".
-			//"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
-			"Host: ".$this->host."\r\n".
-			$credentials.
-			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
-			$encoding_headers.
-			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
-			$data;
+			"Host: ".$this->host."\r\n";
+		// http auth
+		$credentials = '';
+		if($this->username != '') {
+			$this->debug('setting http auth credentials');
+			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
+		}
+		// set content type
+		$this->outgoing_payload .= "Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n";
+		// set encoding headers
+		if($this->encoding != '' && function_exists('gzdeflate')){
+			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
+			"Connection: close\r\n";
+			set_magic_quotes_runtime(0);
+		}
+		// set soapaction
+		$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n\r\n";
+		// add data
+		$this->outgoing_payload .= $data;
 		
 		// send payload
 		if(!fputs($fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
@@ -284,6 +260,9 @@ class soap_transport_http extends nusoap_base {
 		if(function_exists('gzinflate')){
 			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
 		}
+		// persistent connection
+		//curl_setopt($ch, CURL_HTTP_VERSION_1_1, true);
+		
 		// set timeout
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
@@ -380,20 +359,16 @@ class soap_transport_http extends nusoap_base {
 		
 		// decode transfer-encoding
 		if($headers['Transfer-Encoding'] == 'chunked'){
-			//$timer->setMarker('starting to decode chunked content');
 			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
 			}
-			//$timer->setMarker('finished decoding of chunked content');
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 		}
 		// decode content-encoding
 		if($headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){
-					//$timer->setMarker('starting decoding of gzip/deflated content');
 					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
     					$data = $degzdata;
 					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
@@ -401,8 +376,6 @@ class soap_transport_http extends nusoap_base {
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
 					}
-					//$timer->setMarker('finished decoding of gzip/deflated content');
-					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
     			} else {
 					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
 				}
@@ -413,13 +386,59 @@ class soap_transport_http extends nusoap_base {
 		return $data;
 	}
 	
+	/**
+	* if authenticating, set user credentials here
+	*
+	* @param    string $user
+	* @param    string $pass
+	* @access   public
+	*/
+	function setCredentials($username, $password) {
+		$this->username = $username;
+		$this->password = $password;
+	}
+	
+	/**
+	* set the soapaction value
+	*
+	* @param    string $soapaction
+	* @access   public
+	*/
+	function setSOAPAction($soapaction) {
+		$this->soapaction = $soapaction;
+	}
+	
+	/**
+	* use http encoding
+	*
+	* @param    string $enc encoding style. supported values: gzip, deflate, or both
+	* @access   public
+	*/
 	function setEncoding($enc='gzip, deflate'){
 		$this->encoding = $enc;
 		$this->protocol_version = '1.1';
 	}
 	
-	// This function will decode "chunked' transfer encoding
- 	// as defined in RFC2068 19.4.6
+	/**
+	* set proxy info here
+	*
+	* @param    string $proxyhost
+	* @param    string $proxyport
+	* @access   public
+	*/
+	function setProxy($proxyhost, $proxyport) {
+		$this->proxyhost = $proxyhost;
+		$this->proxyport = $proxyport;
+	}
+	
+	/**
+	* decode a string that is encoded w/ "chunked' transfer encoding
+ 	* as defined in RFC2068 19.4.6
+	*
+	* @param    string $buffer
+	* @returns	string
+	* @access   public
+	*/
 	function decodeChunked($buffer){
 		// length := 0
 		$length = 0;

@@ -33,6 +33,8 @@ class soapclient extends nusoap_base  {
 	var $http_encoding = false;
 	var $timeout = 0;
 	var $endpointType = '';
+	var $persistentConnection = false;
+	
 	/**
 	* fault related variables
 	*
@@ -222,7 +224,11 @@ class soapclient extends nusoap_base  {
 			// http(s)
 			case ereg('^http',$this->endpoint):
 				$this->debug('transporting via HTTP');
-				$http = new soap_transport_http($this->endpoint);
+				if($this->persistentConnection && is_object($this->persistentConnection)){
+					$http =& $this->persistentConnection;
+				} else {
+					$http = new soap_transport_http($this->endpoint);
+				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport);
@@ -255,6 +261,10 @@ class soapclient extends nusoap_base  {
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
 				$this->debug("transport debug data...\n".$http->debug_str);
+				// save transport object if using persistent connections
+				if($this->persistentConnection && !is_object($this->persistentConnection)){
+					$this->persistentConnection = $http;
+				}
 				if($err = $http->getError()){
 					$this->setError('HTTP Error: '.$err);
 					return false;
@@ -358,6 +368,15 @@ class soapclient extends nusoap_base  {
 	*/
 	function setHTTPEncoding($enc='gzip, deflate'){
 		$this->http_encoding = $enc;
+	}
+	
+	/**
+	* use HTTP persistent connections if possible
+	*
+	* @access   public
+	*/
+	function useHTTPPersistentConnection(){
+		$this->persistentConnection = true;
 	}
 	
 	/**
