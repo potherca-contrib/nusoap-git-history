@@ -1397,7 +1397,7 @@ class soap_transport_http extends nusoap_base {
 			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password")."\r\n";
 		}
 		// set content type
-		$this->outgoing_payload .= 'Content-Type: text/xml; charset="'.$this->soap_defencoding."\"\r\nContent-Length: ".strlen($data)."\r\n";
+		$this->outgoing_payload .= 'Content-Type: text/xml; charset='.$this->soap_defencoding."\r\nContent-Length: ".strlen($data)."\r\n";
 		// http encoding
 		if($this->encoding != '' && function_exists('gzdeflate')){
 			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
@@ -3057,7 +3057,7 @@ class wsdl extends XMLSchema {
 				}
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
 					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if($optionals && !isset($value[$eName])){
+					if(isset($optionals) && !isset($value[$eName])){
 						// do nothing
 					} else {
 						// get value
@@ -3230,6 +3230,7 @@ class soap_parser extends nusoap_base {
 	var $debug_flag = true;
 	var $soapresponse = NULL;
 	var $responseHeaders = '';
+	var $body_position = 0;
 	// for multiref parsing:
 	// array of id => pos
 	var $ids = array();
@@ -3275,7 +3276,7 @@ class soap_parser extends nusoap_base {
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
 				// get header value
-				if($this->root_header != ""){
+				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
 					$this->responseHeaders = $this->message[$this->root_header]['result'];
 				}
 				// resolve hrefs/ids
@@ -3593,8 +3594,21 @@ class soap_parser extends nusoap_base {
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
             } else {
+            	// is array or struct? better way to do this probably
             	foreach($children as $child_pos){
-				    $params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
+            			$struct = 1;
+            			break;
+            		}
+            		$keys[$this->message[$child_pos]['name']] = 1;
+            	}
+            	//
+            	foreach($children as $child_pos){
+            		if(isset($struct)){
+            			$params[] = &$this->message[$child_pos]['result'];
+            		} else {
+				    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+                	}
                 }
 			}
 			return is_array($params) ? $params : array();
@@ -3859,6 +3873,8 @@ class soapclient extends nusoap_base  {
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
+					// pass encoding into transport layer, so appropriate http headers are sent
+					$http->soap_defencoding = $this->soap_defencoding;
 				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){

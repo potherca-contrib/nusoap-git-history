@@ -246,6 +246,8 @@ class soapclient extends nusoap_base  {
 					$http =& $this->persistentConnection;
 				} else {
 					$http = new soap_transport_http($this->endpoint);
+					// pass encoding into transport layer, so appropriate http headers are sent
+					$http->soap_defencoding = $this->soap_defencoding;
 				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){

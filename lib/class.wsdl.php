@@ -752,7 +752,7 @@ class wsdl extends XMLSchema {
 				}
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
 					// if user took advantage of a minOccurs=0, then only serialize named parameters
-					if($optionals && !isset($value[$eName])){
+					if(isset($optionals) && !isset($value[$eName])){
 						// do nothing
 					} else {
 						// get value

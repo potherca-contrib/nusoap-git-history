@@ -35,6 +35,7 @@ class soap_parser extends nusoap_base {
 	var $debug_flag = true;
 	var $soapresponse = NULL;
 	var $responseHeaders = '';
+	var $body_position = 0;
 	// for multiref parsing:
 	// array of id => pos
 	var $ids = array();
@@ -80,7 +81,7 @@ class soap_parser extends nusoap_base {
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
 				// get header value
-				if($this->root_header != ""){
+				if($this->root_header != '' && isset($this->message[$this->root_header]['result'])){
 					$this->responseHeaders = $this->message[$this->root_header]['result'];
 				}
 				// resolve hrefs/ids
@@ -398,8 +399,21 @@ class soap_parser extends nusoap_base {
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
             } else {
+            	// is array or struct? better way to do this probably
             	foreach($children as $child_pos){
-				    $params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
+            			$struct = 1;
+            			break;
+            		}
+            		$keys[$this->message[$child_pos]['name']] = 1;
+            	}
+            	//
+            	foreach($children as $child_pos){
+            		if(isset($struct)){
+            			$params[] = &$this->message[$child_pos]['result'];
+            		} else {
+				    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
+                	}
                 }
 			}
 			return is_array($params) ? $params : array();
