@@ -278,7 +278,7 @@ class soap_parser extends nusoap_base {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
 				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 				
-				// add value to parent's result, if parent is struct/array
+				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
 				if($this->message[$parent]['type'] != 'map'){
 					if(strtolower($this->message[$parent]['type']) == 'array'){
@@ -287,6 +287,7 @@ class soap_parser extends nusoap_base {
 						$this->message[$parent]['result'][$this->message[$pos]['name']] = $this->message[$pos]['result'];
 					}
 				}
+				*/
 			}
 		}
 		
