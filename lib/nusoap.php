@@ -918,7 +918,7 @@ class XMLSchema extends nusoap_base  {
 			// attributes
 			if(count($attrs['attrs']) >= 1){
 				foreach($attrs['attrs'] as $attr => $aParts){
-					$contentStr .= '<$schemaPrefix:attribute ref="'.$aParts['ref'].'"';
+					$contentStr .= "<$schemaPrefix:attribute ref=\"".$aParts['ref'].'"';
 					if(isset($aParts['wsdl:arrayType'])){
 						$contentStr .= ' wsdl:arrayType="'.$aParts['wsdl:arrayType'].'"';
 					}
@@ -1972,6 +1972,7 @@ class soap_server extends nusoap_base {
 	* @access   private
 	*/
 	function parse_request($data='') {
+		global $HTTP_SERVER_VARS;
 		$this->debug('entering parseRequest() on '.date('H:i Y-m-d'));
         $dump = '';
 		// get headers
@@ -1998,7 +1999,24 @@ class soap_server extends nusoap_base {
 		} elseif(is_array($_SERVER)){
 			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
 			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? $_SERVER['SOAPAction'] : '';
+		} elseif (is_array($HTTP_SERVER_VARS)) {
+			$this->headers['User-Agent'] = $HTTP_SERVER_VARS['HTTP_USER_AGENT'];
+			$this->SOAPAction = isset($HTTP_SERVER_VARS['SOAPAction']) ? $HTTP_SERVER_VARS['SOAPAction'] : '';
+			// get the character encoding of the incoming request
+			if (isset($HTTP_SERVER_VARS['CONTENT_TYPE'])) {
+				if (strpos($HTTP_SERVER_VARS['CONTENT_TYPE'], '=')) {
+					$enc = substr(strstr($HTTP_SERVER_VARS['CONTENT_TYPE'], '='), 1);
+					$enc = str_replace('"','',$enc);
+					$enc = str_replace('\\','',$enc);
+					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+						$this->xml_encoding = $enc;
+					} else {
+						$this->xml_encoding = 'us-ascii';
+					}
+				}
+			}
 		}
+		$this->debug('got encoding: '.$this->xml_encoding);
 		$this->request = $dump."\r\n\r\n".$data;
 		// parse response, get soap parser obj
 		$parser = new soap_parser($data,$this->xml_encoding);

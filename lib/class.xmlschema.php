@@ -346,7 +346,7 @@ class XMLSchema extends nusoap_base  {
 			// attributes
 			if(count($attrs['attrs']) >= 1){
 				foreach($attrs['attrs'] as $attr => $aParts){
-					$contentStr .= '<$schemaPrefix:attribute ref="'.$aParts['ref'].'"';
+					$contentStr .= "<$schemaPrefix:attribute ref=\"".$aParts['ref'].'"';
 					if(isset($aParts['wsdl:arrayType'])){
 						$contentStr .= ' wsdl:arrayType="'.$aParts['wsdl:arrayType'].'"';
 					}

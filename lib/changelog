@@ -16,3 +16,4 @@
 - xmlschema: emit import statements and qualify all elements with prefix in serializeSchema (better interop with validation tools)
 - soapclient: get xml character encoding from HTTP Content-Type header if provided, e.g. text/xml;charset="UTF-8"
 - soapclient: use headers in call if provided (previously ignored this parameter)
+- soap_server: in parse_request, if neither getallheaders nor $_SERVER are available, use $HTTP_SERVER_VARS to get SOAPAction and xml encoding
