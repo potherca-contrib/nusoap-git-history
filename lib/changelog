@@ -17,3 +17,6 @@
 - soapclient: get xml character encoding from HTTP Content-Type header if provided, e.g. text/xml;charset="UTF-8"
 - soapclient: use headers in call if provided (previously ignored this parameter)
 - soap_server: in parse_request, if neither getallheaders nor $_SERVER are available, use $HTTP_SERVER_VARS to get SOAPAction and xml encoding
+
+2003-07-24, version 0.6.5
+- soap_transport_http: apply patch from Steven Brown "if the server closes connection prematurely, nusoap would spin trying to read data that isn't there"

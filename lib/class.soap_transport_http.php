@@ -426,6 +426,13 @@ class soap_transport_http extends nusoap_base {
 	    // loop until headers have been retrieved
 	    $data = '';
 	    while (!isset($lb)){
+
+			// We might EOF during header read.
+			if(feof($this->fp)) {
+				$this->setError('server failed to send headers');
+				return false;
+			}
+
 			$data .= fgets($this->fp, 256);
 			$pos = strpos($data,"\r\n\r\n");
 			if($pos > 1){
