@@ -37,8 +37,28 @@ class soap_server extends nusoap_base {
 
 		// turn on debugging?
 		global $debug;
-		if(isset($debug)){
-			$this->debug_flag = 1;
+		global $_REQUEST;
+		global $_SERVER;
+		global $HTTP_SERVER_VARS;
+
+		if (isset($debug)) {
+			$this->debug_flag = $debug;
+		} else if (isset($_REQUEST['debug'])) {
+			$this->debug_flag = $_REQUEST['debug'];
+		} else if (isset($_SERVER['QUERY_STRING'])) {
+			$qs = explode('&', $_SERVER['QUERY_STRING']);
+			foreach ($qs as $v) {
+				if (substr($v, 0, 6) == 'debug=') {
+					$this->debug_flag = substr($v, 6);
+				}
+			}
+		} else if (isset($HTTP_SERVER_VARS['QUERY_STRING'])) {
+			$qs = explode('&', $HTTP_SERVER_VARS['QUERY_STRING']);
+			foreach ($qs as $v) {
+				if (substr($v, 0, 6) == 'debug=') {
+					$this->debug_flag = substr($v, 6);
+				}
+			}
 		}
 
 		// wsdl

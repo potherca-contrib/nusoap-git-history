@@ -58,3 +58,10 @@
 - soap_transport_http: deflate is gzcompress/gzuncompress (cf. http://archive.develooper.com/libwww@perl.org/msg04650.html)
 - soap_transport_http: clean use of persistentConnection so it's always a set boolean
 - soapclient: add responseData member to access deflated/gunzipped payload
+
+2003-08-05, version 0.6.5
+- soap_server: look multiple places when setting debug_flag
+
+2003-08-07, version 0.6.5
+- nusoap_base: serialize specified type (e.g. ArrayOfString) even for simple array
+- wsdl: only specify encodingStyle in the input/output soap bindings when it is not empty (thanks Guillaume)

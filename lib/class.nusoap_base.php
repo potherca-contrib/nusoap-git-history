@@ -313,25 +313,30 @@ class nusoap_base {
 							} elseif ($tt_ns) {
 								$tt_prefix = 'ns' . rand(1000, 9999);
 								$array_typename = "$tt_prefix:$tt";
-								$atts .= " xmlns:$tt_prefix=\"$tt_ns\"";
+								$xmlns .= " xmlns:$tt_prefix=\"$tt_ns\"";
 							} else {
 								$array_typename = $tt;
 							}
 						}
 						$array_type = $i;
 						if ($use == 'literal') {
-							$xml = "<$name $atts>".$xml."</$name>";
+							$type_str = '';
+						} else if (isset($type) && isset($type_prefix)) {
+							$type_str = " xsi:type=\"$type_prefix:$type\"";
 						} else {
-							$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
+							$type_str = " xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"";
 						}
 					// empty array
 					} else {
 						if ($use == 'literal') {
-							$xml = "<$name $atts>".$xml."</$name>";;
+							$type_str = '';
+						} else if (isset($type) && isset($type_prefix)) {
+							$type_str = " xsi:type=\"$type_prefix:$type\"";
 						} else {
-							$xml = "<$name xsi:type=\"SOAP-ENC:Array\" $atts>".$xml."</$name>";;
+							$type_str = " xsi:type=\"SOAP-ENC:Array\"";
 						}
 					}
+					$xml = "<$name$xmlns$type_str$atts>".$xml."</$name>";
 				} else {
 					// got a struct
 					if(isset($type) && isset($type_prefix)){

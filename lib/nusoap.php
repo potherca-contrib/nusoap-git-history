@@ -313,25 +313,30 @@ class nusoap_base {
 							} elseif ($tt_ns) {
 								$tt_prefix = 'ns' . rand(1000, 9999);
 								$array_typename = "$tt_prefix:$tt";
-								$atts .= " xmlns:$tt_prefix=\"$tt_ns\"";
+								$xmlns .= " xmlns:$tt_prefix=\"$tt_ns\"";
 							} else {
 								$array_typename = $tt;
 							}
 						}
 						$array_type = $i;
 						if ($use == 'literal') {
-							$xml = "<$name $atts>".$xml."</$name>";
+							$type_str = '';
+						} else if (isset($type) && isset($type_prefix)) {
+							$type_str = " xsi:type=\"$type_prefix:$type\"";
 						} else {
-							$xml = "<$name xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"$atts>".$xml."</$name>";
+							$type_str = " xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"".$array_typename."[$array_type]\"";
 						}
 					// empty array
 					} else {
 						if ($use == 'literal') {
-							$xml = "<$name $atts>".$xml."</$name>";;
+							$type_str = '';
+						} else if (isset($type) && isset($type_prefix)) {
+							$type_str = " xsi:type=\"$type_prefix:$type\"";
 						} else {
-							$xml = "<$name xsi:type=\"SOAP-ENC:Array\" $atts>".$xml."</$name>";;
+							$type_str = " xsi:type=\"SOAP-ENC:Array\"";
 						}
 					}
+					$xml = "<$name$xmlns$type_str$atts>".$xml."</$name>";
 				} else {
 					// got a struct
 					if(isset($type) && isset($type_prefix)){
@@ -1888,8 +1893,28 @@ class soap_server extends nusoap_base {
 
 		// turn on debugging?
 		global $debug;
-		if(isset($debug)){
-			$this->debug_flag = 1;
+		global $_REQUEST;
+		global $_SERVER;
+		global $HTTP_SERVER_VARS;
+
+		if (isset($debug)) {
+			$this->debug_flag = $debug;
+		} else if (isset($_REQUEST['debug'])) {
+			$this->debug_flag = $_REQUEST['debug'];
+		} else if (isset($_SERVER['QUERY_STRING'])) {
+			$qs = explode('&', $_SERVER['QUERY_STRING']);
+			foreach ($qs as $v) {
+				if (substr($v, 0, 6) == 'debug=') {
+					$this->debug_flag = substr($v, 6);
+				}
+			}
+		} else if (isset($HTTP_SERVER_VARS['QUERY_STRING'])) {
+			$qs = explode('&', $HTTP_SERVER_VARS['QUERY_STRING']);
+			foreach ($qs as $v) {
+				if (substr($v, 0, 6) == 'debug=') {
+					$this->debug_flag = substr($v, 6);
+				}
+			}
 		}
 
 		// wsdl
@@ -3008,8 +3033,18 @@ class wsdl extends XMLSchema {
 				foreach($attrs['operations'] as $opName => $opParts) {
 					$binding_xml .= '<operation name="' . $opName . '">';
 					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
-					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"/></input>';
-					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"/></output>';
+					if (isset($opParts['input']['encodingStyle']) && $opParts['input']['encodingStyle'] != '') {
+						$enc_style = '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
+					} else {
+						$enc_style = '';
+					}
+					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . $enc_style . '/></input>';
+					if (isset($opParts['output']['encodingStyle']) && $opParts['output']['encodingStyle'] != '') {
+						$enc_style = '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
+					} else {
+						$enc_style = '';
+					}
+					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . $enc_style . '/></output>';
 					$binding_xml .= '</operation>';
 					$portType_xml .= '<operation name="' . $opParts['name'] . '"';
 					if (isset($opParts['parameterOrder'])) {

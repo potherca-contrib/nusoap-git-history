@@ -556,8 +556,18 @@ class wsdl extends XMLSchema {
 				foreach($attrs['operations'] as $opName => $opParts) {
 					$binding_xml .= '<operation name="' . $opName . '">';
 					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
-					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"/></input>';
-					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"/></output>';
+					if (isset($opParts['input']['encodingStyle']) && $opParts['input']['encodingStyle'] != '') {
+						$enc_style = '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"';
+					} else {
+						$enc_style = '';
+					}
+					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . $enc_style . '/></input>';
+					if (isset($opParts['output']['encodingStyle']) && $opParts['output']['encodingStyle'] != '') {
+						$enc_style = '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"';
+					} else {
+						$enc_style = '';
+					}
+					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . $enc_style . '/></output>';
 					$binding_xml .= '</operation>';
 					$portType_xml .= '<operation name="' . $opParts['name'] . '"';
 					if (isset($opParts['parameterOrder'])) {
