@@ -41,3 +41,12 @@
 - wsdl: add proxy authentication
 - soapclient: add proxy authentication
 - soapclient: allow proxy information in ctor, so that it can be used for wsdl
+
+2003-08-01, version 0.6.5
+- soap_transport_http: close a persistent connection that's at EOF
+- soap_transport_http: prevent conflicts between setEncoding and usePersistentConnection
+- soap_transport_http: fix use of $headers instead of $this->incoming_headers in getResponse
+- soapclient: improve handling of persistent connections
+- soapclient: force xml_encoding to upper case
+- soap_server: let the Web server decide whether to close the connection (no Connection: close header)
+- soap_server: force xml_encoding to upper case

@@ -262,6 +262,9 @@ class soapclient extends nusoap_base  {
 					$http = new soap_transport_http($this->endpoint);
 					// pass encoding into transport layer, so appropriate http headers are sent
 					$http->soap_defencoding = $this->soap_defencoding;
+					if ($this->persistentConnection) {
+						$http->usePersistentConnection();
+					}
 				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
@@ -298,7 +301,6 @@ class soapclient extends nusoap_base  {
 				
 				// save transport object if using persistent connections
 				if($this->persistentConnection && !is_object($this->persistentConnection)){
-					$http->usePersistentConnection();
 					$this->persistentConnection = $http;
 				}
 				
@@ -310,12 +312,13 @@ class soapclient extends nusoap_base  {
 				} else {
 					if(strpos($http->incoming_headers['content-type'],'=')){
 						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
-						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-							$this->xml_encoding = $enc;
-						}
 						$this->debug('got response encoding: '.$enc);
+						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+							$this->xml_encoding = strtoupper($enc);
+						}
+						// TODO: should we set a default encoding?
 					}
-					$this->debug('got response, length: '.strlen($response));
+					$this->debug('got response, length: '.strlen($response).' use encoding: '.$this->xml_encoding);
 					return $this->parseResponse($response);
 				}
 			break;

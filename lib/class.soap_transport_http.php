@@ -68,7 +68,12 @@ class soap_transport_http extends nusoap_base {
 		
 		// use persistent connection
 		if($this->persistentConnection == 1 && is_resource($this->fp)){
-			return true;
+			if (!feof($this->fp)) {
+				$this->debug('Re-use persistent connection');
+				return true;
+			}
+			fclose($this->fp);
+			$this->debug('Closed persistent connection at EOF');
 		}
 		
 		// set timeout
@@ -88,6 +93,7 @@ class soap_transport_http extends nusoap_base {
 		// set response timeout
 		socket_set_timeout( $this->fp, $response_timeout);
 		
+		$this->debug('socket connected');
 		return true;
 	}
 	
@@ -107,7 +113,6 @@ class soap_transport_http extends nusoap_base {
 		if(!$this->connect($timeout)){
 			return false;
 		}
-		$this->debug('socket connected');
 		
 		// send request
 		if(!$this->sendRequest($data)){
@@ -283,6 +288,7 @@ class soap_transport_http extends nusoap_base {
 		$this->protocol_version = '1.1';
 		$this->outgoing_headers['Accept-Encoding'] = $enc;
 		$this->outgoing_headers['Connection'] = 'close';
+		unset($this->persistentConnection);
 		set_magic_quotes_runtime(0);
 		// deprecated
 		$this->encoding = $enc;
@@ -327,6 +333,7 @@ class soap_transport_http extends nusoap_base {
 		$chunkstart = $chunkend;
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
+			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
 			
 			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
 		  	
@@ -458,7 +465,7 @@ class soap_transport_http extends nusoap_base {
 		// close filepointer
 		if(
 			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
-			!isset($this->persistentConnection)){
+			(!isset($this->persistentConnection)) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
 			$this->debug('closed socket');
@@ -473,7 +480,7 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 		
 		// decode transfer-encoding
-		if(isset($headers['transfer-encoding']) && $headers['transfer-encoding'] == 'chunked'){
+		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
 			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
@@ -482,14 +489,14 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// decode content-encoding
-		if(isset($headers['content-encoding']) && $headers['content-encoding'] != ''){
-			if($headers['content-encoding'] == 'deflate' || $headers['content-encoding'] == 'gzip'){
+		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
+			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){
 					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
     					$data = $degzdata;
-					} elseif($headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -512,9 +519,13 @@ class soap_transport_http extends nusoap_base {
 	}
 	
 	function usePersistentConnection(){
+		if (isset($this->outgoing_headers['Accept-Encoding'])) {
+			return false;
+		}
 		$this->protocol_version = '1.1';
 		$this->persistentConnection = 1;
 		$this->outgoing_headers['Connection'] = 'Keep-Alive';
+		return true;
 	}
 }
 

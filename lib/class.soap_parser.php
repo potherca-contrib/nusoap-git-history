@@ -56,7 +56,7 @@ class soap_parser extends nusoap_base {
 
 		// Check whether content has been read.
 		if(!empty($xml)){
-			$this->debug('Entering soap_parser()');
+			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
 			// Create an XML parser.
 			$this->parser = xml_parser_create($this->xml_encoding);
 			// Set the options for parsing the XML data.

@@ -1385,7 +1385,12 @@ class soap_transport_http extends nusoap_base {
 		
 		// use persistent connection
 		if($this->persistentConnection == 1 && is_resource($this->fp)){
-			return true;
+			if (!feof($this->fp)) {
+				$this->debug('Re-use persistent connection');
+				return true;
+			}
+			fclose($this->fp);
+			$this->debug('Closed persistent connection at EOF');
 		}
 		
 		// set timeout
@@ -1405,6 +1410,7 @@ class soap_transport_http extends nusoap_base {
 		// set response timeout
 		socket_set_timeout( $this->fp, $response_timeout);
 
+		$this->debug('socket connected');
 		return true;
 	}
 	
@@ -1424,7 +1430,6 @@ class soap_transport_http extends nusoap_base {
 		if(!$this->connect($timeout)){
 			return false;
 		}
-		$this->debug('socket connected');
 		
 		// send request
 		if(!$this->sendRequest($data)){
@@ -1600,6 +1605,7 @@ class soap_transport_http extends nusoap_base {
 		$this->protocol_version = '1.1';
 		$this->outgoing_headers['Accept-Encoding'] = $enc;
 		$this->outgoing_headers['Connection'] = 'close';
+		unset($this->persistentConnection);
 		set_magic_quotes_runtime(0);
 		// deprecated
 		$this->encoding = $enc;
@@ -1644,7 +1650,7 @@ class soap_transport_http extends nusoap_base {
 		$chunkstart = $chunkend;
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
-			
+			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
 			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
 		  	
 			// Just in case we got a broken connection
@@ -1775,7 +1781,7 @@ class soap_transport_http extends nusoap_base {
 		// close filepointer
 		if(
 			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
-			!isset($this->persistentConnection)){
+			(!isset($this->persistentConnection)) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
 			$this->debug('closed socket');
@@ -1790,7 +1796,7 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
 		
 		// decode transfer-encoding
-		if(isset($headers['transfer-encoding']) && $headers['transfer-encoding'] == 'chunked'){
+		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
 			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
@@ -1799,14 +1805,14 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// decode content-encoding
-		if(isset($headers['content-encoding']) && $headers['content-encoding'] != ''){
-			if($headers['content-encoding'] == 'deflate' || $headers['content-encoding'] == 'gzip'){
+		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
+			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){
 					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
     					$data = $degzdata;
-					} elseif($headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -1829,9 +1835,13 @@ class soap_transport_http extends nusoap_base {
 	}
 	
 	function usePersistentConnection(){
+		if (isset($this->outgoing_headers['Accept-Encoding'])) {
+			return false;
+		}
 		$this->protocol_version = '1.1';
 		$this->persistentConnection = 1;
 		$this->outgoing_headers['Connection'] = 'Keep-Alive';
+		return true;
 	}
 }
 
@@ -1937,7 +1947,8 @@ class soap_server extends nusoap_base {
 				$header[] = "Status: 200 OK\r\n";
 			}
 			$header[] = "Server: $this->title Server v$this->version\r\n";
-			$header[] = "Connection: Close\r\n";
+			// Let the Web server decide about this
+			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
 			if (isset($this->headers))
@@ -1988,9 +1999,9 @@ class soap_server extends nusoap_base {
 			if(strpos($this->headers['Content-Type'],'=')){
 				$enc = str_replace('"','',substr(strstr($this->headers["Content-Type"],'='),1));
 				if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-					$this->xml_encoding = $enc;
+					$this->xml_encoding = strtoupper($enc);
 				} else {
-					$this->xml_encoding = 'us-ascii';
+					$this->xml_encoding = 'US-ASCII';
 				}
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
@@ -2003,9 +2014,9 @@ class soap_server extends nusoap_base {
 					$enc = str_replace('"','',$enc);
 					$enc = str_replace('\\','',$enc);
 					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = $enc;
+						$this->xml_encoding = strtoupper($enc);
 					} else {
-						$this->xml_encoding = 'us-ascii';
+						$this->xml_encoding = 'US-ASCII';
 					}
 				}
 			}
@@ -2019,9 +2030,9 @@ class soap_server extends nusoap_base {
 					$enc = str_replace('"','',$enc);
 					$enc = str_replace('\\','',$enc);
 					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = $enc;
+						$this->xml_encoding = strtoupper($enc);
 					} else {
-						$this->xml_encoding = 'us-ascii';
+						$this->xml_encoding = 'US-ASCII';
 					}
 				}
 			}
@@ -3361,6 +3372,7 @@ class soap_parser extends nusoap_base {
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
+	* @param    string $method
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method=''){
@@ -3370,7 +3382,7 @@ class soap_parser extends nusoap_base {
 
 		// Check whether content has been read.
 		if(!empty($xml)){
-			$this->debug('Entering soap_parser()');
+			$this->debug('Entering soap_parser(), length='.strlen($xml).', encoding='.$encoding);
 			// Create an XML parser.
 			$this->parser = xml_parser_create($this->xml_encoding);
 			// Set the options for parsing the XML data.
@@ -4017,6 +4029,9 @@ class soapclient extends nusoap_base  {
 					$http = new soap_transport_http($this->endpoint);
 					// pass encoding into transport layer, so appropriate http headers are sent
 					$http->soap_defencoding = $this->soap_defencoding;
+					if ($this->persistentConnection) {
+						$http->usePersistentConnection();
+					}
 				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
@@ -4053,7 +4068,6 @@ class soapclient extends nusoap_base  {
 				
 				// save transport object if using persistent connections
 				if($this->persistentConnection && !is_object($this->persistentConnection)){
-					$http->usePersistentConnection();
 					$this->persistentConnection = $http;
 				}
 				
@@ -4065,12 +4079,13 @@ class soapclient extends nusoap_base  {
 				} else {
 					if(strpos($http->incoming_headers['content-type'],'=')){
 						$enc = str_replace('"','',substr(strstr($http->incoming_headers["content-type"],'='),1));
-						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-							$this->xml_encoding = $enc;
-						}
 						$this->debug('got response encoding: '.$enc);
+						if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
+							$this->xml_encoding = strtoupper($enc);
+						}
+						// TODO: should we set a default encoding?
 					}
-					$this->debug('got response, length: '.strlen($response));
+					$this->debug('got response, length: '.strlen($response).' use encoding: '.$this->xml_encoding);
 					return $this->parseResponse($response);
 				}
 			break;

@@ -100,7 +100,8 @@ class soap_server extends nusoap_base {
 				$header[] = "Status: 200 OK\r\n";
 			}
 			$header[] = "Server: $this->title Server v$this->version\r\n";
-			$header[] = "Connection: Close\r\n";
+			// Let the Web server decide about this
+			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
 			if (isset($this->headers))
@@ -151,9 +152,9 @@ class soap_server extends nusoap_base {
 			if(strpos($this->headers['Content-Type'],'=')){
 				$enc = str_replace('"','',substr(strstr($this->headers["Content-Type"],'='),1));
 				if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
-					$this->xml_encoding = $enc;
+					$this->xml_encoding = strtoupper($enc);
 				} else {
-					$this->xml_encoding = 'us-ascii';
+					$this->xml_encoding = 'US-ASCII';
 				}
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
@@ -166,9 +167,9 @@ class soap_server extends nusoap_base {
 					$enc = str_replace('"','',$enc);
 					$enc = str_replace('\\','',$enc);
 					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = $enc;
+						$this->xml_encoding = strtoupper($enc);
 					} else {
-						$this->xml_encoding = 'us-ascii';
+						$this->xml_encoding = 'US-ASCII';
 					}
 				}
 			}
@@ -182,9 +183,9 @@ class soap_server extends nusoap_base {
 					$enc = str_replace('"','',$enc);
 					$enc = str_replace('\\','',$enc);
 					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = $enc;
+						$this->xml_encoding = strtoupper($enc);
 					} else {
-						$this->xml_encoding = 'us-ascii';
+						$this->xml_encoding = 'US-ASCII';
 					}
 				}
 			}
