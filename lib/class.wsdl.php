@@ -651,7 +651,7 @@ class wsdl extends XMLSchema {
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
 					$xml .= $this->serializeType($name, $type, $parameters[$name]);
-				} else {
+				} elseif(is_array($parameters)) {
 					$xml .= $this->serializeType($name, $type, array_shift($parameters));
 				} 
 			}

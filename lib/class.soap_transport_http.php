@@ -258,12 +258,12 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function sendHTTPS($data, $timeout=0) {
-	   	global $t;
-		$t->setMarker('inside sendHTTPS()');
+	   	//global $t;
+		//$t->setMarker('inside sendHTTPS()');
 		$this->debug('entered sendHTTPS() with data of length: '.strlen($data));
 		// init CURL
 		$ch = curl_init();
-		$t->setMarker('got curl handle');
+		//$t->setMarker('got curl handle');
 		// set proxy
 		if($this->proxyhost && $this->proxyport){
 			$host = $this->proxyhost;
@@ -319,10 +319,10 @@ class soap_transport_http extends nusoap_base {
 
 		// set payload
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
-		$t->setMarker('set curl options, executing...');
+		//$t->setMarker('set curl options, executing...');
 		// send and receive
 		$this->incoming_payload = curl_exec($ch);
-		$t->setMarker('executed transfer');
+		//$t->setMarker('executed transfer');
 		$data = $this->incoming_payload;
 
         $cErr = curl_error($ch);
@@ -336,13 +336,13 @@ class soap_transport_http extends nusoap_base {
 			curl_close($ch);
 	    	return false;
 		} else {
-			echo '<pre>';
-			var_dump(curl_getinfo($ch));
-			echo '</pre>';
+			//echo '<pre>';
+			//var_dump(curl_getinfo($ch));
+			//echo '</pre>';
 		}
 		// close curl
 		curl_close($ch);
-		$t->setMarker('closed curl');
+		//$t->setMarker('closed curl');
 		
 		// remove 100 header
 		if(ereg('^HTTP/1.1 100',$data)){
