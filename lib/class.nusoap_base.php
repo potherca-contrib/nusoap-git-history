@@ -62,6 +62,7 @@ class nusoap_base {
 
 	var $title = 'NuSOAP';
 	var $version = '0.6.6';
+	var $revision = '$Revision$';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters as entities

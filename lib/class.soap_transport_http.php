@@ -59,7 +59,8 @@ class soap_transport_http extends nusoap_base {
 		$this->uri = $this->path;
 		
 		// build headers
-		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
+		ereg('\$Revision$this->revision, $rev);
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;
 		} else {
@@ -405,6 +406,9 @@ class soap_transport_http extends nusoap_base {
 
 			// We might EOF during header read.
 			if(feof($this->fp)) {
+				$this->incoming_payload = $data;
+				$this->debug('found no headers before EOF after length ' . strlen($data));
+				$this->debug("received before EOF:\n" . $data);
 				$this->setError('server failed to send headers');
 				return false;
 			}
@@ -466,6 +470,17 @@ class soap_transport_http extends nusoap_base {
 		if($this->incoming_payload == ''){
 			$this->setError('no response from server');
 			return false;
+		}
+		
+		// decode transfer-encoding
+		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
+			if(!$data = $this->decodeChunked($data, $lb)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+			// set decoded payload
+			$this->incoming_payload = $header_data.$lb.$lb.$data;
 		}
 		
 	  } else if ($this->scheme == 'https') {
@@ -531,15 +546,6 @@ class soap_transport_http extends nusoap_base {
 		}
 	  }
 		
-		// decode transfer-encoding
-		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
-			if(!$data = $this->decodeChunked($data, $lb)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
-		}
-		
 		// decode content-encoding
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
@@ -555,6 +561,8 @@ class soap_transport_http extends nusoap_base {
 					}
 					//$timer->setMarker('finished decoding of gzip/deflated content');
 					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+					// set decoded payload
+					$this->incoming_payload = $header_data.$lb.$lb.$data;
     			} else {
 					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
 				}
@@ -567,8 +575,6 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		
-		// set decoded payload
-		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
 

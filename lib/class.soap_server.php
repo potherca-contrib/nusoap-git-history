@@ -103,7 +103,6 @@ class soap_server extends nusoap_base {
 			if($this->externalWSDLURL){
               if (strpos($this->externalWSDLURL,"://")!==false) { // assume URL
 				header('Location: '.$this->externalWSDLURL);
-				exit();
               } else { // assume file
                 header("Content-Type: text/xml\r\n");
                 $fp = fopen($this->externalWSDLURL, 'r');
@@ -112,8 +111,8 @@ class soap_server extends nusoap_base {
 			} else {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize();
-				exit();
 			}
+			exit();
 		}
 		
 		// print web interface
@@ -144,7 +143,8 @@ class soap_server extends nusoap_base {
 				// $header[] = "Status: 200 OK";
 			}
 			$header[] = "Server: $this->title Server v$this->version";
-			$header[] = "X-SOAPed-By: $this->title Server v$this->version";
+			ereg('\$Revision$this->revision, $rev);
+			$header[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
@@ -669,7 +669,15 @@ class soap_server extends nusoap_base {
         }
         
         if(false == $endpoint) {
-            $endpoint = "http://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
+        	if (isset($_SERVER['HTTPS'])) {
+        		$HTTPS = $_SERVER['HTTPS'];
+        	} elseif (isset($GLOBALS['HTTPS'])) {
+        		$HTTPS = $GLOBALS['HTTPS'];
+        	} else {
+        		$HTTPS = 0;
+        	}
+        	$SCHEME = $HTTPS ? 'https' : 'http';
+            $endpoint = "$SCHEME://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
         }
         
         if(false == $schemaTargetNamespace) {

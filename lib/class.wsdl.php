@@ -900,9 +900,9 @@ class wsdl extends nusoap_base {
 					}
 				}
 		    	if ($uqType == 'boolean' && !$value) {
-					$value = 0;
+					$value = 'false';
 				} elseif ($uqType == 'boolean') {
-					$value = 1;
+					$value = 'true';
 				} 
 				if ($uqType == 'string' && gettype($value) == 'string') {
 					$value = $this->expandEntities($value);

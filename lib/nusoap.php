@@ -62,6 +62,7 @@ class nusoap_base {
 
 	var $title = 'NuSOAP';
 	var $version = '0.6.6';
+	var $revision = '$Revision$';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters as entities
@@ -1567,7 +1568,8 @@ class soap_transport_http extends nusoap_base {
 		$this->uri = $this->path;
 		
 		// build headers
-		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
+		ereg('\$Revision$this->revision, $rev);
+		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;
 		} else {
@@ -1913,6 +1915,9 @@ class soap_transport_http extends nusoap_base {
 
 			// We might EOF during header read.
 			if(feof($this->fp)) {
+				$this->incoming_payload = $data;
+				$this->debug('found no headers before EOF after length ' . strlen($data));
+				$this->debug("received before EOF:\n" . $data);
 				$this->setError('server failed to send headers');
 				return false;
 			}
@@ -1974,6 +1979,17 @@ class soap_transport_http extends nusoap_base {
 		if($this->incoming_payload == ''){
 			$this->setError('no response from server');
 			return false;
+		}
+		
+		// decode transfer-encoding
+		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
+			if(!$data = $this->decodeChunked($data, $lb)){
+				$this->setError('Decoding of chunked data failed');
+				return false;
+			}
+			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
+			// set decoded payload
+			$this->incoming_payload = $header_data.$lb.$lb.$data;
 		}
 		
 	  } else if ($this->scheme == 'https') {
@@ -2039,15 +2055,6 @@ class soap_transport_http extends nusoap_base {
 		}
 	  }
 		
-		// decode transfer-encoding
-		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
-			if(!$data = $this->decodeChunked($data, $lb)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
-		}
-		
 		// decode content-encoding
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
@@ -2063,6 +2070,8 @@ class soap_transport_http extends nusoap_base {
 					}
 					//$timer->setMarker('finished decoding of gzip/deflated content');
 					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
+					// set decoded payload
+					$this->incoming_payload = $header_data.$lb.$lb.$data;
     			} else {
 					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
 				}
@@ -2075,8 +2084,6 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		
-		// set decoded payload
-		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
 
@@ -2199,7 +2206,6 @@ class soap_server extends nusoap_base {
 			if($this->externalWSDLURL){
               if (strpos($this->externalWSDLURL,"://")!==false) { // assume URL
 				header('Location: '.$this->externalWSDLURL);
-				exit();
               } else { // assume file
                 header("Content-Type: text/xml\r\n");
                 $fp = fopen($this->externalWSDLURL, 'r');
@@ -2208,8 +2214,8 @@ class soap_server extends nusoap_base {
 			} else {
 				header("Content-Type: text/xml; charset=ISO-8859-1\r\n");
 				print $this->wsdl->serialize();
-				exit();
 			}
+			exit();
 		}
 		
 		// print web interface
@@ -2240,7 +2246,8 @@ class soap_server extends nusoap_base {
 				// $header[] = "Status: 200 OK";
 			}
 			$header[] = "Server: $this->title Server v$this->version";
-			$header[] = "X-SOAPed-By: $this->title Server v$this->version";
+			ereg('\$Revision$this->revision, $rev);
+			$header[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding";
@@ -2765,7 +2772,15 @@ class soap_server extends nusoap_base {
         }
         
         if(false == $endpoint) {
-            $endpoint = "http://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
+        	if (isset($_SERVER['HTTPS'])) {
+        		$HTTPS = $_SERVER['HTTPS'];
+        	} elseif (isset($GLOBALS['HTTPS'])) {
+        		$HTTPS = $GLOBALS['HTTPS'];
+        	} else {
+        		$HTTPS = 0;
+        	}
+        	$SCHEME = $HTTPS ? 'https' : 'http';
+            $endpoint = "$SCHEME://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
         }
         
         if(false == $schemaTargetNamespace) {
@@ -3700,9 +3715,9 @@ class wsdl extends nusoap_base {
 					}
 				}
 		    	if ($uqType == 'boolean' && !$value) {
-					$value = 0;
+					$value = 'false';
 				} elseif ($uqType == 'boolean') {
-					$value = 1;
+					$value = 'true';
 				} 
 				if ($uqType == 'string' && gettype($value) == 'string') {
 					$value = $this->expandEntities($value);

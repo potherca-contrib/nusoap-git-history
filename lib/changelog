@@ -180,3 +180,14 @@
 - soap_transport_http: accept chunking with LF separators in addition to CRLF.
 - wsdlcache: added class
 - nusoapmime: fix comments
+
+2004-02-23, version 0.6.6
+- soap_transport_http: don't try to unchunk cURL data, since cURL already does it
+- soap_transport_http: append CVS revision to version in User-Agent
+- wsdl: serialize boolean as true|false, not 1|0, to agree with XML Schema
+- soap_server: always exit() after returning WSDL
+- soap_server: use the WSDL URL scheme as the default endpoint URL scheme
+- soap_server: append CVS revision to version in X-SOAP-Server
+- nusoap_base: add (CVS) revision
+- wsdlcache: synchronize using a per-WSDL lock file (Thanks Ingo)
+- wsdlcache: add cache lifetime, after which cache contents are invalidated (Thanks Ingo)
