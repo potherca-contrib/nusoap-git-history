@@ -103,3 +103,7 @@
 - nusoap_base: add serialization of Apache Map (when not using WSDL)
 - wsdl: add serialization of Apache Map (when using WSDL)
 - wsdl: only change &, <, > to entities, not all HTML entities
+
+2003-08-28, version 0.6.5
+- soap_transport_http: disable cURL verification of peer and server (formerly the cURL default)
+- soap_transport_http: mingle cURL code with straight http, so sendHTTP is no longer needed

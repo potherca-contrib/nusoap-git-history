@@ -1361,6 +1361,7 @@ class soap_transport_http extends nusoap_base {
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
 	var $persistentConnection = false;
+	var $ch = false;	// cURL handle
 	
 	/**
 	* constructor
@@ -1397,7 +1398,7 @@ class soap_transport_http extends nusoap_base {
 	}
 	
 	function connect($connection_timeout=0,$response_timeout=30){
-		
+	  if ($this->scheme == 'http') {
 		// use persistent connection
 		if($this->persistentConnection && is_resource($this->fp)){
 			if (!feof($this->fp)) {
@@ -1427,6 +1428,52 @@ class soap_transport_http extends nusoap_base {
 
 		$this->debug('socket connected');
 		return true;
+	  } else if ($this->scheme == 'https') {
+		if (!extension_loaded('curl')) {
+			$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
+			return false;
+		}
+		$this->debug('connect using http');
+		// init CURL
+		$this->ch = curl_init();
+		// set url
+		$hostURL = ($this->port != '') ? "https://$this->host:$this->port" : "https://$this->host";
+		// add path
+		$hostURL .= $this->path;
+		curl_setopt($this->ch, CURLOPT_URL, $hostURL);
+		// set other options
+		curl_setopt($this->ch, CURLOPT_HEADER, 1);
+		curl_setopt($this->ch, CURLOPT_RETURNTRANSFER, 1);
+		// encode
+		// We manage this ourselves through headers and encoding
+//		if(function_exists('gzuncompress')){
+//			curl_setopt($this->ch, CURLOPT_ENCODING, 'deflate');
+//		}
+		// persistent connection
+		if ($this->persistentConnection) {
+			// The way we send data, we cannot use persistent connections, since
+			// there will be some "junk" at the end of our request.
+			//curl_setopt($this->ch, CURL_HTTP_VERSION_1_1, true);
+			$this->persistentConnection = false;
+			$this->outgoing_headers['Connection'] = 'close';
+		}
+		// set timeout
+		if ($connection_timeout != 0) {
+			curl_setopt($this->ch, CURLOPT_TIMEOUT, $connection_timeout);
+		}
+		// recent versions of cURL turn on peer/host checking by default,
+		// while PHP binaries are not compiled with a default location for the
+		// CA cert bundle, so disable peer/host checking.
+//curl_setopt($this->ch, CURLOPT_CAINFO, 'f:\php-4.3.2-win32\extensions\curl-ca-bundle.crt');		
+		curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, 0);
+		curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, 0);
+		$this->debug('cURL connection set up');
+		return true;
+	  } else {
+		$this->setError('Unknown scheme ' . $this->scheme);
+		$this->debug('Unknown scheme ' . $this->scheme);
+		return false;
+	  }
 	}
 	
 	/**
@@ -1470,125 +1517,7 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function sendHTTPS($data, $timeout=0) {
-	   	//global $t;
-		//$t->setMarker('inside sendHTTPS()');
-		$this->debug('entered sendHTTPS() with data of length: '.strlen($data));
-		// init CURL
-		$ch = curl_init();
-		//$t->setMarker('got curl handle');
-		// set url
-		$hostURL = ($this->port != '') ? "https://$this->host:$this->port" : "https://$this->host";
-		// add path
-		$hostURL .= $this->path;
-		curl_setopt($ch, CURLOPT_URL, $hostURL);
-		// set other options
-		curl_setopt($ch, CURLOPT_HEADER, 1);
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-		// encode
-//		if(function_exists('gzuncompress')){
-//			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
-//		}
-		// persistent connection
-		//curl_setopt($ch, CURL_HTTP_VERSION_1_1, true);
-		
-		// set timeout
-		if($timeout != 0){
-			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-		}
-// some cURL testing
-//curl_setopt($ch, CURLOPT_CAINFO, 'f:\php-4.3.2-win32\extensions\curl-ca-bundle.crt');		
-//curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-//curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-		// build payload
-		$this->buildPayload($data);
-
-		// set payload
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
-		//$t->setMarker('set curl options, executing...');
-		// send and receive
-		$this->incoming_payload = curl_exec($ch);
-		//$t->setMarker('executed transfer');
-		$data = $this->incoming_payload;
-        $cErr = curl_error($ch);
-
-		if($cErr != ''){
-        	$err = 'cURL ERROR: '.curl_errno($ch).': '.$cErr.'<br>';
-			foreach(curl_getinfo($ch) as $k => $v){
-				$err .= "$k: $v<br>";
-			}
-			$this->setError($err);
-			curl_close($ch);
-	    	return false;
-		} else {
-			//echo '<pre>';
-			//var_dump(curl_getinfo($ch));
-			//echo '</pre>';
-		}
-		// close curl
-		curl_close($ch);
-		//$t->setMarker('closed curl');
-		
-		// remove 100 header
-		if(ereg('^HTTP/1.1 100',$data)){
-			if($pos = strpos($data,"\r\n\r\n") ){
-				$data = ltrim(substr($data,$pos));
-			} elseif($pos = strpos($data,"\n\n") ){
-				$data = ltrim(substr($data,$pos));
-			}
-		}//
-		
-		// separate content from HTTP headers
-		if( $pos = strpos($data,"\r\n\r\n") ){
-			$lb = "\r\n";
-		} elseif( $pos = strpos($data,"\n\n") ){
-			$lb = "\n";
-		} else {
-			$this->setError('no proper separation of headers and document');
-			return false;
-		}
-		$header_data = trim(substr($data,0,$pos));
-		$header_array = explode($lb,$header_data);
-		$data = ltrim(substr($data,$pos));
-		$this->debug('found proper separation of headers and document');
-		$this->debug('cleaned data, stringlen: '.strlen($data));
-		// clean headers
-		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			$headers[trim($arr[0])] = trim($arr[1]);
-		}
-		if(strlen($data) == 0){
-			$this->debug('no data after headers!');
-			$this->setError('no data present after HTTP headers.');
-			return false;
-		}
-		
-		// decode transfer-encoding
-		if($headers['Transfer-Encoding'] == 'chunked'){
-			if(!$data = $this->decodeChunked($data)){
-				$this->setError('Decoding of chunked data failed');
-				return false;
-			}
-		}
-		// decode content-encoding
-		if($headers['Content-Encoding'] != ''){
-			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
-    			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzuncompress')){
-					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
-    					$data = $degzdata;
-					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){ // do our best
-						$data = $degzdata;
-					} else {
-						$this->setError('Errors occurred when trying to decode the data');
-					}
-    			} else {
-					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
-				}
-			}
-		}
-		// set decoded payload
-		$this->incoming_payload = $header_data."\r\n\r\n".$data;
-		return $data;
+		return $this->send($data, $timeout);
 	}
 	
 	/**
@@ -1709,7 +1638,7 @@ class soap_transport_http extends nusoap_base {
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
 		// start building outgoing payload:
-		$this->outgoing_payload = "$this->request_method $this->uri ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+		$this->outgoing_payload = "$this->request_method $this->uri HTTP/$this->protocol_version\r\n";
 
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
@@ -1730,6 +1659,7 @@ class soap_transport_http extends nusoap_base {
 		// build payload
 		$this->buildPayload($data);
 
+	  if ($this->scheme == 'http') {
 		// send payload
 		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
 			$this->setError('couldn\'t write message data to socket');
@@ -1738,11 +1668,18 @@ class soap_transport_http extends nusoap_base {
 		}
 		$this->debug('wrote data to socket');
 		return true;
+	  } else if ($this->scheme == 'https') {
+		// set payload
+		curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
+		$this->debug('set cURL payload');
+		return true;
+	  }
 	}
 	
 	function getResponse(){
 		$this->incoming_payload = '';
 	    
+	  if ($this->scheme == 'http') {
 	    // loop until headers have been retrieved
 	    $data = '';
 	    while (!isset($lb)){
@@ -1777,8 +1714,8 @@ class soap_transport_http extends nusoap_base {
 		$data = substr($data,$pos);
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line);
-			if(count($arr) >= 2){
+			$arr = explode(':',$header_line, 2);
+			if(count($arr) > 1){
 				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 			}
 		}
@@ -1811,6 +1748,68 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+	  } else if ($this->scheme == 'https') {
+		// send and receive
+		$this->debug('send and receive with cURL');
+		$this->incoming_payload = curl_exec($this->ch);
+		$data = $this->incoming_payload;
+
+        $cErr = curl_error($this->ch);
+		if ($cErr != '') {
+        	$err = 'cURL ERROR: '.curl_errno($this->ch).': '.$cErr.'<br>';
+			foreach(curl_getinfo($this->ch) as $k => $v){
+				$err .= "$k: $v<br>";
+			}
+			$this->debug($err);
+			$this->setError($err);
+			curl_close($this->ch);
+	    	return false;
+		} else {
+			//echo '<pre>';
+			//var_dump(curl_getinfo($this->ch));
+			//echo '</pre>';
+		}
+		// close curl
+		$this->debug('No cURL error, closing cURL');
+		curl_close($this->ch);
+		
+		// remove 100 header
+		if (ereg('^HTTP/1.1 100',$data)) {
+			if ($pos = strpos($data,"\r\n\r\n")) {
+				$data = ltrim(substr($data,$pos));
+			} elseif($pos = strpos($data,"\n\n") ) {
+				$data = ltrim(substr($data,$pos));
+			}
+		}
+		
+		// separate content from HTTP headers
+		if ($pos = strpos($data,"\r\n\r\n")) {
+			$lb = "\r\n";
+		} elseif( $pos = strpos($data,"\n\n")) {
+			$lb = "\n";
+		} else {
+			$this->debug('no proper separation of headers and document');
+			$this->setError('no proper separation of headers and document');
+			return false;
+		}
+		$header_data = trim(substr($data,0,$pos));
+		$header_array = explode($lb,$header_data);
+		$data = ltrim(substr($data,$pos));
+		$this->debug('found proper separation of headers and document');
+		$this->debug('cleaned data, stringlen: '.strlen($data));
+		// clean headers
+		foreach ($header_array as $header_line) {
+			$arr = explode(':',$header_line,2);
+			if (count($arr) > 1) {
+				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
+			}
+		}
+		if (strlen($data) == 0) {
+			$this->debug('no data after headers!');
+			$this->setError('no data present after HTTP headers.');
+			return false;
+		}
+	  }
 		
 		// decode transfer-encoding
 		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
@@ -1848,6 +1847,8 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		
+		// set decoded payload
+		$this->incoming_payload = $header_data."\r\n\r\n".$data;
 		return $data;
 	}
 	
