@@ -306,3 +306,16 @@
 - wsdl: serialize elements from complexType extension base
 - wsdl: serialize data (associative array elements) as attributes according to XML Schema
 - xmlschema: record extension base if present for a complexType
+
+2004-12-15, version 0.6.8
+- nusoap_base: add 2000 XML Schema (rare, but used by Akamai)
+- soap_parser: avoid deserializing more common attributes that are not data
+- soap_parser: be lax when HTTP specifies ISO-8859-1 (the default) and XML specifies UTF-8 (the norm)
+- soap_server: account for the fact that get_class_methods returns methods in all lower case (thanks Steve Haldane)
+- soap_transport_http: parse digest info that includes '=' in the data (thanks Jinsuk Kim)
+- wsdl: feably handle some cases for literal serialization of form="unqualified" elements
+- wsdl: don't serialize the decimal portion of a PHP double when the XML type is long
+- wsdl: fix serialization of attributes for complexType that is an extension
+- wsdlcache: enhance diagnostics
+- xmlschema: handle untyped elements
+- xmlschema: handle WSDL for SOAP Array that uses the base attribute plus a sequence of element

@@ -484,7 +484,7 @@ class soapclient extends nusoap_base  {
 	* @param    string $username
 	* @param    string $password
 	* @param	string $authtype (basic|digest|certificate)
-	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase: see corresponding options in cURL docs)
 	* @access   public
 	*/
 	function setCredentials($username, $password, $authtype = 'basic', $certRequest = array()) {

@@ -269,7 +269,7 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $password
 	* @param	string $authtype (basic, digest, certificate)
 	* @param	array $digestRequest (keys must be nonce, nc, realm, qop)
-	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase)
+	* @param	array $certRequest (keys must be cainfofile, sslcertfile, sslkeyfile, passphrase: see corresponding options in cURL docs)
 	* @access   public
 	*/
 	function setCredentials($username, $password, $authtype = 'basic', $digestRequest = array(), $certRequest = array()) {
@@ -775,7 +775,7 @@ class soap_transport_http extends nusoap_base {
  				// parse elements into array
  				$digestElements = explode(',', $digestString);
  				foreach ($digestElements as $val) {
- 					$tempElement = explode('=', trim($val));
+ 					$tempElement = explode('=', trim($val), 2);
  					$digestRequest[$tempElement[0]] = str_replace("\"", '', $tempElement[1]);
  				}
 

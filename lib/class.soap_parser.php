@@ -72,8 +72,11 @@ class soap_parser extends nusoap_base {
 					if (strtoupper($xml_encoding) != $encoding) {
 						$err = "Charset from HTTP Content-Type '" . $encoding . "' does not match encoding from XML declaration '" . $xml_encoding . "'";
 						$this->debug($err);
-						$this->setError($err);
-						return;
+						if ($encoding != 'ISO-8859-1' || strtoupper($xml_encoding) != 'UTF-8') {
+							$this->setError($err);
+							return;
+						}
+						// when HTTP says ISO-8859-1 (the default) and XML says UTF-8 (the typical), assume the other endpoint is just sloppy and proceed
 					} else {
 						$this->debug('Charset from HTTP Content-Type matches encoding from XML declaration');
 					}
@@ -118,6 +121,7 @@ class soap_parser extends nusoap_base {
 					foreach($this->multirefs as $id => $hrefs){
 						$this->debug('resolving multirefs for id: '.$id);
 						$idVal = $this->buildVal($this->ids[$id]);
+						unset($idVal['!id']);
 						foreach($hrefs as $refPos => $ref){
 							$this->debug('resolving href at pos '.$refPos);
 							$this->multirefs[$id][$refPos] = $idVal;
@@ -243,7 +247,7 @@ class soap_parser extends nusoap_base {
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
-			} elseif ($key != 'href' && $key != 'xmlns') {
+			} elseif ($key != 'href' && $key != 'xmlns' && $key_localpart != 'encodingStyle' && $key_localpart != 'root') {
 				$this->message[$pos]['xattrs']['!' . $key] = $value;
 			}
 
@@ -312,12 +316,24 @@ class soap_parser extends nusoap_base {
             // build complex values
 			} elseif($this->message[$pos]['children'] != ''){
 			
-				// if result has already been generated (struct/array
+				// if result has already been generated (struct/array)
 				if(!isset($this->message[$pos]['result'])){
 					$this->message[$pos]['result'] = $this->buildVal($pos);
 				}
-			// build complex values of just attributes
+			// build complex values of attributes and possibly simpleContent
 			} elseif (isset($this->message[$pos]['xattrs'])) {
+				if (isset($this->message[$pos]['cdata']) && $this->message[$pos]['cdata'] != '') {
+	            	if (isset($this->message[$pos]['type'])) {
+						$this->message[$pos]['xattrs']['!'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], isset($this->message[$pos]['type_namespace']) ? $this->message[$pos]['type_namespace'] : '');
+					} else {
+						$parent = $this->message[$pos]['parent'];
+						if (isset($this->message[$parent]['type']) && ($this->message[$parent]['type'] == 'array') && isset($this->message[$parent]['arrayType'])) {
+							$this->message[$pos]['xattrs']['!'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], isset($this->message[$parent]['arrayTypeNamespace']) ? $this->message[$parent]['arrayTypeNamespace'] : '');
+						} else {
+							$this->message[$pos]['xattrs']['!'] = $this->message[$pos]['cdata'];
+						}
+					}
+				}
 				$this->message[$pos]['result'] = $this->message[$pos]['xattrs'];
 			// set value of simple type
 			} else {

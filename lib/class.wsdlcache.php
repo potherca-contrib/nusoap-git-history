@@ -81,6 +81,8 @@ class wsdlcache {
 			}
 			$this->releaseMutex($filename);
 			return (!is_null($s)) ? unserialize($s) : null;
+		} else {
+			$this->debug("Unable to obtain mutex for $filename in get");
 		}
 		return null;
 	}
@@ -123,6 +125,8 @@ class wsdlcache {
 			$this->debug("Put $wsdl_instance->wsdl ($filename) in cache");
 			$this->releaseMutex($filename);
 			return true;
+		} else {
+			$this->debug("Unable to obtain mutex for $filename in put");
 		}
 		return false;
 	}
@@ -138,6 +142,9 @@ class wsdlcache {
 		$ret = flock($this->fplock[md5($filename)], LOCK_UN);
 		fclose($this->fplock[md5($filename)]);
 		unset($this->fplock[md5($filename)]);
+		if (! $ret) {
+			$this->debug("Not able to release lock for $filename");
+		}
 		return $ret;
 	}
 
@@ -150,9 +157,10 @@ class wsdlcache {
 	*/
 	function remove($wsdl) {
 		$filename = $this->createFilename($wsdl);
+		// ignore errors obtaining mutex
 		$this->obtainMutex($filename, "w");
 		$ret = unlink($filename);
-		$this->debug("Removed $wsdl ($filename) from cache");
+		$this->debug("Removed ($ret) $wsdl ($filename) from cache");
 		$this->releaseMutex($filename);
 		return $ret;
 	}

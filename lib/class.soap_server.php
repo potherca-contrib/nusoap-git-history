@@ -175,7 +175,7 @@ class soap_server extends nusoap_base {
 				$this->SOAPAction = str_replace('"','',$this->headers['SOAPAction']);
 			}
 			// get the character encoding of the incoming request
-			if(strpos($this->headers['Content-Type'],'=')){
+			if(isset($this->headers['Content-Type']) && strpos($this->headers['Content-Type'],'=')){
 				$enc = str_replace('"','',substr(strstr($this->headers["Content-Type"],'='),1));
 				if(eregi('^(ISO-8859-1|US-ASCII|UTF-8)$',$enc)){
 					$this->xml_encoding = strtoupper($enc);
@@ -372,7 +372,7 @@ class soap_server extends nusoap_base {
 			$this->fault('Client',"method '$this->methodname' not defined in service");
 			return;
 		}
-		if ($class != '' && !in_array($method, get_class_methods($class))) {
+		if ($class != '' && !in_array(strtolower($method), get_class_methods($class))) {
 			$this->debug("method '$this->methodname' not found in class '$class'!");
 			$this->result = 'fault: method not found';
 			$this->fault('Client',"method '$this->methodname' not defined in service");

@@ -119,6 +119,10 @@ class nusoap_base {
 		'IDREF'=>'','IDREFS'=>'','ENTITY'=>'','ENTITIES'=>'','integer'=>'integer','nonPositiveInteger'=>'integer',
 		'negativeInteger'=>'integer','long'=>'integer','int'=>'integer','short'=>'integer','byte'=>'integer','nonNegativeInteger'=>'integer',
 		'unsignedLong'=>'','unsignedInt'=>'','unsignedShort'=>'','unsignedByte'=>'','positiveInteger'=>''),
+	'http://www.w3.org/2000/10/XMLSchema' => array(
+		'i4'=>'','int'=>'integer','boolean'=>'boolean','string'=>'string','double'=>'double',
+		'float'=>'double','dateTime'=>'string',
+		'timeInstant'=>'string','base64Binary'=>'string','base64'=>'string','ur-type'=>'array'),
 	'http://www.w3.org/1999/XMLSchema' => array(
 		'i4'=>'','int'=>'integer','boolean'=>'boolean','string'=>'string','double'=>'double',
 		'float'=>'double','dateTime'=>'string',
