@@ -1,0 +1,6 @@
+2003-07-21, version 0.6.5
+- soap_transport_http: SOAPAction header is quoted again, fixes problem w/ Weblogic Server
+- applied Jason Levitt patch for proper array serialization, fixes problem w/ Amazon shopping cart services
+- fixed null value serialization
+- applied patch from "BZC ToOn'S" - fixes wsdl serialization when no parameters
+- applied John's patch, implementing compression for the server

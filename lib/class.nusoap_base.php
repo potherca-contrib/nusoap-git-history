@@ -54,13 +54,13 @@ require_once('class.soap_server.php');//
 * nusoap_base
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.4';
+	var $version = '0.6.5';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters
@@ -201,7 +201,10 @@ class nusoap_base {
 		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
-        	if ($use == 'literal') {
+        	if(is_bool($val) && !$val){
+        		$val = 0;
+			}
+			if ($use == 'literal') {
 	        	return "<$name$xmlns>$val</$name>";
         	} else {
 	        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
@@ -216,7 +219,7 @@ class nusoap_base {
 					// TODO: depends on nillable
 					$xml .= "<$name$xmlns/>";
 				} else {
-					$xml .= "<$name$xmlns xsi:type=\"xsd:nil\"/>";
+					$xml .= "<$name$xmlns xsi:nil=\"true\"/>";
 				}
 				break;
 			case (is_bool($val) || $type == 'boolean'):
@@ -275,9 +278,10 @@ class nusoap_base {
 					$i = 0;
 					if(is_array($val) && count($val)> 0){
 						foreach($val as $v){
-	                    	if(is_object($v) && get_class($v) == 'soapval'){
-	                        	$tt = $v->type;
-	                        } else {
+	                    	if(is_object($v) && get_class($v) ==  'soapval'){
+								$tt_ns = $v->type_ns;
+								$tt = $v->type;
+							} else {
 								$tt = gettype($v);
 	                        }
 							$array_types[$tt] = 1;
@@ -295,7 +299,16 @@ class nusoap_base {
 						} elseif($tt == 'array' || $tt == 'Array'){
 							$array_typename = 'SOAP-ENC:Array';
 						} else {
-							$array_typename = $tt;
+							// if type is prefixed, create type prefix
+							if ($tt_ns != '' && $tt_ns == $this->namespaces['xsd']){
+								 $array_typename = 'xsd:' . $tt;
+							} elseif ($tt_ns) {
+								$tt_prefix = 'ns' . rand(1000, 9999);
+								$array_typename = "$tt_prefix:$tt";
+								$atts .= " xmlns:$tt_prefix=\"$tt_ns\"";
+							} else {
+								$array_typename = $tt;
+							}
 						}
 						if(isset($array_types['array'])){
 							$array_type = $i.",".$i;

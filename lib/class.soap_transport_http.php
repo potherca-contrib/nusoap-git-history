@@ -7,7 +7,7 @@
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access public
 */
 class soap_transport_http extends nusoap_base {
@@ -398,6 +398,9 @@ class soap_transport_http extends nusoap_base {
 		
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
+			if($k == 'SOAPAction'){
+				$v = '"'.$v.'"';
+			}
 			$this->outgoing_payload .= $k.': '.$v."\r\n";
 		}
 		

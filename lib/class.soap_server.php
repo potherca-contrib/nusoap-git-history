@@ -10,7 +10,7 @@
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class soap_server extends nusoap_base {
@@ -103,6 +103,19 @@ class soap_server extends nusoap_base {
 			$header[] = "Server: $this->title Server v$this->version\r\n";
 			$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->charset_encoding\r\n";
+			//begin code to compress payload - by John
+			if (isset($this->headers))
+			{
+			   if (isset($this->headers['Accept-Encoding']))
+			   {	
+			    if (($this->headers['Accept-Encoding'] == 'deflate') && (function_exists('gzcompress')))
+			    {
+			    	$header[] ="Content-Encoding: deflate";
+			    	$payload = gzcompress($payload);
+			    }
+			   }
+			}
+			//end code
 			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
 			reset($header);
 			foreach($header as $hdr){

@@ -54,13 +54,13 @@ require_once('class.soap_server.php');*/
 * nusoap_base
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.4';
+	var $version = '0.6.5';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters
@@ -201,7 +201,10 @@ class nusoap_base {
 		}
         // serialize if an xsd built-in primitive type
         if($type != '' && isset($this->typemap[$this->XMLSchemaVersion][$type])){
-        	if ($use == 'literal') {
+        	if(is_bool($val) && !$val){
+        		$val = 0;
+			}
+			if ($use == 'literal') {
 	        	return "<$name$xmlns>$val</$name>";
         	} else {
 	        	return "<$name$xmlns xsi:type=\"xsd:$type\">$val</$name>";
@@ -216,7 +219,7 @@ class nusoap_base {
 					// TODO: depends on nillable
 					$xml .= "<$name$xmlns/>";
 				} else {
-					$xml .= "<$name$xmlns xsi:type=\"xsd:nil\"/>";
+					$xml .= "<$name$xmlns xsi:nil=\"true\"/>";
 				}
 				break;
 			case (is_bool($val) || $type == 'boolean'):
@@ -275,9 +278,10 @@ class nusoap_base {
 					$i = 0;
 					if(is_array($val) && count($val)> 0){
 						foreach($val as $v){
-	                    	if(is_object($v) && get_class($v) == 'soapval'){
-	                        	$tt = $v->type;
-	                        } else {
+	                    	if(is_object($v) && get_class($v) ==  'soapval'){
+								$tt_ns = $v->type_ns;
+								$tt = $v->type;
+							} else {
 								$tt = gettype($v);
 	                        }
 							$array_types[$tt] = 1;
@@ -295,7 +299,16 @@ class nusoap_base {
 						} elseif($tt == 'array' || $tt == 'Array'){
 							$array_typename = 'SOAP-ENC:Array';
 						} else {
-							$array_typename = $tt;
+							// if type is prefixed, create type prefix
+							if ($tt_ns != '' && $tt_ns == $this->namespaces['xsd']){
+								 $array_typename = 'xsd:' . $tt;
+							} elseif ($tt_ns) {
+								$tt_prefix = 'ns' . rand(1000, 9999);
+								$array_typename = "$tt_prefix:$tt";
+								$atts .= " xmlns:$tt_prefix=\"$tt_ns\"";
+							} else {
+								$array_typename = $tt;
+							}
 						}
 						if(isset($array_types['array'])){
 							$array_type = $i.",".$i;
@@ -512,7 +525,7 @@ function usleepWindows($usec)
 * mainly used for returning faults from deployed functions
 * in a server instance.
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access public
 */
 class soap_fault extends nusoap_base {
@@ -577,7 +590,7 @@ class soap_fault extends nusoap_base {
 * tutorials I refer to :)
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class XMLSchema extends nusoap_base  {
@@ -1250,7 +1263,7 @@ class XMLSchema extends nusoap_base  {
 * NOTE: this is only really used when WSDL is not available.
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class soapval extends nusoap_base {
@@ -1307,7 +1320,7 @@ class soapval extends nusoap_base {
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access public
 */
 class soap_transport_http extends nusoap_base {
@@ -1698,6 +1711,9 @@ class soap_transport_http extends nusoap_base {
 		
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
+			if($k == 'SOAPAction'){
+				$v = '"'.$v.'"';
+			}
 			$this->outgoing_payload .= $k.': '.$v."\r\n";
 		}
 		
@@ -1840,7 +1856,7 @@ class soap_transport_http extends nusoap_base {
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class soap_server extends nusoap_base {
@@ -1933,6 +1949,19 @@ class soap_server extends nusoap_base {
 			$header[] = "Server: $this->title Server v$this->version\r\n";
 			$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->charset_encoding\r\n";
+			//begin code to compress payload - by John
+			if (isset($this->headers))
+			{
+			   if (isset($this->headers['Accept-Encoding']))
+			   {	
+			    if (($this->headers['Accept-Encoding'] == 'deflate') && (function_exists('gzcompress')))
+			    {
+			    	$header[] ="Content-Encoding: deflate";
+			    	$payload = gzcompress($payload);
+			    }
+			   }
+			}
+			//end code
 			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
 			reset($header);
 			foreach($header as $hdr){
@@ -2356,7 +2385,7 @@ class soap_server extends nusoap_base {
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access public 
 */
 class wsdl extends XMLSchema {
@@ -2863,25 +2892,27 @@ class wsdl extends XMLSchema {
 		if (count($this->messages) >= 1) {
 			foreach($this->messages as $msgName => $msgParts) {
 				$xml .= '<message name="' . $msgName . '">';
-				foreach($msgParts as $partName => $partType) {
-					// print 'serializing '.$partType.', sv: '.$this->XMLSchemaVersion.'<br>';
-					if (strpos($partType, ':')) {
-					    $typePrefix = $this->getPrefixFromNamespace($this->getPrefix($partType));
-					} elseif (isset($this->typemap[$this->namespaces['xsd']][$partType])) {
-					    // print 'checking typemap: '.$this->XMLSchemaVersion.'<br>';
-					    $typePrefix = 'xsd';
-					} else {
-					    foreach($this->typemap as $ns => $types) {
-					        if (isset($types[$partType])) {
-					            $typePrefix = $this->getPrefixFromNamespace($ns);
-					        } 
-					    } 
-					    if (!isset($typePrefix)) {
-					        die("$partType has no namespace!");
-					    } 
-					} 
-					$xml .= '<part name="' . $partName . '" type="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
-				} 
+				if(is_array($msgParts)){
+					foreach($msgParts as $partName => $partType) {
+						// print 'serializing '.$partType.', sv: '.$this->XMLSchemaVersion.'<br>';
+						if (strpos($partType, ':')) {
+						    $typePrefix = $this->getPrefixFromNamespace($this->getPrefix($partType));
+						} elseif (isset($this->typemap[$this->namespaces['xsd']][$partType])) {
+						    // print 'checking typemap: '.$this->XMLSchemaVersion.'<br>';
+						    $typePrefix = 'xsd';
+						} else {
+						    foreach($this->typemap as $ns => $types) {
+						        if (isset($types[$partType])) {
+						            $typePrefix = $this->getPrefixFromNamespace($ns);
+						        } 
+						    } 
+						    if (!isset($typePrefix)) {
+						        die("$partType has no namespace!");
+						    } 
+						} 
+						$xml .= '<part name="' . $partName . '" type="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
+					}
+				}
 				$xml .= '</message>';
 			} 
 		} 
@@ -3225,8 +3256,9 @@ class wsdl extends XMLSchema {
 				}
 				$this->messages[$name.'Request'][$pName] = $pType;
 			}
-		}
-		
+		} else {
+            $this->messages[$name.'Request']= '0';
+        }
 		if($out)
 		{
 			foreach($out as $pName => $pType)
@@ -3236,7 +3268,9 @@ class wsdl extends XMLSchema {
 				}
 				$this->messages[$name.'Response'][$pName] = $pType;
 			}
-		}
+		} else {
+            $this->messages[$name.'Response']= '0';
+        }
 		return true;
 	} 
 }
@@ -3249,7 +3283,7 @@ class wsdl extends XMLSchema {
 * soap_parser class parses SOAP XML messages into native PHP values
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class soap_parser extends nusoap_base {
@@ -3684,7 +3718,7 @@ class soap_parser extends nusoap_base {
 * unset($soapclient);
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access   public
 */
 class soapclient extends nusoap_base  {

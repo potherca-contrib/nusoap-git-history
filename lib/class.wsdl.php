@@ -6,7 +6,7 @@
 * parses a WSDL file, allows access to it's data, other utility methods
 * 
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.4
+* @version  v 0.6.5
 * @access public 
 */
 class wsdl extends XMLSchema {
@@ -513,25 +513,27 @@ class wsdl extends XMLSchema {
 		if (count($this->messages) >= 1) {
 			foreach($this->messages as $msgName => $msgParts) {
 				$xml .= '<message name="' . $msgName . '">';
-				foreach($msgParts as $partName => $partType) {
-					// print 'serializing '.$partType.', sv: '.$this->XMLSchemaVersion.'<br>';
-					if (strpos($partType, ':')) {
-					    $typePrefix = $this->getPrefixFromNamespace($this->getPrefix($partType));
-					} elseif (isset($this->typemap[$this->namespaces['xsd']][$partType])) {
-					    // print 'checking typemap: '.$this->XMLSchemaVersion.'<br>';
-					    $typePrefix = 'xsd';
-					} else {
-					    foreach($this->typemap as $ns => $types) {
-					        if (isset($types[$partType])) {
-					            $typePrefix = $this->getPrefixFromNamespace($ns);
-					        } 
-					    } 
-					    if (!isset($typePrefix)) {
-					        die("$partType has no namespace!");
-					    } 
-					} 
-					$xml .= '<part name="' . $partName . '" type="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
-				} 
+				if(is_array($msgParts)){
+					foreach($msgParts as $partName => $partType) {
+						// print 'serializing '.$partType.', sv: '.$this->XMLSchemaVersion.'<br>';
+						if (strpos($partType, ':')) {
+						    $typePrefix = $this->getPrefixFromNamespace($this->getPrefix($partType));
+						} elseif (isset($this->typemap[$this->namespaces['xsd']][$partType])) {
+						    // print 'checking typemap: '.$this->XMLSchemaVersion.'<br>';
+						    $typePrefix = 'xsd';
+						} else {
+						    foreach($this->typemap as $ns => $types) {
+						        if (isset($types[$partType])) {
+						            $typePrefix = $this->getPrefixFromNamespace($ns);
+						        } 
+						    } 
+						    if (!isset($typePrefix)) {
+						        die("$partType has no namespace!");
+						    } 
+						} 
+						$xml .= '<part name="' . $partName . '" type="' . $typePrefix . ':' . $this->getLocalPart($partType) . '" />';
+					}
+				}
 				$xml .= '</message>';
 			} 
 		} 
@@ -875,8 +877,9 @@ class wsdl extends XMLSchema {
 				}
 				$this->messages[$name.'Request'][$pName] = $pType;
 			}
-		}
-		
+		} else {
+            $this->messages[$name.'Request']= '0';
+        }
 		if($out)
 		{
 			foreach($out as $pName => $pType)
@@ -886,7 +889,9 @@ class wsdl extends XMLSchema {
 				}
 				$this->messages[$name.'Response'][$pName] = $pType;
 			}
-		}
+		} else {
+            $this->messages[$name.'Response']= '0';
+        }
 		return true;
 	} 
 }
