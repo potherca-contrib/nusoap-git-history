@@ -34,6 +34,8 @@ if ($method == '') {
 	echo '<option>echoIntegerArray</option>';
 	echo '<option>echoFloat</option>';
 	echo '<option>echoFloatArray</option>';
+	echo '<option>echoStruct</option>';
+	echo '<option>echoStructArray</option>';
 	echo '<option>echoVoid</option>';
 	echo '<option>echoBoolean</option>';
 	echo '<option>echoBase64</option>';
@@ -57,6 +59,13 @@ if ($method == 'echoString') {
 	$params = array('inputFloat' => 3.14159265);
 } elseif ($method == 'echoFloatArray') {
 	$params = array('inputFloatArray' => array(1.1, 2.2, 3.3, 1/4, -1/9));
+} elseif ($method == 'echoStruct') {
+	$struct = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
+	$params = array('inputStruct' => $struct);
+} elseif ($method == 'echoStructArray') {
+	$structs[] = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
+	$structs[] = array('varString' => 'when', 'varInt' => 4, 'varFloat' => 99.9876);
+	$params = array('inputStructArray' => $structs);
 } elseif ($method == 'echoVoid') {
 	$params = array();
 } elseif ($method == 'echoBoolean') {
