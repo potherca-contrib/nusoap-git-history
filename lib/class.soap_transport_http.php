@@ -23,7 +23,7 @@ class soap_transport_http extends nusoap_base {
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
-	var $persistentConnection = 0;
+	var $persistentConnection = false;
 	
 	/**
 	* constructor
@@ -67,7 +67,7 @@ class soap_transport_http extends nusoap_base {
 	function connect($connection_timeout=0,$response_timeout=30){
 		
 		// use persistent connection
-		if($this->persistentConnection == 1 && is_resource($this->fp)){
+		if($this->persistentConnection && is_resource($this->fp)){
 			if (!feof($this->fp)) {
 				$this->debug('Re-use persistent connection');
 				return true;
@@ -153,7 +153,7 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
-		if(function_exists('gzinflate')){
+		if(function_exists('gzuncompress')){
 			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
 		}
 		// persistent connection
@@ -239,10 +239,10 @@ class soap_transport_http extends nusoap_base {
 		if($headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
-					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    			if(function_exists('gzuncompress')){
+					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
     					$data = $degzdata;
-					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){ // do our best
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -288,7 +288,7 @@ class soap_transport_http extends nusoap_base {
 		$this->protocol_version = '1.1';
 		$this->outgoing_headers['Accept-Encoding'] = $enc;
 		$this->outgoing_headers['Connection'] = 'close';
-		unset($this->persistentConnection);
+		$this->persistentConnection = false;
 		set_magic_quotes_runtime(0);
 		// deprecated
 		$this->encoding = $enc;
@@ -465,7 +465,7 @@ class soap_transport_http extends nusoap_base {
 		// close filepointer
 		if(
 			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
-			(!isset($this->persistentConnection)) || feof($this->fp)){
+			(! $this->persistentConnection) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
 			$this->debug('closed socket');
@@ -492,11 +492,11 @@ class soap_transport_http extends nusoap_base {
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
+    			if(function_exists('gzuncompress')){
 					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
     					$data = $degzdata;
-					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){	// do our best
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -523,7 +523,7 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		$this->protocol_version = '1.1';
-		$this->persistentConnection = 1;
+		$this->persistentConnection = true;
 		$this->outgoing_headers['Connection'] = 'Keep-Alive';
 		return true;
 	}

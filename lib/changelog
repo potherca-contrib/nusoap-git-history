@@ -50,3 +50,11 @@
 - soapclient: force xml_encoding to upper case
 - soap_server: let the Web server decide whether to close the connection (no Connection: close header)
 - soap_server: force xml_encoding to upper case
+
+2003-08-04, version 0.6.5
+- soap_parser: use XML type information to pick a PHP data type; also decode base64
+- soap_server: read all HTTP headers when using _SERVER or HTTP_SERVER_VARS
+- soap_server: add gzip encoding support for outgoing messages
+- soap_transport_http: deflate is gzcompress/gzuncompress (cf. http://archive.develooper.com/libwww@perl.org/msg04650.html)
+- soap_transport_http: clean use of persistentConnection so it's always a set boolean
+- soapclient: add responseData member to access deflated/gunzipped payload

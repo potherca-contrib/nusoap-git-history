@@ -39,7 +39,10 @@ class soapclient extends nusoap_base  {
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
-	
+	var $request = '';
+	var $response = '';
+	var $responseData = '';
+
 	/**
 	* fault related variables
 	*
@@ -112,6 +115,7 @@ class soapclient extends nusoap_base  {
 		$this->error_str = '';
 		$this->request = '';
 		$this->response = '';
+		$this->responseData = '';
 		$this->faultstring = '';
 		$this->faultcode = '';
 		$this->opData = array();
@@ -279,7 +283,7 @@ class soapclient extends nusoap_base  {
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
-					$response = $http->send($msg,$timeout);
+					$this->responseData = $http->send($msg,$timeout);
 				} elseif(ereg('^https',$this->endpoint)){
 				//} elseif(strpos($this->endpoint,'https:')){
 					//if(phpversion() == '4.3.0-dev'){
@@ -288,7 +292,7 @@ class soapclient extends nusoap_base  {
 						//$this->response = $http->incoming_payload;
 					//} else
 					if (extension_loaded('curl')) {
-						$response = $http->sendHTTPS($msg,$timeout);
+						$this->responseData = $http->sendHTTPS($msg,$timeout);
 					} else {
 						$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 					}								
@@ -318,8 +322,8 @@ class soapclient extends nusoap_base  {
 						}
 						// TODO: should we set a default encoding?
 					}
-					$this->debug('got response, length: '.strlen($response).' use encoding: '.$this->xml_encoding);
-					return $this->parseResponse($response);
+					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
+					return $this->parseResponse($this->responseData);
 				}
 			break;
 			default:

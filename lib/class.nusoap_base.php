@@ -368,6 +368,10 @@ class nusoap_base {
     * @access public
     */
     function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc'){
+    // TODO: add an option to automatically run utf8_encode on $body and $headers
+    // if $this->soap_defencoding is UTF-8.  Not doing this automatically allows
+    // one to send arbitrary UTF-8 characters, not just characters that map to ISO-8859-1
+
 	// serialize namespaces
     $ns_string = '';
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){

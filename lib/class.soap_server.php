@@ -104,16 +104,32 @@ class soap_server extends nusoap_base {
 			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
-			if (isset($this->headers))
-			{
-			   if (isset($this->headers['Accept-Encoding']))
-			   {	
-			    if (($this->headers['Accept-Encoding'] == 'deflate') && (function_exists('gzcompress')))
-			    {
-			    	$header[] ="Content-Encoding: deflate";
-			    	$payload = gzcompress($payload);
-			    }
-			   }
+			if (isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
+			   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
+					if (function_exists('gzcompress')) {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content being deflated -->";
+						}
+						$header[] = "Content-Encoding: deflate";
+						$payload = gzcompress($payload);
+					} else {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content will not be deflated: no gzcompress -->";
+						}
+					}
+			   } else if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
+					if (function_exists('gzencode')) {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content being gzipped -->";
+						}
+						$header[] = "Content-Encoding: gzip";
+						$payload = gzencode($payload);
+					} else {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content will not be gzipped: no gzencode -->";
+						}
+					}
+				}
 			}
 			//end code
 			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
@@ -158,35 +174,57 @@ class soap_server extends nusoap_base {
 				}
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
-			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
-			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? str_replace('"', '', $_SERVER['SOAPAction']) : '';
-			// get the character encoding of the incoming request
-			if (isset($_SERVER['CONTENT_TYPE'])) {
-				if (strpos($_SERVER['CONTENT_TYPE'], '=')) {
-					$enc = substr(strstr($_SERVER['CONTENT_TYPE'], '='), 1);
-					$enc = str_replace('"','',$enc);
-					$enc = str_replace('\\','',$enc);
-					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = strtoupper($enc);
-					} else {
-						$this->xml_encoding = 'US-ASCII';
+			foreach ($_SERVER as $k => $v) {
+				if (substr($k, 0, 5) == 'HTTP_') {
+					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
+					if ($k == 'Soapaction') {
+						// get SOAPAction header
+						$k = 'SOAPAction';
+						$v = str_replace('"', '', $v);
+						$v = str_replace('\\', '', $v);
+					} else if ($k == 'Content-Type') {
+						// get the character encoding of the incoming request
+						if (strpos($v, '=')) {
+							$enc = substr(strstr($v, '='), 1);
+							$enc = str_replace('"', '', $enc);
+							$enc = str_replace('\\', '', $enc);
+							if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+								$this->xml_encoding = strtoupper($enc);
+							} else {
+								$this->xml_encoding = 'US-ASCII';
+							}
+						}
 					}
+					$this->headers[$k] = $v;
+					$dump .= "$k: $v\r\n";
+					$this->debug("$k: $v");
 				}
 			}
 		} elseif (is_array($HTTP_SERVER_VARS)) {
-			$this->headers['User-Agent'] = $HTTP_SERVER_VARS['HTTP_USER_AGENT'];
-			$this->SOAPAction = isset($HTTP_SERVER_VARS['SOAPAction']) ? str_replace('"', '', $HTTP_SERVER_VARS['SOAPAction']) : '';
-			// get the character encoding of the incoming request
-			if (isset($HTTP_SERVER_VARS['CONTENT_TYPE'])) {
-				if (strpos($HTTP_SERVER_VARS['CONTENT_TYPE'], '=')) {
-					$enc = substr(strstr($HTTP_SERVER_VARS['CONTENT_TYPE'], '='), 1);
-					$enc = str_replace('"','',$enc);
-					$enc = str_replace('\\','',$enc);
-					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = strtoupper($enc);
-					} else {
-						$this->xml_encoding = 'US-ASCII';
+			foreach ($HTTP_SERVER_VARS as $k => $v) {
+				if (substr($k, 0, 5) == 'HTTP_') {
+					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
+					if ($k == 'Soapaction') {
+						// get SOAPAction header
+						$k = 'SOAPAction';
+						$v = str_replace('"', '', $v);
+						$v = str_replace('\\', '', $v);
+					} else if ($k == 'Content-Type') {
+						// get the character encoding of the incoming request
+						if (strpos($v, '=')) {
+							$enc = substr(strstr($v, '='), 1);
+							$enc = str_replace('"', '', $enc);
+							$enc = str_replace('\\', '', $enc);
+							if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+								$this->xml_encoding = strtoupper($enc);
+							} else {
+								$this->xml_encoding = 'US-ASCII';
+							}
+						}
 					}
+					$this->headers[$k] = $v;
+					$dump .= "$k: $v\r\n";
+					$this->debug("$k: $v");
 				}
 			}
 		}

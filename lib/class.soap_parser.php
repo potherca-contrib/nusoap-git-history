@@ -204,6 +204,13 @@ class soap_parser extends nusoap_base {
 				$expr = '([A-Za-z0-9_]+):([A-Za-z]+[A-Za-z0-9_]+)\[([0-9]+),?([0-9]*)\]';
 				if(ereg($expr,$value,$regs)){
 					$this->message[$pos]['typePrefix'] = $regs[1];
+					$this->message[$pos]['arrayTypePrefix'] = $regs[1];
+	                if (isset($this->namespaces[$regs[1]])) {
+	                	$this->message[$pos]['arrayTypeNamespace'] = $this->namespaces[$regs[1]];
+	                } else if (isset($attrs['xmlns:'.$regs[1]])) {
+						$this->message[$pos]['arrayTypeNamespace'] = $attrs['xmlns:'.$regs[1]];
+	                }
+					$this->message[$pos]['arrayType'] = $regs[2];
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
@@ -276,7 +283,16 @@ class soap_parser extends nusoap_base {
 			// set value of simple type
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
+            	if (isset($this->message[$pos]['type'])) {
+					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], $this->message[$pos]['type_namespace']);
+				} else {
+					$parent = $this->message[$pos]['parent'];
+					if ($this->message[$parent]['type'] == 'array') {
+						if (isset($this->message[$parent]['arrayType'])) {
+							$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], $this->message[$pos]['arrayTypeNamespace']);
+						}
+					}
+				}
 				
 				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
@@ -321,6 +337,8 @@ class soap_parser extends nusoap_base {
 	function character_data($parser, $data){
 		$pos = $this->depth_array[$this->depth];
 		if ($this->xml_encoding=='UTF-8'){
+			// TODO: add an option to disable this for folks who want
+			// raw UTF-8 that, e.g., might not map to iso-8859-1
 			$data = utf8_decode($data);
 		}
         $this->message[$pos]['cdata'] .= $data;
@@ -363,6 +381,45 @@ class soap_parser extends nusoap_base {
 			$text = str_replace($encoded,$entity,$text);
 		}
 		return $text;
+	}
+
+	/**
+	* decodes simple types into PHP variables
+	*
+	* @param    string $value value to decode
+	* @param    string $type XML type to decode
+	* @param    string $typens XML type namespace to decode
+	* @access   private
+	*/
+	function decodeSimple($value, $type, $typens) {
+		// TODO: use the namespace!
+		if ((!isset($type)) || ($type == 'string')) {
+			return (string) $value;
+		}
+		if ($type == 'int' || $type == 'integer' || $type == 'short' || $type == 'long' || $type == 'byte') {
+			return (int) $value;
+		}
+		if ($type == 'float' || $type == 'double' || $type == 'decimal') {
+			return (double) $value;
+		}
+		if ($type == 'boolean') {
+			if (strtolower($value) == 'false' || strtolower($value) == 'f') {
+				return false;
+			}
+			return (boolean) $value;
+		}
+		if ($type == 'base64' || $type == 'base64Binary') {
+			return base64_decode($value);
+		}
+		// obscure numeric types
+		if ($type == 'nonPositiveInteger' || $type == 'negativeInteger'
+			|| $type == 'nonNegativeInteger' || $type == 'positiveInteger'
+			|| $type == 'unsignedLong' || $type == 'unsignedInt'
+			|| $type == 'unsignedShort' || $type == 'unsignedByte') {
+			return (int) $value;
+		}
+		// everything else
+		return (string) $value;
 	}
 
 	/**

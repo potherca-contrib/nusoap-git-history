@@ -368,6 +368,10 @@ class nusoap_base {
     * @access public
     */
     function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc'){
+    // TODO: add an option to automatically run utf8_encode on $body and $headers
+    // if $this->soap_defencoding is UTF-8.  Not doing this automatically allows
+    // one to send arbitrary UTF-8 characters, not just characters that map to ISO-8859-1
+
 	// serialize namespaces
     $ns_string = '';
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){
@@ -1340,7 +1344,7 @@ class soap_transport_http extends nusoap_base {
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	var $useSOAPAction = true;
-	var $persistentConnection = 0;
+	var $persistentConnection = false;
 	
 	/**
 	* constructor
@@ -1384,7 +1388,7 @@ class soap_transport_http extends nusoap_base {
 	function connect($connection_timeout=0,$response_timeout=30){
 		
 		// use persistent connection
-		if($this->persistentConnection == 1 && is_resource($this->fp)){
+		if($this->persistentConnection && is_resource($this->fp)){
 			if (!feof($this->fp)) {
 				$this->debug('Re-use persistent connection');
 				return true;
@@ -1470,7 +1474,7 @@ class soap_transport_http extends nusoap_base {
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 		// encode
-		if(function_exists('gzinflate')){
+		if(function_exists('gzuncompress')){
 			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
 		}
 		// persistent connection
@@ -1556,10 +1560,10 @@ class soap_transport_http extends nusoap_base {
 		if($headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
-					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+    			if(function_exists('gzuncompress')){
+					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
     					$data = $degzdata;
-					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){ // do our best
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -1605,7 +1609,7 @@ class soap_transport_http extends nusoap_base {
 		$this->protocol_version = '1.1';
 		$this->outgoing_headers['Accept-Encoding'] = $enc;
 		$this->outgoing_headers['Connection'] = 'close';
-		unset($this->persistentConnection);
+		$this->persistentConnection = false;
 		set_magic_quotes_runtime(0);
 		// deprecated
 		$this->encoding = $enc;
@@ -1781,7 +1785,7 @@ class soap_transport_http extends nusoap_base {
 		// close filepointer
 		if(
 			//(isset($this->incoming_headers['connection']) && $this->incoming_headers['connection'] == 'close') || 
-			(!isset($this->persistentConnection)) || feof($this->fp)){
+			(! $this->persistentConnection) || feof($this->fp)){
 			fclose($this->fp);
 			$this->fp = false;
 			$this->debug('closed socket');
@@ -1808,11 +1812,11 @@ class soap_transport_http extends nusoap_base {
 		if(isset($this->incoming_headers['content-encoding']) && $this->incoming_headers['content-encoding'] != ''){
 			if(strtolower($this->incoming_headers['content-encoding']) == 'deflate' || strtolower($this->incoming_headers['content-encoding']) == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
-    			if(function_exists('gzinflate')){
+    			if(function_exists('gzuncompress')){
 					//$timer->setMarker('starting decoding of gzip/deflated content');
-					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
+					if($this->incoming_headers['content-encoding'] == 'deflate' && $degzdata = @gzuncompress($data)){
     					$data = $degzdata;
-					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
+					} elseif($this->incoming_headers['content-encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){	// do our best
 						$data = $degzdata;
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
@@ -1839,7 +1843,7 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 		$this->protocol_version = '1.1';
-		$this->persistentConnection = 1;
+		$this->persistentConnection = true;
 		$this->outgoing_headers['Connection'] = 'Keep-Alive';
 		return true;
 	}
@@ -1951,16 +1955,32 @@ class soap_server extends nusoap_base {
 			//$header[] = "Connection: Close\r\n";
 			$header[] = "Content-Type: text/xml; charset=$this->soap_defencoding\r\n";
 			//begin code to compress payload - by John
-			if (isset($this->headers))
-			{
-			   if (isset($this->headers['Accept-Encoding']))
-			   {	
-			    if (($this->headers['Accept-Encoding'] == 'deflate') && (function_exists('gzcompress')))
-			    {
-			    	$header[] ="Content-Encoding: deflate";
-			    	$payload = gzcompress($payload);
-			    }
-			   }
+			if (isset($this->headers) && isset($this->headers['Accept-Encoding'])) {	
+			   if (strstr($this->headers['Accept-Encoding'], 'deflate')) {
+					if (function_exists('gzcompress')) {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content being deflated -->";
+						}
+						$header[] = "Content-Encoding: deflate";
+						$payload = gzcompress($payload);
+					} else {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content will not be deflated: no gzcompress -->";
+						}
+					}
+			   } else if (strstr($this->headers['Accept-Encoding'], 'gzip')) {
+					if (function_exists('gzencode')) {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content being gzipped -->";
+						}
+						$header[] = "Content-Encoding: gzip";
+						$payload = gzencode($payload);
+					} else {
+						if (isset($this->debug_flag) && $this->debug_flag) {
+							$payload .= "<!-- Content will not be gzipped: no gzencode -->";
+						}
+					}
+				}
 			}
 			//end code
 			$header[] = "Content-Length: ".strlen($payload)."\r\n\r\n";
@@ -2005,35 +2025,57 @@ class soap_server extends nusoap_base {
 				}
 			}
 		} elseif(isset($_SERVER) && is_array($_SERVER)){
-			$this->headers['User-Agent'] = $_SERVER['HTTP_USER_AGENT'];
-			$this->SOAPAction = isset($_SERVER['SOAPAction']) ? str_replace('"', '', $_SERVER['SOAPAction']) : '';
-			// get the character encoding of the incoming request
-			if (isset($_SERVER['CONTENT_TYPE'])) {
-				if (strpos($_SERVER['CONTENT_TYPE'], '=')) {
-					$enc = substr(strstr($_SERVER['CONTENT_TYPE'], '='), 1);
-					$enc = str_replace('"','',$enc);
-					$enc = str_replace('\\','',$enc);
-					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = strtoupper($enc);
-					} else {
-						$this->xml_encoding = 'US-ASCII';
+			foreach ($_SERVER as $k => $v) {
+				if (substr($k, 0, 5) == 'HTTP_') {
+					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
+					if ($k == 'Soapaction') {
+						// get SOAPAction header
+						$k = 'SOAPAction';
+						$v = str_replace('"', '', $v);
+						$v = str_replace('\\', '', $v);
+					} else if ($k == 'Content-Type') {
+						// get the character encoding of the incoming request
+						if (strpos($v, '=')) {
+							$enc = substr(strstr($v, '='), 1);
+							$enc = str_replace('"', '', $enc);
+							$enc = str_replace('\\', '', $enc);
+							if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+								$this->xml_encoding = strtoupper($enc);
+							} else {
+								$this->xml_encoding = 'US-ASCII';
+							}
+						}
 					}
+					$this->headers[$k] = $v;
+					$dump .= "$k: $v\r\n";
+					$this->debug("$k: $v");
 				}
 			}
 		} elseif (is_array($HTTP_SERVER_VARS)) {
-			$this->headers['User-Agent'] = $HTTP_SERVER_VARS['HTTP_USER_AGENT'];
-			$this->SOAPAction = isset($HTTP_SERVER_VARS['SOAPAction']) ? str_replace('"', '', $HTTP_SERVER_VARS['SOAPAction']) : '';
-			// get the character encoding of the incoming request
-			if (isset($HTTP_SERVER_VARS['CONTENT_TYPE'])) {
-				if (strpos($HTTP_SERVER_VARS['CONTENT_TYPE'], '=')) {
-					$enc = substr(strstr($HTTP_SERVER_VARS['CONTENT_TYPE'], '='), 1);
-					$enc = str_replace('"','',$enc);
-					$enc = str_replace('\\','',$enc);
-					if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-						$this->xml_encoding = strtoupper($enc);
-					} else {
-						$this->xml_encoding = 'US-ASCII';
+			foreach ($HTTP_SERVER_VARS as $k => $v) {
+				if (substr($k, 0, 5) == 'HTTP_') {
+					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
+					if ($k == 'Soapaction') {
+						// get SOAPAction header
+						$k = 'SOAPAction';
+						$v = str_replace('"', '', $v);
+						$v = str_replace('\\', '', $v);
+					} else if ($k == 'Content-Type') {
+						// get the character encoding of the incoming request
+						if (strpos($v, '=')) {
+							$enc = substr(strstr($v, '='), 1);
+							$enc = str_replace('"', '', $enc);
+							$enc = str_replace('\\', '', $enc);
+							if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+								$this->xml_encoding = strtoupper($enc);
+							} else {
+								$this->xml_encoding = 'US-ASCII';
+							}
+						}
 					}
+					$this->headers[$k] = $v;
+					$dump .= "$k: $v\r\n";
+					$this->debug("$k: $v");
 				}
 			}
 		}
@@ -3530,6 +3572,13 @@ class soap_parser extends nusoap_base {
 				$expr = '([A-Za-z0-9_]+):([A-Za-z]+[A-Za-z0-9_]+)\[([0-9]+),?([0-9]*)\]';
 				if(ereg($expr,$value,$regs)){
 					$this->message[$pos]['typePrefix'] = $regs[1];
+					$this->message[$pos]['arrayTypePrefix'] = $regs[1];
+	                if (isset($this->namespaces[$regs[1]])) {
+	                	$this->message[$pos]['arrayTypeNamespace'] = $this->namespaces[$regs[1]];
+	                } else if (isset($attrs['xmlns:'.$regs[1]])) {
+						$this->message[$pos]['arrayTypeNamespace'] = $attrs['xmlns:'.$regs[1]];
+	                }
+					$this->message[$pos]['arrayType'] = $regs[2];
 					$this->message[$pos]['arraySize'] = $regs[3];
 					$this->message[$pos]['arrayCols'] = $regs[4];
 				}
@@ -3602,8 +3651,17 @@ class soap_parser extends nusoap_base {
 			// set value of simple type
 			} else {
             	//$this->debug('adding data for scalar value '.$this->message[$pos]['name'].' of value '.$this->message[$pos]['cdata']);
-				$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
-				
+            	if (isset($this->message[$pos]['type'])) {
+					$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$pos]['type'], $this->message[$pos]['type_namespace']);
+				} else {
+					$parent = $this->message[$pos]['parent'];
+					if ($this->message[$parent]['type'] == 'array') {
+						if (isset($this->message[$parent]['arrayType'])) {
+							$this->message[$pos]['result'] = $this->decodeSimple($this->message[$pos]['cdata'], $this->message[$parent]['arrayType'], $this->message[$pos]['arrayTypeNamespace']);
+						}
+					}
+				}
+
 				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
 				if($this->message[$parent]['type'] != 'map'){
@@ -3647,6 +3705,8 @@ class soap_parser extends nusoap_base {
 	function character_data($parser, $data){
 		$pos = $this->depth_array[$this->depth];
 		if ($this->xml_encoding=='UTF-8'){
+			// TODO: add an option to disable this for folks who want
+			// raw UTF-8 that, e.g., might not map to iso-8859-1
 			$data = utf8_decode($data);
 		}
         $this->message[$pos]['cdata'] .= $data;
@@ -3689,6 +3749,45 @@ class soap_parser extends nusoap_base {
 			$text = str_replace($encoded,$entity,$text);
 		}
 		return $text;
+	}
+
+	/**
+	* decodes simple types into PHP variables
+	*
+	* @param    string $value value to decode
+	* @param    string $type XML type to decode
+	* @param    string $typens XML type namespace to decode
+	* @access   private
+	*/
+	function decodeSimple($value, $type, $typens) {
+		// TODO: use the namespace!
+		if ((!isset($type)) || ($type == 'string')) {
+			return (string) $value;
+		}
+		if ($type == 'int' || $type == 'integer' || $type == 'short' || $type == 'long' || $type == 'byte') {
+			return (int) $value;
+		}
+		if ($type == 'float' || $type == 'double' || $type == 'decimal') {
+			return (double) $value;
+		}
+		if ($type == 'boolean') {
+			if (strtolower($value) == 'false' || strtolower($value) == 'f') {
+				return false;
+			}
+			return (boolean) $value;
+		}
+		if ($type == 'base64' || $type == 'base64Binary') {
+			return base64_decode($value);
+		}
+		// obscure numeric types
+		if ($type == 'nonPositiveInteger' || $type == 'negativeInteger'
+			|| $type == 'nonNegativeInteger' || $type == 'positiveInteger'
+			|| $type == 'unsignedLong' || $type == 'unsignedInt'
+			|| $type == 'unsignedShort' || $type == 'unsignedByte') {
+			return (int) $value;
+		}
+		// everything else
+		return (string) $value;
 	}
 
 	/**
@@ -3806,6 +3905,9 @@ class soapclient extends nusoap_base  {
 	var $endpointType = '';
 	var $persistentConnection = false;
 	var $defaultRpcParams = false;
+	var $request = '';
+	var $response = '';
+	var $responseData = '';
 	
 	/**
 	* fault related variables
@@ -3879,6 +3981,7 @@ class soapclient extends nusoap_base  {
 		$this->error_str = '';
 		$this->request = '';
 		$this->response = '';
+		$this->responseData = '';
 		$this->faultstring = '';
 		$this->faultcode = '';
 		$this->opData = array();
@@ -4046,7 +4149,7 @@ class soapclient extends nusoap_base  {
 				$this->debug('sending message, length: '.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
-					$response = $http->send($msg,$timeout);
+					$this->responseData = $http->send($msg,$timeout);
 				} elseif(ereg('^https',$this->endpoint)){
 				//} elseif(strpos($this->endpoint,'https:')){
 					//if(phpversion() == '4.3.0-dev'){
@@ -4055,7 +4158,7 @@ class soapclient extends nusoap_base  {
 						//$this->response = $http->incoming_payload;
 					//} else
 					if (extension_loaded('curl')) {
-						$response = $http->sendHTTPS($msg,$timeout);
+						$this->responseData = $http->sendHTTPS($msg,$timeout);
 					} else {
 						$this->setError('CURL Extension, or OpenSSL extension w/ PHP version >= 4.3 is required for HTTPS');
 					}								
@@ -4085,8 +4188,8 @@ class soapclient extends nusoap_base  {
 						}
 						// TODO: should we set a default encoding?
 					}
-					$this->debug('got response, length: '.strlen($response).' use encoding: '.$this->xml_encoding);
-					return $this->parseResponse($response);
+					$this->debug('got response, length: '.strlen($this->responseData).' use encoding: '.$this->xml_encoding);
+					return $this->parseResponse($this->responseData);
 				}
 			break;
 			default:
