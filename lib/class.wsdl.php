@@ -193,18 +193,24 @@ class wsdl extends XMLSchema {
             if (isset($bindingData['operations']) && is_array($bindingData['operations'])) {
                 foreach($bindingData['operations'] as $operation => $data) {
                     $this->debug('post-parse data gathering for ' . $operation);
-                    $this->bindings[$binding]['operations'][$operation]['input'] = array_merge($this->bindings[$binding]['operations'][$operation]['input'], $this->portTypes[ $bindingData['portType'] ][$operation]['input']);
-                    $this->bindings[$binding]['operations'][$operation]['output'] = array_merge($this->bindings[$binding]['operations'][$operation]['output'], $this->portTypes[ $bindingData['portType'] ][$operation]['output']);
+                    $this->bindings[$binding]['operations'][$operation]['input'] = 
+						isset($this->bindings[$binding]['operations'][$operation]['input']) ? 
+						array_merge($this->bindings[$binding]['operations'][$operation]['input'], $this->portTypes[ $bindingData['portType'] ][$operation]['input']) :
+						$this->portTypes[ $bindingData['portType'] ][$operation]['input'];
+                    $this->bindings[$binding]['operations'][$operation]['output'] = 
+						isset($this->bindings[$binding]['operations'][$operation]['output']) ?
+						array_merge($this->bindings[$binding]['operations'][$operation]['output'], $this->portTypes[ $bindingData['portType'] ][$operation]['output']) :
+						$this->portTypes[ $bindingData['portType'] ][$operation]['output'];
                     if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ])){
 						$this->bindings[$binding]['operations'][$operation]['input']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['input']['message'] ];
 					}
 					if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ])){
                    		$this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
                     }
-					if (!isset($this->bindings[$binding]['operations'][$operation]['style'])) {
+					if (isset($this->bindings[$binding]['operations'][$operation]['style'])) {
                         $this->bindings[$binding]['operations'][$operation]['style'] = $bindingData['style'];
                     } 
-                    $this->bindings[$binding]['operations'][$operation]['transport'] = $bindingData['transport'];
+                    $this->bindings[$binding]['operations'][$operation]['transport'] = isset($bindingData['transport']) ? $bindingData['transport'] : '';
                     $this->bindings[$binding]['operations'][$operation]['documentation'] = isset($this->portTypes[ $bindingData['portType'] ][$operation]['documentation']) ? $this->portTypes[ $bindingData['portType'] ][$operation]['documentation'] : '';
                     $this->bindings[$binding]['operations'][$operation]['endpoint'] = isset($bindingData['endpoint']) ? $bindingData['endpoint'] : '';
                 } 
@@ -273,7 +279,7 @@ class wsdl extends XMLSchema {
             switch ($this->status) {
                 case 'message':
                     if ($name == 'part') {
-                    	if ($attrs['type']) {
+                    	if (isset($attrs['type'])) {
 		                    $this->debug("msg " . $this->currentMessage . ": found part $attrs[name]: " . implode(',', $attrs));
 		                    $this->messages[$this->currentMessage][$attrs['name']] = $attrs['type'];
             			} 

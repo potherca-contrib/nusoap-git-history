@@ -103,7 +103,7 @@ class soapclient extends nusoap_base  {
 			$this->opData = $opData;
 			$soapAction = $opData['soapAction'];
 			$this->endpoint = $opData['endpoint'];
-			$namespace = $opData['input']['namespace'];
+			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] : 'http://testuri.org';
 			$style = $opData['style'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
@@ -119,7 +119,7 @@ class soapclient extends nusoap_base  {
 				$this->wsdl->serializeRPCParameters($operation,'input',$params).
 				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
 			} elseif($opData['input']['use'] == 'literal') {
-				$payload = array_shift($params);
+				$payload = is_array($params) ? array_shift($params) : $params;
 			}
 			// serialize envelope
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces);

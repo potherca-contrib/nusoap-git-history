@@ -251,6 +251,7 @@ class nusoap_base {
                         }
 						$array_types[$tt] = 1;
 						$xml .= $this->serialize_val($v,'item');
+						$i = 0;
 						if(is_array($v) && is_numeric(key($v))){
 							$i += sizeof($v);
 						} else {
@@ -266,7 +267,7 @@ class nusoap_base {
 					} else {
 						$array_typename = $tt;
 					}
-					if($array_types['array']){
+					if(isset($array_types['array'])){
 						$array_type = $i.",".$i;
 					} else {
 						$array_type = $i;

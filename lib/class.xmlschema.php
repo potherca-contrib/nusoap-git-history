@@ -217,7 +217,7 @@ class XMLSchema extends nusoap_base  {
 				}
 			break;
 			case 'complexType':
-				if($attrs['name']){
+				if(isset($attrs['name'])){
 					$this->currentElement = false;
 					$this->currentComplexType = $attrs['name'];
 					$this->complexTypes[$this->currentComplexType] = $attrs;
@@ -240,13 +240,13 @@ class XMLSchema extends nusoap_base  {
 				} elseif(isset($attrs['ref'])){
 					$ename = $attrs['ref'];
 				} else {
-					$this->xdebug('adding complexType '.$attrs[name]);
+					$this->xdebug('adding complexType '.$attrs['name']);
 					$this->currentComplexType = $attrs['name'];
 					$this->complexTypes[ $attrs['name'] ] = $attrs;
 					$this->complexTypes[ $attrs['name'] ]['element'] = 1;
 					$this->complexTypes[$this->currentComplexType]['phpType'] = 'struct';
 				}
-				if($ename && $this->currentComplexType){
+				if(isset($ename) && $this->currentComplexType){
 					$this->complexTypes[$this->currentComplexType]['elements'][$ename] = $attrs;
 				}
 			break;
