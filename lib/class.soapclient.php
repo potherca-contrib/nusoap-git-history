@@ -386,15 +386,18 @@ class soapclient extends nusoap_base  {
 	* @access   public
 	*/
 	function getProxy(){
+		$evalStr = '';
 		foreach($this->operations as $operation => $opData){
 			if($operation != ''){
 				// create param string
+				$paramStr = '';
 				if(sizeof($opData['input']['parts']) > 0){
 					foreach($opData['input']['parts'] as $name => $type){
 						$paramStr .= "\$$name,";
 					}
 					$paramStr = substr($paramStr,0,strlen($paramStr)-1);
 				}
+				$opData['namespace'] = !isset($opData['namespace']) ? 'http://testuri.com' : $opData['namespace'];
 				$evalStr .= "function $operation ($paramStr){
 					// load params into array
 					\$params = array($paramStr);

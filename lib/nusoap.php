@@ -231,6 +231,11 @@ class nusoap_base {
 				$xml .= "<$name$xmlns xsi:type=\"xsd:string\"$atts>$val</$name>";
 				break;
 			case is_object($val):
+				$name = get_class($val);
+				foreach(get_object_vars($val) as $k => $v){
+					$pXml = isset($pXml) ? $pXml.$this->serialize_val($v,$k) : $this->serialize_val($v,$k);
+				}
+				$xml .= '<'.$name.'>'.$pXml.'</'.$name.'>';
 				break;
 			break;
 			case (is_array($val) || $type):
@@ -240,6 +245,7 @@ class nusoap_base {
 				foreach($keyList as $keyListValue){
 					if(!is_int($keyListValue)){
 						$valueType = 'arrayStruct';
+						break;
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
@@ -255,7 +261,7 @@ class nusoap_base {
 						if(is_array($v) && is_numeric(key($v))){
 							$i += sizeof($v);
 						} else {
-							$i += 1;
+							++$i;
 						}
 					}
 					if(count($array_types) > 1){
@@ -1232,6 +1238,8 @@ class soap_transport_http extends nusoap_base {
 	var $scheme = '';
 	var $protocol_version = '1.0';
 	var $encoding = '';
+	var $outgoing_headers = array();
+	var $incoming_headers = array();
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
 	
@@ -1252,52 +1260,9 @@ class soap_transport_http extends nusoap_base {
 			$this->port = 80;
 		}
 	}
-
-	/**
-	* if authenticating, set user credentials here
-	*
-	* @param    string $user
-	* @param    string $pass
-	* @access   public
-	*/
-	function setCredentials($username, $password) {
-		$this->username = $username;
-		$this->password = $password;
-	}
-
-	/**
-	* set the soapaction value
-	*
-	* @param    string $soapaction
-	* @access   public
-	*/
-	function setSOAPAction($soapaction) {
-		$this->soapaction = $soapaction;
-	}
-
-	/**
-	* set proxy info here
-	*
-	* @param    string $proxyhost
-	* @param    string $proxyport
-	* @access   public
-	*/
-	function setProxy($proxyhost, $proxyport) {
-		$this->proxyhost = $proxyhost;
-		$this->proxyport = $proxyport;
-	}
-
-	/**
-	* send the SOAP message via HTTP
-	*
-	* @param    string $data message data
-	* @param    integer $timeout set timeout in seconds
-	* @return	string data
-	* @access   public
-	*/
-	function send($data, $timeout=0) {
 	
-		$this->debug('entered send() with data of length: '.strlen($data));
+	function connect($timeout){
+		
 		// proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
 			$host = $this->proxyhost;
@@ -1327,37 +1292,54 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('Couldn\'t open socket connection to server: '.$this->url.', Error: '.$this->error_str);
 			return false;
 		}
-		$this->debug('socket connected');
-		// http auth
-		$credentials = '';
-		if($this->username != '') {
-			$this->debug('setting http auth credentials');
-			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
+		return $fp;
+	}
+	
+	/**
+	* send the SOAP message via HTTP
+	*
+	* @param    string $data message data
+	* @param    integer $timeout set timeout in seconds
+	* @return	string data
+	* @access   public
+	*/
+	function send($data, $timeout=0) {
+		$this->debug('entered send() with data of length: '.strlen($data));
+		// get connnection
+		if(!$fp = $this->connect($timeout)){
+			return false;
 		}
+		$this->debug('socket connected');
+		
+		// start building outgoing payload:
 		// swap url for path if going through a proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
 			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
 			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
-		// set encoding headers
-		if($this->encoding != '' && function_exists('gzdeflate')){
-			$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
-			"Connection: close\r\n";
-			set_magic_quotes_runtime(0);
-		} else {
-			$encoding_headers = '';
-		}
 		// make payload
 		$this->outgoing_payload .=
 			"User-Agent: $this->title/$this->version\r\n".
-			//"User-Agent: Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)\r\n".
-			"Host: ".$this->host."\r\n".
-			$credentials.
-			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
-			$encoding_headers.
-			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
-			$data;
+			"Host: ".$this->host."\r\n";
+		// http auth
+		$credentials = '';
+		if($this->username != '') {
+			$this->debug('setting http auth credentials');
+			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password")."\r\n";
+		}
+		// set content type
+		$this->outgoing_payload .= 'Content-Type: text/xml; charset="'.$this->soap_defencoding."\"\r\nContent-Length: ".strlen($data)."\r\n";
+		// http encoding
+		if($this->encoding != '' && function_exists('gzdeflate')){
+			$this->outgoing_payload .= "Accept-Encoding: $this->encoding\r\n".
+			"Connection: close\r\n";
+			set_magic_quotes_runtime(0);
+		}
+		// set soapaction
+		$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n\r\n";
+		// add data
+		$this->outgoing_payload .= $data;
 		
 		// send payload
 		if(!fputs($fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
@@ -1472,12 +1454,12 @@ class soap_transport_http extends nusoap_base {
 	* @access   public
 	*/
 	function sendHTTPS($data, $timeout=0) {
-	   	global $t;
-		$t->setMarker('inside sendHTTPS()');
+	   	//global $t;
+		//$t->setMarker('inside sendHTTPS()');
 		$this->debug('entered sendHTTPS() with data of length: '.strlen($data));
 		// init CURL
 		$ch = curl_init();
-		$t->setMarker('got curl handle');
+		//$t->setMarker('got curl handle');
 		// set proxy
 		if($this->proxyhost && $this->proxyport){
 			$host = $this->proxyhost;
@@ -1498,6 +1480,9 @@ class soap_transport_http extends nusoap_base {
 		if(function_exists('gzinflate')){
 			curl_setopt($ch, CURLOPT_ENCODING, 'deflate');
 		}
+		// persistent connection
+		//curl_setopt($ch, CURL_HTTP_VERSION_1_1, true);
+		
 		// set timeout
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
@@ -1527,16 +1512,17 @@ class soap_transport_http extends nusoap_base {
 			"Host: ".$this->host."\r\n".
 			$encoding_headers.
 			$credentials.
-			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
+			"Content-Type: text/xml; charset=\"$this->soap_defencoding\"\r\n".
+			"Content-Length: ".strlen($data)."\r\n".
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 
 		// set payload
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
-		$t->setMarker('set curl options, executing...');
+		//$t->setMarker('set curl options, executing...');
 		// send and receive
 		$this->incoming_payload = curl_exec($ch);
-		$t->setMarker('executed transfer');
+		//$t->setMarker('executed transfer');
 		$data = $this->incoming_payload;
 
         $cErr = curl_error($ch);
@@ -1550,13 +1536,13 @@ class soap_transport_http extends nusoap_base {
 			curl_close($ch);
 	    	return false;
 		} else {
-			echo '<pre>';
-			var_dump(curl_getinfo($ch));
-			echo '</pre>';
+			//echo '<pre>';
+			//var_dump(curl_getinfo($ch));
+			//echo '</pre>';
 		}
 		// close curl
 		curl_close($ch);
-		$t->setMarker('closed curl');
+		//$t->setMarker('closed curl');
 		
 		// remove 100 header
 		if(ereg('^HTTP/1.1 100',$data)){
@@ -1594,20 +1580,16 @@ class soap_transport_http extends nusoap_base {
 		
 		// decode transfer-encoding
 		if($headers['Transfer-Encoding'] == 'chunked'){
-			//$timer->setMarker('starting to decode chunked content');
 			if(!$data = $this->decodeChunked($data)){
 				$this->setError('Decoding of chunked data failed');
 				return false;
 			}
-			//$timer->setMarker('finished decoding of chunked content');
-			//print "<pre>\nde-chunked:\n---------------\n$data\n\n---------------\n</pre>";
 		}
 		// decode content-encoding
 		if($headers['Content-Encoding'] != ''){
 			if($headers['Content-Encoding'] == 'deflate' || $headers['Content-Encoding'] == 'gzip'){
     			// if decoding works, use it. else assume data wasn't gzencoded
     			if(function_exists('gzinflate')){
-					//$timer->setMarker('starting decoding of gzip/deflated content');
 					if($headers['Content-Encoding'] == 'deflate' && $degzdata = @gzinflate($data)){
     					$data = $degzdata;
 					} elseif($headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))){
@@ -1615,8 +1597,6 @@ class soap_transport_http extends nusoap_base {
 					} else {
 						$this->setError('Errors occurred when trying to decode the data');
 					}
-					//$timer->setMarker('finished decoding of gzip/deflated content');
-					//print "<xmp>\nde-inflated:\n---------------\n$data\n-------------\n</xmp>";
     			} else {
 					$this->setError('The server sent deflated data. Your php install must have the Zlib extension compiled in to support this.');
 				}
@@ -1627,13 +1607,59 @@ class soap_transport_http extends nusoap_base {
 		return $data;
 	}
 	
+	/**
+	* if authenticating, set user credentials here
+	*
+	* @param    string $user
+	* @param    string $pass
+	* @access   public
+	*/
+	function setCredentials($username, $password) {
+		$this->username = $username;
+		$this->password = $password;
+	}
+	
+	/**
+	* set the soapaction value
+	*
+	* @param    string $soapaction
+	* @access   public
+	*/
+	function setSOAPAction($soapaction) {
+		$this->soapaction = $soapaction;
+	}
+	
+	/**
+	* use http encoding
+	*
+	* @param    string $enc encoding style. supported values: gzip, deflate, or both
+	* @access   public
+	*/
 	function setEncoding($enc='gzip, deflate'){
 		$this->encoding = $enc;
 		$this->protocol_version = '1.1';
 	}
 	
-	// This function will decode "chunked' transfer encoding
- 	// as defined in RFC2068 19.4.6
+	/**
+	* set proxy info here
+	*
+	* @param    string $proxyhost
+	* @param    string $proxyport
+	* @access   public
+	*/
+	function setProxy($proxyhost, $proxyport) {
+		$this->proxyhost = $proxyhost;
+		$this->proxyport = $proxyport;
+	}
+	
+	/**
+	* decode a string that is encoded w/ "chunked' transfer encoding
+ 	* as defined in RFC2068 19.4.6
+	*
+	* @param    string $buffer
+	* @returns	string
+	* @access   public
+	*/
 	function decodeChunked($buffer){
 		// length := 0
 		$length = 0;
@@ -2848,7 +2874,7 @@ class wsdl extends XMLSchema {
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
 					$xml .= $this->serializeType($name, $type, $parameters[$name]);
-				} else {
+				} elseif(is_array($parameters)) {
 					$xml .= $this->serializeType($name, $type, array_shift($parameters));
 				} 
 			}
@@ -3079,7 +3105,7 @@ class soap_parser extends nusoap_base {
 		$this->method = $method;
 
 		// Check whether content has been read.
-	if(!empty($xml)){
+		if(!empty($xml)){
 			$this->debug('Entering soap_parser()');
 			// Create an XML parser.
 			$this->parser = xml_parser_create($this->xml_encoding);
@@ -3100,7 +3126,7 @@ class soap_parser extends nusoap_base {
 			    xml_error_string(xml_get_error_code($this->parser)));
 				$this->debug('parse error: '.$err);
 				$this->errstr = $err;
-		} else {
+			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
@@ -3108,9 +3134,19 @@ class soap_parser extends nusoap_base {
 				if($this->root_header != ""){
 					$this->responseHeaders = $this->message[$this->root_header]['result'];
 				}
+				// resolve hrefs/ids
+				if(sizeof($this->multirefs) > 0){
+					foreach($this->multirefs as $id => $hrefs){
+						$this->debug('resolving multirefs for id: '.$id);
+						foreach($hrefs as $refPos => $ref){
+							$this->debug('resolving href at pos '.$refPos);
+							$this->multirefs[$id][$refPos] = $this->buildVal($this->ids[$id]);
+						}
+					}
+				}
 			}
 			xml_parser_free($this->parser);
-	} else {
+		} else {
 			$this->debug('xml was empty, didn\'t parse!');
 			$this->errstr = 'xml was empty, didn\'t parse!';
 		}
@@ -3301,16 +3337,7 @@ class soap_parser extends nusoap_base {
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
-			// resolve hrefs/ids
-			if(sizeof($this->multirefs) > 0){
-				foreach($this->multirefs as $id => $hrefs){
-					$this->debug('resolving multirefs for id: '.$id);
-					foreach($hrefs as $refPos => $ref){
-						$this->debug('resolving href at pos '.$refPos);
-						$this->multirefs[$id][$refPos] = $this->buildval($this->ids[$id]);
-					}
-				}
-			}
+			// do nothing
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
@@ -3467,6 +3494,8 @@ class soapclient extends nusoap_base  {
 	var $http_encoding = false;
 	var $timeout = 0;
 	var $endpointType = '';
+	var $persistentConnection = false;
+	
 	/**
 	* fault related variables
 	*
@@ -3656,7 +3685,11 @@ class soapclient extends nusoap_base  {
 			// http(s)
 			case ereg('^http',$this->endpoint):
 				$this->debug('transporting via HTTP');
-				$http = new soap_transport_http($this->endpoint);
+				if($this->persistentConnection && is_object($this->persistentConnection)){
+					$http =& $this->persistentConnection;
+				} else {
+					$http = new soap_transport_http($this->endpoint);
+				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
 					$http->setProxy($this->proxyhost,$this->proxyport);
@@ -3689,6 +3722,10 @@ class soapclient extends nusoap_base  {
 				$this->request = $http->outgoing_payload;
 				$this->response = $http->incoming_payload;
 				$this->debug("transport debug data...\n".$http->debug_str);
+				// save transport object if using persistent connections
+				if($this->persistentConnection && !is_object($this->persistentConnection)){
+					$this->persistentConnection = $http;
+				}
 				if($err = $http->getError()){
 					$this->setError('HTTP Error: '.$err);
 					return false;
@@ -3795,21 +3832,33 @@ class soapclient extends nusoap_base  {
 	}
 	
 	/**
+	* use HTTP persistent connections if possible
+	*
+	* @access   public
+	*/
+	function useHTTPPersistentConnection(){
+		$this->persistentConnection = true;
+	}
+	
+	/**
 	* dynamically creates proxy class, allowing user to directly call methods from wsdl
 	*
 	* @return   object soap_proxy object
 	* @access   public
 	*/
 	function getProxy(){
+		$evalStr = '';
 		foreach($this->operations as $operation => $opData){
 			if($operation != ''){
 				// create param string
+				$paramStr = '';
 				if(sizeof($opData['input']['parts']) > 0){
 					foreach($opData['input']['parts'] as $name => $type){
 						$paramStr .= "\$$name,";
 					}
 					$paramStr = substr($paramStr,0,strlen($paramStr)-1);
 				}
+				$opData['namespace'] = !isset($opData['namespace']) ? 'http://testuri.com' : $opData['namespace'];
 				$evalStr .= "function $operation ($paramStr){
 					// load params into array
 					\$params = array($paramStr);

@@ -106,7 +106,7 @@ class soap_transport_http extends nusoap_base {
 		$credentials = '';
 		if($this->username != '') {
 			$this->debug('setting http auth credentials');
-			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
+			$this->outgoing_payload .= 'Authorization: Basic '.base64_encode("$this->username:$this->password")."\r\n";
 		}
 		// set content type
 		$this->outgoing_payload .= 'Content-Type: text/xml; charset="'.$this->soap_defencoding."\"\r\nContent-Length: ".strlen($data)."\r\n";
@@ -292,7 +292,8 @@ class soap_transport_http extends nusoap_base {
 			"Host: ".$this->host."\r\n".
 			$encoding_headers.
 			$credentials.
-			"Content-Type: text/xml\r\nContent-Length: ".strlen($data)."\r\n".
+			"Content-Type: text/xml; charset=\"$this->soap_defencoding\"\r\n".
+			"Content-Length: ".strlen($data)."\r\n".
 			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
 			$data;
 

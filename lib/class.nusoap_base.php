@@ -245,6 +245,7 @@ class nusoap_base {
 				foreach($keyList as $keyListValue){
 					if(!is_int($keyListValue)){
 						$valueType = 'arrayStruct';
+						break;
 					}
 				}
                 if($valueType=='arraySimple' || ereg('^ArrayOf',$type)){
@@ -260,7 +261,7 @@ class nusoap_base {
 						if(is_array($v) && is_numeric(key($v))){
 							$i += sizeof($v);
 						} else {
-							$i += 1;
+							++$i;
 						}
 					}
 					if(count($array_types) > 1){

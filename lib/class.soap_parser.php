@@ -52,7 +52,7 @@ class soap_parser extends nusoap_base {
 		$this->method = $method;
 
 		// Check whether content has been read.
-	if(!empty($xml)){
+		if(!empty($xml)){
 			$this->debug('Entering soap_parser()');
 			// Create an XML parser.
 			$this->parser = xml_parser_create($this->xml_encoding);
@@ -73,7 +73,7 @@ class soap_parser extends nusoap_base {
 			    xml_error_string(xml_get_error_code($this->parser)));
 				$this->debug('parse error: '.$err);
 				$this->errstr = $err;
-		} else {
+			} else {
 				$this->debug('parsed successfully, found root struct: '.$this->root_struct.' of name '.$this->root_struct_name);
 				// get final value
 				$this->soapresponse = $this->message[$this->root_struct]['result'];
@@ -81,9 +81,19 @@ class soap_parser extends nusoap_base {
 				if($this->root_header != ""){
 					$this->responseHeaders = $this->message[$this->root_header]['result'];
 				}
+				// resolve hrefs/ids
+				if(sizeof($this->multirefs) > 0){
+					foreach($this->multirefs as $id => $hrefs){
+						$this->debug('resolving multirefs for id: '.$id);
+						foreach($hrefs as $refPos => $ref){
+							$this->debug('resolving href at pos '.$refPos);
+							$this->multirefs[$id][$refPos] = $this->buildVal($this->ids[$id]);
+						}
+					}
+				}
 			}
 			xml_parser_free($this->parser);
-	} else {
+		} else {
 			$this->debug('xml was empty, didn\'t parse!');
 			$this->errstr = 'xml was empty, didn\'t parse!';
 		}
@@ -274,16 +284,7 @@ class soap_parser extends nusoap_base {
 		 } elseif($name == 'Header'){
 			$this->status = 'envelope';
 		} elseif($name == 'Envelope'){
-			// resolve hrefs/ids
-			if(sizeof($this->multirefs) > 0){
-				foreach($this->multirefs as $id => $hrefs){
-					$this->debug('resolving multirefs for id: '.$id);
-					foreach($hrefs as $refPos => $ref){
-						$this->debug('resolving href at pos '.$refPos);
-						$this->multirefs[$id][$refPos] = $this->buildval($this->ids[$id]);
-					}
-				}
-			}
+			// do nothing
 		}
 		// set parent back to my parent
 		$this->parent = $this->message[$pos]['parent'];
