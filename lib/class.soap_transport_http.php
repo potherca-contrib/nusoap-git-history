@@ -18,12 +18,14 @@ class soap_transport_http extends nusoap_base {
     var $proxyhost = '';
     var $proxyport = '';
 	var $scheme = '';
+	var $request_method = 'POST';
 	var $protocol_version = '1.0';
 	var $encoding = '';
 	var $outgoing_headers = array();
 	var $incoming_headers = array();
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
+	var $useSOAPAction = true;
 	
 	/**
 	* constructor
@@ -96,9 +98,9 @@ class soap_transport_http extends nusoap_base {
 		// start building outgoing payload:
 		// swap url for path if going through a proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
-			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+			$this->outgoing_payload = "$this->request_method $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
-			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+			$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
 		// make payload
 		$this->outgoing_payload .=
@@ -119,7 +121,10 @@ class soap_transport_http extends nusoap_base {
 			set_magic_quotes_runtime(0);
 		}
 		// set soapaction
-		$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n\r\n";
+		if($this->useSOAPAction){
+			$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n";
+		}
+		$this->outgoing_payload .= "\r\n";
 		// add data
 		$this->outgoing_payload .= $data;
 		

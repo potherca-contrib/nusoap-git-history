@@ -35,16 +35,21 @@ class wsdl extends XMLSchema {
     var $depth = 0;
     var $depth_array = array();
 	var $usedNamespaces = array();
-
+	// for getting wsdl
+	var $proxyhost = '';
+    var $proxyport = '';
+    
     /**
      * constructor
      * 
      * @param string $wsdl WSDL document URL
      * @access public 
      */
-    function wsdl($wsdl = '')
-    {
-        $this->wsdl = $wsdl; 
+    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false){
+        $this->wsdl = $wsdl;
+        $this->proxyhost = $proxyhost;
+        $this->proxyport = $proxyport;
+        
         // parse wsdl file
         if ($wsdl != "") {
             $this->debug('initial wsdl file: ' . $wsdl);
@@ -95,7 +100,24 @@ class wsdl extends XMLSchema {
         $wsdl_props = parse_url($wsdl);
 
         if (isset($wsdl_props['host'])) {
-            // $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
+        	
+        	// get wsdl
+        	//die("$wsdl");
+	        $tr = new soap_transport_http($wsdl);
+			$tr->request_method = 'GET';
+			$tr->useSOAPAction = false;
+			if($this->proxyhost && $this->proxyport){
+				$tr->setProxy($this->proxyhost,$this->proxyport);
+			}
+			$wsdl_string = $tr->send($request);
+			// catch errors
+			if($err = $tr->getError() ){
+				$this->debug('HTTP ERROR: '.$err);
+	            $this->setError('HTTP ERROR: '.$err);
+	            return false;
+			}
+			unset($tr);
+            /* $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
             $fsockopen_timeout = 30; 
             // check if a port value is supplied in url
             if (isset($wsdl_props['port'])) {
@@ -145,7 +167,8 @@ class wsdl extends XMLSchema {
             } else {
                 $this->setError('bad path to WSDL file.');
                 return false;
-            } 
+            }
+            */
         } else {
             // $wsdl seems to be a non-url file path, do the regular fopen
             if ($fp = @fopen($wsdl, 'r')) {

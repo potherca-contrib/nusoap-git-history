@@ -1301,12 +1301,14 @@ class soap_transport_http extends nusoap_base {
     var $proxyhost = '';
     var $proxyport = '';
 	var $scheme = '';
+	var $request_method = 'POST';
 	var $protocol_version = '1.0';
 	var $encoding = '';
 	var $outgoing_headers = array();
 	var $incoming_headers = array();
 	var $outgoing_payload = '';
 	var $incoming_payload = '';
+	var $useSOAPAction = true;
 	
 	/**
 	* constructor
@@ -1379,9 +1381,9 @@ class soap_transport_http extends nusoap_base {
 		// start building outgoing payload:
 		// swap url for path if going through a proxy
 		if($this->proxyhost != '' && $this->proxyport != ''){
-			$this->outgoing_payload = "POST $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+			$this->outgoing_payload = "$this->request_method $this->url ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		} else {
-			$this->outgoing_payload = "POST $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+			$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
 		}
 		// make payload
 		$this->outgoing_payload .=
@@ -1402,7 +1404,10 @@ class soap_transport_http extends nusoap_base {
 			set_magic_quotes_runtime(0);
 		}
 		// set soapaction
-		$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n\r\n";
+		if($this->useSOAPAction){
+			$this->outgoing_payload .= "SOAPAction: \"$this->soapaction\""."\r\n";
+		}
+		$this->outgoing_payload .= "\r\n";
 		// add data
 		$this->outgoing_payload .= $data;
 		
@@ -1804,7 +1809,7 @@ class soap_server extends nusoap_base {
 	var $result = 'successful';
 	var $wsdl = false;
 	var $externalWSDLURL = false;
-    var $debug_flag = 0;
+    var $debug_flag = true;
 	
 	/**
 	* constructor
@@ -2008,6 +2013,7 @@ class soap_server extends nusoap_base {
 						$this->debug('got a(n) '.gettype($method_response).' from method');
 						$this->debug('serializing return value');
 						if($this->wsdl){
+							// weak attempt at supporting multiple output params
 							if(sizeof($this->opData['output']['parts']) > 1){
 						    	$opParams = $method_response;
 						    } else {
@@ -2089,10 +2095,10 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false){
-	    if($this->externalWSDLURL){
+		if($this->externalWSDLURL){
 			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
 		}
-		if(false == $in) {
+	    if(false == $in) {
 		}
 		if(false == $out) {
 		}
@@ -2228,20 +2234,20 @@ class soap_server extends nusoap_base {
 				    // create hidden div
 				    $b .= "<div id='$op' class='hidden'>
 				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
-				    foreach($data as $donnie => $marie){
-						if($donnie == 'input' || $donnie == 'output'){
+				    foreach($data as $donnie => $marie){ // loop through opdata
+						if($donnie == 'input' || $donnie == 'output'){ // show input/output data
 						    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
-						    foreach($marie as $captain => $tenille){
-							if($captain == 'parts'){
-							    $b .= "&nbsp;&nbsp;$captain:<br>";
-				                if(is_array($tenille)){
-							    foreach($tenille as $joanie => $chachi){
-									$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
-							    }
-				        		}
-							} else {
-							    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
-							}
+						    foreach($marie as $captain => $tenille){ // loop through data
+								if($captain == 'parts'){ // loop thru parts
+								    $b .= "&nbsp;&nbsp;$captain:<br>";
+					                //if(is_array($tenille)){
+								    	foreach($tenille as $joanie => $chachi){
+											$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
+								    	}
+					        		//}
+								} else {
+								    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
+								}
 						    }
 						} else {
 						    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
@@ -2333,16 +2339,21 @@ class wsdl extends XMLSchema {
     var $depth = 0;
     var $depth_array = array();
 	var $usedNamespaces = array();
-
+	// for getting wsdl
+	var $proxyhost = '';
+    var $proxyport = '';
+    
     /**
      * constructor
      * 
      * @param string $wsdl WSDL document URL
      * @access public 
      */
-    function wsdl($wsdl = '')
-    {
-        $this->wsdl = $wsdl; 
+    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false){
+        $this->wsdl = $wsdl;
+        $this->proxyhost = $proxyhost;
+        $this->proxyport = $proxyport;
+        
         // parse wsdl file
         if ($wsdl != "") {
             $this->debug('initial wsdl file: ' . $wsdl);
@@ -2393,7 +2404,24 @@ class wsdl extends XMLSchema {
         $wsdl_props = parse_url($wsdl);
 
         if (isset($wsdl_props['host'])) {
-            // $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
+        	
+        	// get wsdl
+        	//die("$wsdl");
+	        $tr = new soap_transport_http($wsdl);
+			$tr->request_method = 'GET';
+			$tr->useSOAPAction = false;
+			if($this->proxyhost && $this->proxyport){
+				$tr->setProxy($this->proxyhost,$this->proxyport);
+			}
+			$wsdl_string = $tr->send($request);
+			// catch errors
+			if($err = $tr->getError() ){
+				$this->debug('HTTP ERROR: '.$err);
+	            $this->setError('HTTP ERROR: '.$err);
+	            return false;
+			}
+			unset($tr);
+            /* $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
             $fsockopen_timeout = 30; 
             // check if a port value is supplied in url
             if (isset($wsdl_props['port'])) {
@@ -2443,7 +2471,8 @@ class wsdl extends XMLSchema {
             } else {
                 $this->setError('bad path to WSDL file.');
                 return false;
-            } 
+            }
+            */
         } else {
             // $wsdl seems to be a non-url file path, do the regular fopen
             if ($fp = @fopen($wsdl, 'r')) {
@@ -3659,7 +3688,7 @@ class soapclient extends nusoap_base  {
 			
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =& new wsdl($this->wsdlFile);
+			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			// catch errors
