@@ -499,7 +499,7 @@ class XMLSchema extends nusoap_base  {
 	function getPrefixFromNamespace($ns){
 		foreach($this->namespaces as $p => $n){
 			if($ns == $n || $ns == $p){
-			    $this->usedNamespaces[$p] = $ns;
+			    $this->usedNamespaces[$p] = $n;
 				return $p;
 			}
 		}

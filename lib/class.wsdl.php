@@ -643,17 +643,25 @@ class wsdl extends XMLSchema {
 		// set input params
 		$xml = '';
 		if (isset($opData[$direction]['parts']) && sizeof($opData[$direction]['parts']) > 0) {
+			
+			$use = $opData[$direction]['use'];
+			if($use == 'literal'){
+				$unwrap = sizeof($opData[$direction]['parts']) == 1;
+			} else {
+				$unwrap = 0;
+			}
+			$this->debug("use=$use");
 			$this->debug('got ' . count($opData[$direction]['parts']) . ' part(s)');
 			foreach($opData[$direction]['parts'] as $name => $type) {
 				// NOTE: add error handling here
 				// if serializeType returns false, then catch global error and fault
 				if (isset($parameters[$name])) {
-					$xml .= $this->serializeType($name, $type, $parameters[$name]);
+					$xml .= $this->serializeType($name, $type, $parameters[$name], $use, $unwrap);
 				} elseif(is_array($parameters)) {
-					$xml .= $this->serializeType($name, $type, array_shift($parameters));
+					$xml .= $this->serializeType($name, $type, array_shift($parameters), $use, $unwrap);
 				} 
 			}
-		} 
+		}
 		return $xml;
 	} 
 	
@@ -663,13 +671,15 @@ class wsdl extends XMLSchema {
 	 * @param string $name , name of type
 	 * @param string $type , type of type, heh
 	 * @param mixed $value , a native PHP value
+	 * @param string $use , rpc|encoded
+	 * @param boolean $unwrap , if true, unwrap parameter structure if possible
 	 * @return string serialization
 	 * @access public 
 	 */
-	function serializeType($name, $type, $value)
+	function serializeType($name, $type, $value, $use='encoded', $unwrap=false)
 	{
-		
-		$this->debug("in serializeType: $name, $type, $value");
+		$this->debug("in serializeType: $name, $type, $value, $use");
+		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
 			$ns = substr($type, 0, strrpos($type, ':'));
@@ -687,7 +697,11 @@ class wsdl extends XMLSchema {
 					$value = htmlspecialchars($value);
 				} 
 				// it's a scalar
-				return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+				if ($use == 'literal') {
+					return "<$name>$value</$name>";
+				} else {
+					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\">$value</$name>";
+				}
 			} 
 		} else {
 			$uqType = $type;
@@ -704,7 +718,13 @@ class wsdl extends XMLSchema {
 		$this->debug("serializeType: uqType: $uqType, ns: $ns, phptype: $phpType, arrayType: " . (isset($typeDef['arrayType']) ? $typeDef['arrayType'] : '') ); 
 		// if php type == struct, map value to the <all> element names
 		if ($phpType == 'struct') {
-			$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">\n";
+			if (!$unwrap) {
+				if ($use == 'literal') {
+					$xml = "<$name>";
+				} else {
+					$xml = "<$name xsi:type=\"" . $this->getPrefixFromNamespace($ns) . ":$uqType\">";
+				}
+			}
 			if (is_array($this->complexTypes[$uqType]['elements'])) {
 				foreach($this->complexTypes[$uqType]['elements'] as $eName => $attrs) {
 					// get value
@@ -714,14 +734,16 @@ class wsdl extends XMLSchema {
 					    $v = array_shift($value);
 					} 
 					if (!isset($attrs['type'])) {
-					    $xml .= $this->serializeType($eName, $attrs['name'], $v);
+					    $xml .= $this->serializeType($eName, $attrs['name'], $v, $use);
 					} else {
-					    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']));
-					    $xml .= $this->serialize_val($v, $eName, $this->getLocalPart($attrs['type']), null, $this->getNamespaceFromPrefix($this->getPrefix($attrs['type'])));
+					    $this->debug("calling serialize_val() for $eName, $v, " . $this->getLocalPart($attrs['type']), false, $use);
+					    $xml .= $this->serialize_val($v, $eName, $this->getLocalPart($attrs['type']), null, $this->getNamespaceFromPrefix($this->getPrefix($attrs['type'])), false, $use);
 					} 
 				} 
-			} 
-			$xml .= "</$name>";
+			}
+			if (! $unwrap) {
+				$xml .= "</$name>";
+			}
 		} elseif ($phpType == 'array') {
 			$rows = sizeof($value);
 			if (isset($typeDef['multidimensional'])) {
@@ -738,25 +760,32 @@ class wsdl extends XMLSchema {
 				$contents = '';
 				foreach($value as $k => $v) {
 					$this->debug("serializing array element: $k, $v of type: $typeDef[arrayType]");
-					if (strpos($typeDef['arrayType'], ':')) {
-					    $contents .= $this->serializeType('item', $typeDef['arrayType'], $v);
+					//if (strpos($typeDef['arrayType'], ':') ) {
+					if (!in_array($typeDef['arrayType'],$this->typemap['http://www.w3.org/2001/XMLSchema'])) {
+					    $contents .= $this->serializeType('item', $typeDef['arrayType'], $v, $use);
 					} else {
-					    $contents .= $this->serialize_val($v, 'item', $typeDef['arrayType'], null, $this->XMLSchemaVersion);
+					    $contents .= $this->serialize_val($v, 'item', $typeDef['arrayType'], null, $this->XMLSchemaVersion, false, $use);
 					} 
 				}
 				$this->debug('contents: '.$this->varDump($contents));
 			}
-			$xml = "<$name xsi:type=\"".$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/').':Array" '.
-				$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/')
-				.':arrayType="'
-				.$this->getPrefixFromNamespace($this->getPrefix($typeDef['arrayType']))
-				.":".$this->getLocalPart($typeDef['arrayType'])."[$rows$cols]\">"
-				.$contents
-				."</$name>";
+			if ($use == 'literal') {
+				$xml = "<$name>"
+					.$contents
+					."</$name>";
+			} else {
+				$xml = "<$name xsi:type=\"".$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/').':Array" '.
+					$this->getPrefixFromNamespace('http://schemas.xmlsoap.org/soap/encoding/')
+					.':arrayType="'
+					.$this->getPrefixFromNamespace($this->getPrefix($typeDef['arrayType']))
+					.":".$this->getLocalPart($typeDef['arrayType'])."[$rows$cols]\">"
+					.$contents
+					."</$name>";
+			}
 		}
 		$this->debug('returning: '.$this->varDump($xml));
 		return $xml;
-	} 
+	}
 	
 	/**
 	* register a service with the server

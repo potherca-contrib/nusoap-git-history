@@ -35,8 +35,8 @@ class soapval extends nusoap_base {
 	* @return	string XML data
 	* @access   private
 	*/
-	function serialize() {
-		return $this->serialize_val($this->value,$this->name,$this->type,$this->element_ns,$this->type_ns,$this->attributes);
+	function serialize($use='encoded') {
+		return $this->serialize_val($this->value,$this->name,$this->type,$this->element_ns,$this->type_ns,$this->attributes,$use);
     }
 
 	/**

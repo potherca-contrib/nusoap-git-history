@@ -34,6 +34,7 @@ class soapclient extends nusoap_base  {
 	var $timeout = 0;
 	var $endpointType = '';
 	var $persistentConnection = false;
+	var $defaultRpcParams = false;
 	
 	/**
 	* fault related variables
@@ -87,10 +88,11 @@ class soapclient extends nusoap_base  {
 	* @param	string $namespace optional method namespace
 	* @param	string $soapAction optional SOAPAction value
 	* @param	boolean $headers optional array of soapval objects for headers
+	* @param	boolean $rpcParams optional treat params as RPC for use="literal"
 	* @return	mixed
 	* @access   public
 	*/
-	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false){
+	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=false){
 		$this->operation = $operation;
 		$this->fault = false;
 		$this->error_str = '';
@@ -99,6 +101,9 @@ class soapclient extends nusoap_base  {
 		$this->faultstring = '';
 		$this->faultcode = '';
 		$this->opData = array();
+		
+		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $rpcParams");
+		$this->debug("endpointType: $this->endpointType");
 		// if wsdl, get operation data and process parameters
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 
@@ -108,28 +113,42 @@ class soapclient extends nusoap_base  {
 			}
 			$soapAction = $opData['soapAction'];
 			$this->endpoint = $opData['endpoint'];
-			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] : 'http://testuri.org';
+			if (isset($opData['input']['namespace'])) {
+				$namespace =  $opData['input']['namespace'];
+			} else {
+				if (isset($this->wsdl->wsdl_info['targetNamespace'])) {
+					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
+				} else {
+					$namespace = 'http://testuri.org';
+				}
+			}
 			$style = $opData['style'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
 				$this->wsdl->namespaces['nu'] = $namespace;
-			} else {
-            	$namespace = 'http://testuri.org';
-                $this->wsdl->namespaces['nu'] = $namespace;
+
+
+
             }
 			// serialize payload
 			
-			if($opData['input']['use'] == 'literal') {
+			if($opData['input']['use'] == 'literal' && !$rpcParams) {
 				$payload = is_array($params) ? array_shift($params) : $params;
 			} else {
 				$this->debug("serializing RPC params for operation $operation");
-				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
-				$this->wsdl->serializeRPCParameters($operation,'input',$params).
-				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
+				if (!isset($defaultNamespace)) {
+					$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
+					$this->wsdl->serializeRPCParameters($operation,'input',$params).
+					'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
+				} else {
+					$payload = "<$operation xmlns=\"$defaultNamespace\">".
+					$this->wsdl->serializeRPCParameters($operation,'input',$params).
+					"</$operation>";
+				}
 			}
 			$this->debug('payload size: '.strlen($payload));
 			// serialize envelope
-			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces);
+			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 		} elseif($this->endpointType == 'wsdl') {
 			$this->setError( 'operation '.$operation.' not present.');
@@ -203,6 +222,7 @@ class soapclient extends nusoap_base  {
 		if(isset($this->operations[$operation])){
 			return $this->operations[$operation];
 		}
+		$this->debug("No data for operation: $operation");
 	}
 
     /**
@@ -377,6 +397,29 @@ class soapclient extends nusoap_base  {
 	*/
 	function useHTTPPersistentConnection(){
 		$this->persistentConnection = true;
+	}
+	
+	/**
+	* gets the default RPC parameter setting.
+	* If true, default is that call params are like RPC even for document style.
+	* Each call() can override this value.
+	*
+	* @access public
+	*/
+	function getDefaultRpcParams() {
+		return $this->defaultRpcParams;
+	}
+
+	/**
+	* sets the default RPC parameter setting.
+	* If true, default is that call params are like RPC even for document style
+	* Each call() can override this value.
+	*
+	* @param    boolean $rpcParams
+	* @access public
+	*/
+	function setDefaultRpcParams($rpcParams) {
+		$this->defaultRpcParams = $rpcParams;
 	}
 	
 	/**
