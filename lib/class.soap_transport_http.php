@@ -12,11 +12,8 @@
 */
 class soap_transport_http extends nusoap_base {
 
-	var $username = '';	// TODO: not used anymore
-	var $password = '';	// TODO: not used anymore
 	var $url = '';
-    var $proxyhost = '';	// TODO: not used anymore
-    var $proxyport = '';	// TODO: not used anymore
+	var $uri = '';
 	var $scheme = '';
 	var $request_method = 'POST';
 	var $protocol_version = '1.0';
@@ -58,6 +55,8 @@ class soap_transport_http extends nusoap_base {
 				$this->port = 80;
 			}
 		}
+
+		$this->uri = $this->path;
 		
 		// build headers
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version;
@@ -140,14 +139,6 @@ class soap_transport_http extends nusoap_base {
 		// init CURL
 		$ch = curl_init();
 		//$t->setMarker('got curl handle');
-		// set proxy
-		if($this->proxyhost && $this->proxyport){
-			$host = $this->proxyhost;
-			$port = $this->proxyport;
-		} else {
-			$host = $this->host;
-			$port = $this->port;
-		}
 		// set url
 		$hostURL = ($port != '') ? "https://$host:$port" : "https://$host";
 		// add path
@@ -167,38 +158,9 @@ class soap_transport_http extends nusoap_base {
 		if($timeout != 0){
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		}
-		
-		// TODO: use outgoing_headers instead
-		$credentials = '';
-		if($this->username != '') {
-			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
-		}
-		
-		if($this->encoding != ''){
-			if(function_exists('gzdeflate')){
-				$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
-				"Connection: close\r\n";
-				set_magic_quotes_runtime(0);
-			}
-		}
-		
-		// TODO: don't need this anymore
-		if($this->proxyhost && $this->proxyport){
-			$this->outgoing_payload = "POST $this->url HTTP/$this->protocol_version\r\n";
-		} else {
-			$this->outgoing_payload = "POST $this->path HTTP/$this->protocol_version\r\n";
-		}
-		
-		// TODO: use outgoing_headers instead
-		$this->outgoing_payload .=
-			"User-Agent: $this->title v$this->version\r\n".
-			"Host: ".$this->host.':'.$this->port."\r\n".
-			$encoding_headers.
-			$credentials.
-			"Content-Type: text/xml; charset=\"$this->soap_defencoding\"\r\n".
-			"Content-Length: ".strlen($data)."\r\n".
-			"SOAPAction: \"$this->soapaction\""."\r\n\r\n".
-			$data;
+
+		// build payload
+		$this->buildPayload($data);
 
 		// set payload
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->outgoing_payload);
@@ -319,7 +281,7 @@ class soap_transport_http extends nusoap_base {
 	*/
 	function setEncoding($enc='gzip, deflate'){
 		$this->protocol_version = '1.1';
-		$this->outgoing_headers['Accept-Encoding'] = $this->encoding;
+		$this->outgoing_headers['Accept-Encoding'] = $enc;
 		$this->outgoing_headers['Connection'] = 'close';
 		set_magic_quotes_runtime(0);
 		// deprecated
@@ -331,12 +293,17 @@ class soap_transport_http extends nusoap_base {
 	*
 	* @param    string $proxyhost
 	* @param    string $proxyport
+	* @param	string $proxyusername
+	* @param	string $proxypassword
 	* @access   public
 	*/
-	function setProxy($proxyhost, $proxyport) {
-		$this->path = $this->url;
+	function setProxy($proxyhost, $proxyport, $proxyusername = '', $proxypassword = '') {
+		$this->uri = $this->url;
 		$this->host = $proxyhost;
 		$this->port = $proxyport;
+		if ($proxyusername != '' && $proxypassword != '') {
+			$this->outgoing_headers['Proxy-Authorization'] = ' Basic '.base64_encode($proxyusername.':'.$proxypassword);
+		}
 	}
 	
 	/**
@@ -391,16 +358,19 @@ class soap_transport_http extends nusoap_base {
 		}
 		return $new;
 	}
-	
-	function sendRequest($data){
+
+	/*
+	 *	Writes payload, including HTTP headers, to $this->outgoing_payload.
+	 */
+	function buildPayload($data) {
 		// update content-type header since we may have changed soap_defencoding
 		$this->outgoing_headers['Content-Type'] = 'text/xml; charset='.$this->soap_defencoding;
 		// add content-length header
 		$this->outgoing_headers['Content-Length'] = strlen($data);
 		
 		// start building outgoing payload:
-		$this->outgoing_payload = "$this->request_method $this->path ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
-		
+		$this->outgoing_payload = "$this->request_method $this->uri ".strtoupper($this->scheme)."/$this->protocol_version\r\n";
+
 		// loop thru headers, serializing
 		foreach($this->outgoing_headers as $k => $v){
 			if($k == 'SOAPAction'){
@@ -414,7 +384,12 @@ class soap_transport_http extends nusoap_base {
 		
 		// add data
 		$this->outgoing_payload .= $data;
-		
+	}
+
+	function sendRequest($data){
+		// build payload
+		$this->buildPayload($data);
+
 		// send payload
 		if(!fputs($this->fp, $this->outgoing_payload, strlen($this->outgoing_payload))) {
 			$this->setError('couldn\'t write message data to socket');

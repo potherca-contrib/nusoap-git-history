@@ -38,17 +38,25 @@ class wsdl extends XMLSchema {
 	// for getting wsdl
 	var $proxyhost = '';
     var $proxyport = '';
-    
+	var $proxyusername = '';
+	var $proxypassword = '';
+
     /**
      * constructor
      * 
      * @param string $wsdl WSDL document URL
+	 * @param string $proxyhost
+	 * @param string $proxyport
+	 * @param string $proxyusername
+	 * @param string $proxypassword
      * @access public 
      */
-    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false){
+    function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false){
         $this->wsdl = $wsdl;
         $this->proxyhost = $proxyhost;
         $this->proxyport = $proxyport;
+		$this->proxyusername = $proxyusername;
+		$this->proxypassword = $proxypassword;
         
         // parse wsdl file
         if ($wsdl != "") {
@@ -93,7 +101,7 @@ class wsdl extends XMLSchema {
 			$tr->request_method = 'GET';
 			$tr->useSOAPAction = false;
 			if($this->proxyhost && $this->proxyport){
-				$tr->setProxy($this->proxyhost,$this->proxyport);
+				$tr->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 			}
 			if (isset($wsdl_props['user'])) {
                 $tr->setCredentials($wsdl_props['user'],$wsdl_props['pass']);

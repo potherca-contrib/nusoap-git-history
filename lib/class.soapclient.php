@@ -31,6 +31,8 @@ class soapclient extends nusoap_base  {
 	var $error_str = false;
     var $proxyhost = '';
     var $proxyport = '';
+	var $proxyusername = '';
+	var $proxypassword = '';
     var $xml_encoding = '';
 	var $http_encoding = false;
 	var $timeout = 0;
@@ -55,10 +57,18 @@ class soapclient extends nusoap_base  {
 	* @param    string $endpoint SOAP server or WSDL URL
 	* @param    bool $wsdl optional, set to true if using WSDL
 	* @param	int $portName optional portName in WSDL document
+	* @param    string $proxyhost
+	* @param    string $proxyport
+	* @param	string $proxyusername
+	* @param	string $proxypassword
 	* @access   public
 	*/
-	function soapclient($endpoint,$wsdl = false){
+	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false){
 		$this->endpoint = $endpoint;
+		$this->proxyhost = $proxyhost;
+		$this->proxyport = $proxyport;
+		$this->proxyusername = $proxyusername;
+		$this->proxypassword = $proxypassword;
 
 		// make values
 		if($wsdl){
@@ -67,7 +77,7 @@ class soapclient extends nusoap_base  {
 			
 			// instantiate wsdl object and parse wsdl file
 			$this->debug('instantiating wsdl class with doc: '.$endpoint);
-			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport);
+			$this->wsdl =& new wsdl($this->wsdlFile,$this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
 			// catch errors
@@ -255,7 +265,7 @@ class soapclient extends nusoap_base  {
 				}
 				$http->setSOAPAction($soapaction);
 				if($this->proxyhost && $this->proxyport){
-					$http->setProxy($this->proxyhost,$this->proxyport);
+					$http->setProxy($this->proxyhost,$this->proxyport,$this->proxyusername,$this->proxypassword);
 				}
                 if($this->username != '' && $this->password != '') {
 					$http->setCredentials($this->username,$this->password);
@@ -375,11 +385,15 @@ class soapclient extends nusoap_base  {
 	*
 	* @param    string $proxyhost
 	* @param    string $proxyport
+	* @param	string $proxyusername
+	* @param	string $proxypassword
 	* @access   public
 	*/
-	function setHTTPProxy($proxyhost, $proxyport) {
+	function setHTTPProxy($proxyhost, $proxyport, $proxyusername = '', $proxypassword = '') {
 		$this->proxyhost = $proxyhost;
 		$this->proxyport = $proxyport;
+		$this->proxyusername = $proxyusername;
+		$this->proxypassword = $proxypassword;
 	}
 
 	/**
