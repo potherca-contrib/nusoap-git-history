@@ -59,7 +59,7 @@ class soap_transport_http extends nusoap_base {
 		$this->uri = $this->path;
 		
 		// build headers
-		ereg('\$Revision$this->revision, $rev);
+		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;

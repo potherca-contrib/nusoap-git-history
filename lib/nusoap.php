@@ -832,6 +832,7 @@ class XMLSchema extends nusoap_base  {
 				xml_error_string(xml_get_error_code($this->parser))
 				);
 				$this->debug('XML parse error: '.$errstr);
+				$this->debug("XML payload:\n" . $xml);
 				$this->setError('Parser error: '.$errstr);
 	    	}
             
@@ -1568,7 +1569,7 @@ class soap_transport_http extends nusoap_base {
 		$this->uri = $this->path;
 		
 		// build headers
-		ereg('\$Revision$this->revision, $rev);
+		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
 		if (!isset($u['port'])) {
 			$this->outgoing_headers['Host'] = $this->host;
@@ -2246,7 +2247,7 @@ class soap_server extends nusoap_base {
 				// $header[] = "Status: 200 OK";
 			}
 			$header[] = "Server: $this->title Server v$this->version";
-			ereg('\$Revision$this->revision, $rev);
+			ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 			$header[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
@@ -3054,6 +3055,7 @@ class wsdl extends nusoap_base {
                 xml_error_string(xml_get_error_code($this->parser))
                 );
             $this->debug('XML parse error: ' . $errstr);
+			$this->debug("XML payload:\n" . $wsdl_string);
             $this->setError('Parser error: ' . $errstr);
             return false;
         } 

@@ -239,6 +239,7 @@ class wsdl extends nusoap_base {
                 xml_error_string(xml_get_error_code($this->parser))
                 );
             $this->debug('XML parse error: ' . $errstr);
+			$this->debug("XML payload:\n" . $wsdl_string);
             $this->setError('Parser error: ' . $errstr);
             return false;
         } 

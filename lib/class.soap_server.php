@@ -143,7 +143,7 @@ class soap_server extends nusoap_base {
 				// $header[] = "Status: 200 OK";
 			}
 			$header[] = "Server: $this->title Server v$this->version";
-			ereg('\$Revision$this->revision, $rev);
+			ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 			$header[] = "X-SOAP-Server: $this->title/$this->version (".$rev[1].")";
 			// Let the Web server decide about this
 			//$header[] = "Connection: Close\r\n";
