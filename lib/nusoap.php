@@ -57,15 +57,15 @@ require_once('class.soap_server.php');*/
 *
 * nusoap_base
 *
-* @author   Dietrich Ayala <dietricha@ganx4.com>
-* @version  v 0.6
+* @author   Dietrich Ayala <dietrich@ganx4.com>
+* @version  v 0.6.2
 * @access   public
 */
 
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.1';
+	var $version = '0.6.2';
 	var $error_str = false;
     var $debug_str = '';
 	// toggles automatic encoding of special characters
@@ -1105,8 +1105,8 @@ class XMLSchema extends nusoap_base  {
 * for creating serializable abstractions of native PHP types
 * NOTE: this is only really used when WSDL is not available.
 *
-* @author   Dietrich Ayala <dietricha@ganx4.com>
-* @version  v 0.6
+* @author   Dietrich Ayala <dietrich@ganx4.com>
+* @version  v 0.6.2
 * @access   public
 */
 class soapval extends nusoap_base {
@@ -1235,6 +1235,7 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('entered send() with data of length: '.strlen($data));
 
 		if($this->proxyhost != '' && $this->proxyport != ''){
+			$this->debug('setting proxy host and port');
 			$host = $this->proxyhost;
 			$port = $this->proxyport;
 		} else {
@@ -1252,9 +1253,11 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('Couldn\'t open socket connection to server: '.$server);
 			return false;
 		}
+		$this->debug('socket connected');
 
 		$credentials = '';
 		if($this->username != '') {
+			$this->debug('setting http auth credentials');
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
 
@@ -1290,23 +1293,29 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('Write error');
 		}
-
+		$this->debug('wrote data to socket');
 		// get response
 	    $this->incoming_payload = '';
 	    while ($data = fread($fp, 32768)) {
 			$this->incoming_payload .= $data;
 	    }
 		
+		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+		
 		// close filepointer
 		fclose($fp);
+		
 		$data = $this->incoming_payload;
+		
 		/*if($this->gzip){
 			// if decoding works, use it. else assume data wasn't gzencoded
 			if($degzdata = @gzinflate($data)){
 				$data = $degzdata;
 			}
 		}*/
+		
 		//print "data: <xmp>$data</xmp>";
+		
 		// separate content from HTTP headers
         if(preg_match("/([^<]*?)\r?\n\r?\n(<.*>)/s",$data,$result)) {
 			$this->debug('found proper separation of headers and document');
@@ -1322,6 +1331,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('no data present after HTTP headers.');
 			return false;
 		}
+		$this->debug('end of send()');
 		return $clean_data;
 	}
 
@@ -1432,7 +1442,7 @@ class soap_transport_http extends nusoap_base {
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.1
+* @version  v 0.6.2
 * @access   public
 */
 class soap_server extends nusoap_base {
@@ -1877,7 +1887,7 @@ class soap_server extends nusoap_base {
 /**
 * parses a WSDL file, allows access to it's data, other utility methods
 *
-* @author   Dietrich Ayala <dietricha@ganx4.com>
+* @author   Dietrich Ayala <dietrich@ganx4.com>
 * @access   public
 */
 class wsdl extends XMLSchema {

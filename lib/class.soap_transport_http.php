@@ -81,6 +81,7 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('entered send() with data of length: '.strlen($data));
 
 		if($this->proxyhost != '' && $this->proxyport != ''){
+			$this->debug('setting proxy host and port');
 			$host = $this->proxyhost;
 			$port = $this->proxyport;
 		} else {
@@ -98,9 +99,11 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('Couldn\'t open socket connection to server: '.$server);
 			return false;
 		}
+		$this->debug('socket connected');
 
 		$credentials = '';
 		if($this->username != '') {
+			$this->debug('setting http auth credentials');
 			$credentials = 'Authorization: Basic '.base64_encode("$this->username:$this->password").'\r\n';
 		}
 
@@ -136,23 +139,29 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('Write error');
 		}
-
+		$this->debug('wrote data to socket');
 		// get response
 	    $this->incoming_payload = '';
 	    while ($data = fread($fp, 32768)) {
 			$this->incoming_payload .= $data;
 	    }
 		
+		$this->debug('received incoming payload: '.strlen($this->incoming_payload));
+		
 		// close filepointer
 		fclose($fp);
+		
 		$data = $this->incoming_payload;
+		
 		/*if($this->gzip){
 			// if decoding works, use it. else assume data wasn't gzencoded
 			if($degzdata = @gzinflate($data)){
 				$data = $degzdata;
 			}
 		}*/
+		
 		//print "data: <xmp>$data</xmp>";
+		
 		// separate content from HTTP headers
         if(preg_match("/([^<]*?)\r?\n\r?\n(<.*>)/s",$data,$result)) {
 			$this->debug('found proper separation of headers and document');
@@ -168,6 +177,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('no data present after HTTP headers.');
 			return false;
 		}
+		$this->debug('end of send()');
 		return $clean_data;
 	}
 
