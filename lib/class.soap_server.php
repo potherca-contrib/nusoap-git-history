@@ -204,31 +204,33 @@ class soap_server extends nusoap_base {
 			foreach ($_SERVER as $k => $v) {
 				if (substr($k, 0, 5) == 'HTTP_') {
 					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($k, 5)))));
-					if ($k == 'Soapaction') {
-						// get SOAPAction header
-						$k = 'SOAPAction';
-						$v = str_replace('"', '', $v);
-						$v = str_replace('\\', '', $v);
-					} else if ($k == 'Content-Type') {
-						// get the character encoding of the incoming request
-						if (strpos($v, '=')) {
-							$enc = substr(strstr($v, '='), 1);
-							$enc = str_replace('"', '', $enc);
-							$enc = str_replace('\\', '', $enc);
-							if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
-								$this->xml_encoding = strtoupper($enc);
-							} else {
-								$this->xml_encoding = 'US-ASCII';
-							}
-						} else {
-							// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
-							$this->xml_encoding = 'UTF-8';
-						}
-					}
-					$this->headers[$k] = $v;
-					$dump .= "$k: $v\r\n";
-					$this->debug("$k: $v");
+				} else {
+					$k = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $k))));
 				}
+				if ($k == 'Soapaction') {
+					// get SOAPAction header
+					$k = 'SOAPAction';
+					$v = str_replace('"', '', $v);
+					$v = str_replace('\\', '', $v);
+				} else if ($k == 'Content-Type') {
+					// get the character encoding of the incoming request
+					if (strpos($v, '=')) {
+						$enc = substr(strstr($v, '='), 1);
+						$enc = str_replace('"', '', $enc);
+						$enc = str_replace('\\', '', $enc);
+						if (eregi('^(ISO-8859-1|US-ASCII|UTF-8)$', $enc)) {
+							$this->xml_encoding = strtoupper($enc);
+						} else {
+							$this->xml_encoding = 'US-ASCII';
+						}
+					} else {
+						// should be US-ASCII, but for XML, let's be pragmatic and admit UTF-8 is most common
+						$this->xml_encoding = 'UTF-8';
+					}
+				}
+				$this->headers[$k] = $v;
+				$dump .= "$k: $v\r\n";
+				$this->debug("$k: $v");
 			}
 		} elseif (is_array($HTTP_SERVER_VARS)) {
 			foreach ($HTTP_SERVER_VARS as $k => $v) {
@@ -369,11 +371,16 @@ class soap_server extends nusoap_base {
 						    	$opParams = array($method_response);
 						    }
 						    $return_val = $this->wsdl->serializeRPCParameters($this->methodname,'output',$opParams);
+							if($errstr = $this->wsdl->getError()){
+								$this->debug('got wsdl error: '.$errstr);
+								$this->fault('Server', 'got wsdl error: '.$errstr);
+								return $this->fault->serialize();
+							}
 						} else {
 						    $return_val = $this->serialize_val($method_response);
 						}
 					}
-					$this->debug('return val:'.$this->varDump($return_val));
+					$this->debug('return val: '.$this->varDump($return_val));
 				} else {
 					$return_val = '';
 					$this->debug('got no response from method');
@@ -440,7 +447,9 @@ class soap_server extends nusoap_base {
 	* @param    string $out assoc array of output values: key = param name, value = param type
 	* @param	string $namespace
 	* @param	string $soapaction
-	* @param	string $style (rpc|literal)
+	* @param	string $style optional (rpc|document)
+	* @param	string $use optional (encoded|literal)
+	* @param	string $documentation optional Description to include in WSDL
 	* @access   public
 	*/
 	function register($name,$in=false,$out=false,$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
@@ -617,26 +626,50 @@ class soap_server extends nusoap_base {
     * NOTE: NOT FUNCTIONAL
     *
     * @param string $serviceName, name of the service
-    * @param string $namespace, tns namespace
+    * @param string $namespace optional tns namespace
+    * @param string $endpoint optional URL of service endpoint
+    * @param string $style optional (rpc|document) WSDL style (also specified by operation)
+    * @param string $transport optional SOAP transport
+    * @param string $schemaTargetNamespace optional targetNamespace for service schema
     */
-    function configureWSDL($serviceName,$namespace = false,$endpoint = false,$style='rpc', $transport = 'http://schemas.xmlsoap.org/soap/http')
+    function configureWSDL($serviceName,$namespace = false,$endpoint = false,$style='rpc', $transport = 'http://schemas.xmlsoap.org/soap/http', $schemaTargetNamespace = false)
     {
 		$SERVER_NAME = isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : $GLOBALS['SERVER_NAME'];
+		$SERVER_PORT = isset($_SERVER['SERVER_PORT']) ? $_SERVER['SERVER_PORT'] : $GLOBALS['SERVER_PORT'];
+		if ($SERVER_PORT == 80) {
+			$SERVER_PORT = '';
+		} else {
+			$SERVER_PORT = ':' . $SERVER_PORT;
+		}
 		$SCRIPT_NAME = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : $GLOBALS['SCRIPT_NAME'];
         if(false == $namespace) {
             $namespace = "http://$SERVER_NAME/soap/$serviceName";
         }
         
         if(false == $endpoint) {
-            $endpoint = "http://$SERVER_NAME$SCRIPT_NAME";
+            $endpoint = "http://$SERVER_NAME$SERVER_PORT$SCRIPT_NAME";
+        }
+        
+        if(false == $schemaTargetNamespace) {
+            $schemaTargetNamespace = $namespace;
         }
         
 		$this->wsdl = new wsdl;
 		$this->wsdl->serviceName = $serviceName;
         $this->wsdl->endpoint = $endpoint;
+        $this->wsdl->schemas[$schemaTargetNamespace][0] = new xmlschema;
+        $this->wsdl->schemas[$schemaTargetNamespace][0]->schemaTargetNamespace = $schemaTargetNamespace;
+		$this->wsdl->schemas[$schemaTargetNamespace][0]->namespaces['wsdlns'] = $namespace;
+		$this->wsdl->schemas[$schemaTargetNamespace][0]->namespaces['wsdl'] = 'http://schemas.xmlsoap.org/wsdl/';
+        $this->wsdl->schemas[$schemaTargetNamespace][0]->imports['http://schemas.xmlsoap.org/soap/encoding/'][0] = array('location' => '', 'loaded' => true);
+        $this->wsdl->schemas[$schemaTargetNamespace][0]->imports['http://schemas.xmlsoap.org/wsdl/'][0] = array('location' => '', 'loaded' => true);
 		$this->wsdl->namespaces['tns'] = $namespace;
 		$this->wsdl->namespaces['soap'] = 'http://schemas.xmlsoap.org/wsdl/soap/';
 		$this->wsdl->namespaces['wsdl'] = 'http://schemas.xmlsoap.org/wsdl/';
+		if ($schemaTargetNamespace != $namespace) {
+			$this->wsdl->namespaces['types'] = $schemaTargetNamespace;
+			$this->wsdl->schemas[$schemaTargetNamespace][0]->namespaces['types'] = $schemaTargetNamespace;
+		}
         $this->wsdl->bindings[$serviceName.'Binding'] = array(
         	'name'=>$serviceName.'Binding',
             'style'=>$style,

@@ -97,6 +97,8 @@ class nusoap_base {
 		'xsi' => 'http://www.w3.org/2001/XMLSchema-instance',
 		'SOAP-ENC' => 'http://schemas.xmlsoap.org/soap/encoding/',
 		'si' => 'http://soapinterop.org/xsd');
+	var $usedNamespaces = array();
+
 	/**
 	* load types into typemap array
 	* is this legacy yet?
@@ -381,13 +383,14 @@ class nusoap_base {
     * serialize message
     *
     * @param string body
-    * @param string headers
-    * @param array namespaces
-    * @param string style
+    * @param string headers optional
+    * @param array namespaces optional
+    * @param string style optional (rpc|document)
+    * @param string use optional (encoded|literal)
     * @return string message
     * @access public
     */
-    function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc'){
+    function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc',$use='encoded'){
     // TODO: add an option to automatically run utf8_encode on $body and $headers
     // if $this->soap_defencoding is UTF-8.  Not doing this automatically allows
     // one to send arbitrary UTF-8 characters, not just characters that map to ISO-8859-1
@@ -397,7 +400,7 @@ class nusoap_base {
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){
 		$ns_string .= "  xmlns:$k=\"$v\"";
 	}
-	if($style == 'rpc') {
+	if($style == 'rpc' && $use == 'encoded') {
 		$ns_string = ' SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"' . $ns_string;
 	}
 
@@ -420,6 +423,55 @@ class nusoap_base {
 		$str = htmlspecialchars($str);
 		return nl2br($str);
     }
+
+	/**
+	* contracts a qualified name
+	*
+	* @param    string $string qname
+	* @return	string contracted qname
+	* @access   private
+	*/
+	function contractQname($qname){
+		// get element namespace
+		//$this->xdebug("Contract $qname");
+		if (strrpos($qname, ':')) {
+			// get unqualified name
+			$name = substr($qname, strrpos($qname, ':') + 1);
+			// get ns
+			$ns = substr($qname, 0, strrpos($qname, ':'));
+			$p = $this->getPrefixFromNamespace($ns);
+			if ($p) {
+				return $p . ':' . $name;
+			}
+			return $qname;
+		} else {
+			return $qname;
+		}
+	}
+
+	/**
+	* expands a qualified name
+	*
+	* @param    string $string qname
+	* @return	string expanded qname
+	* @access   private
+	*/
+	function expandQname($qname){
+		// get element prefix
+		if(strpos($qname,':') && !ereg('^http://',$qname)){
+			// get unqualified name
+			$name = substr(strstr($qname,':'),1);
+			// get ns prefix
+			$prefix = substr($qname,0,strpos($qname,':'));
+			if(isset($this->namespaces[$prefix])){
+				return $this->namespaces[$prefix].':'.$name;
+			} else {
+				return $qname;
+			}
+		} else {
+			return $qname;
+		}
+	}
 
     /**
     * returns the local part of a prefixed string
@@ -450,6 +502,40 @@ class nusoap_base {
 		if($pos = strrpos($str,':')){
 			// get prefix
 			return substr($str,0,$pos);
+		}
+		return false;
+	}
+
+	/**
+    * pass it a prefix, it returns a namespace
+	* returns false if no namespace registered with the given prefix
+    *
+    * @param string
+    * @return mixed
+    * @access public
+    */
+	function getNamespaceFromPrefix($prefix){
+		if (isset($this->namespaces[$prefix])) {
+			return $this->namespaces[$prefix];
+		}
+		//$this->setError("No namespace registered for prefix '$prefix'");
+		return false;
+	}
+
+	/**
+    * returns the prefix for a given namespace (or prefix)
+    * or false if no prefixes registered for the given namespace
+    *
+    * @param string
+    * @return mixed
+    * @access public
+    */
+	function getPrefixFromNamespace($ns) {
+		foreach ($this->namespaces as $p => $n) {
+			if ($ns == $n || $ns == $p) {
+			    $this->usedNamespaces[$p] = $n;
+				return $p;
+			}
 		}
 		return false;
 	}

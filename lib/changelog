@@ -132,3 +132,23 @@
 - soap_transport_http: Merge HTTP headers that span multiple lines
 - soap_parser: Properly set errors in ctor
 - soapclient: Pass headers to parseResponse and parse them in that method
+
+2003-10-30, version 0.6.6
+- xmlschema: Add some information for the related type to an element
+
+2003-12-09, version 0.6.6
+- nusoap_base: Add some namespace methods previously in xmlschema
+- xmlschema: Improve parsing of complexType, element and simpleType
+- xmlschema: Improve serialization
+- xmlschema: Track imports
+- xmlschema: Track elementFormDefault and form attributes
+- wsdl: Support multiple <schema> (note that setting $server->wsdl->schemaTargetNamespace no longer does anything!  Use configureWSDL instead.)
+- wsdl: Use form attribute of element to control namespace specification
+- wsdl: Support chained imports (A imports B which imports C)
+- wsdl: Include port in endpoint address when serializing
+- soap_server: Fix use of style (rpc|document) and use (encoded|literal)
+- soap_server: Support _SERVER[CONTENT_TYPE] in addition to _SERVER[HTTP_CONTENT_TYPE]
+- soap_server: Support wsdl with multiple <schema>
+- soap_client: Remove a var_dump
+- soap_client: Add style and use parameters to call method to support doc/lit without WSDL
+- soap_transport_http: Check that $this->fp exists when doing persistent connections

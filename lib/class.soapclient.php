@@ -103,16 +103,28 @@ class soapclient extends nusoap_base  {
 	* calls method, returns PHP native type
 	*
 	* @param    string $method SOAP server URL or path
-	* @param    array $params array of parameters, can be associative or not
-	* @param	string $namespace optional method namespace
-	* @param	string $soapAction optional SOAPAction value
+	* @param    array $params For RPC, array of parameters, can be associative or not.
+	*                         For literal, either the stringized XML for the body,
+	*                         or an array of parameters like the RPC case.  The
+	*                         $rpcParams parameter controls this treatment, or
+	*                         the $defaultRpcParams field if $rpcParams is not
+	*                         specified.  IMPORTANT: most services with literal
+	*                         parameters have document style, in which case there
+	*                         is really one parameter, the root of the fragment
+	*                         used in the call, which encloses what programmers
+	*                         normally think of parameters.  A parameter array
+	*                         *must* include the wrapper.
+	* @param	string $namespace optional method namespace (WSDL can override)
+	* @param	string $soapAction optional SOAPAction value (WSDL can override)
 	* @param	boolean $headers optional array of soapval objects for headers
 	* @param	boolean $rpcParams optional treat params as RPC for use="literal"
 	*                   This can be used on a per-call basis to overrider defaultRpcParams.
+	* @param	string	$style optional (rpc|document) the style to use when serializing parameters (WSDL can override)
+	* @param	string	$use optional (encoded|literal) the use when serializing parameters (WSDL can override)
 	* @return	mixed
 	* @access   public
 	*/
-	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=null){
+	function call($operation,$params=array(),$namespace='',$soapAction='',$headers=false,$rpcParams=null,$style='rpc',$use='encoded'){
 		$this->operation = $operation;
 		$this->fault = false;
 		$this->error_str = '';
@@ -135,9 +147,11 @@ class soapclient extends nusoap_base  {
 			foreach($opData as $key => $value){
 				$this->debug("$key -> $value");
 			}
-			$soapAction = $opData['soapAction'];
+			if (isset($opData['soapAction'])) {
+				$soapAction = $opData['soapAction'];
+			}
 			$this->endpoint = $opData['endpoint'];
-			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	'http://testuri.org';
+			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] :	($namespace != '' ? $namespace : 'http://testuri.org');
 			$style = $opData['style'];
 			// add ns to ns array
 			if($namespace != '' && !isset($this->wsdl->namespaces[$namespace])){
@@ -153,7 +167,7 @@ class soapclient extends nusoap_base  {
 					$this->debug("serializing literal params for operation $operation");
 					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
-					var_dump($params);
+					//$this->debug($this->varDump($params));
 				} else {
 					$this->debug("serializing literal document for operation $operation");
 					//$payload = is_array($params) ? array_shift($params) : $params;
@@ -190,24 +204,22 @@ class soapclient extends nusoap_base  {
 		// no wsdl
 		} else {
 			// make message
-			if(!isset($style)){
-				$style = 'rpc';
-			}
             if($namespace == ''){
             	$namespace = 'http://testuri.org';
                 $this->wsdl->namespaces['ns1'] = $namespace;
             }
 			// serialize envelope
+			// note: 
 			$payload = '';
 			if(is_array($params)){
 				foreach($params as $k => $v){
-					$payload .= $this->serialize_val($v,$k);
+					$payload .= $this->serialize_val($v,$k,false,false,false,false,$use);
 				}
 			}
 			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">".$payload."</ns1:$operation>";
-			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders);
+			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,array(),$style,$use);
 		}
-		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");
+		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style");
 		// send
 		$this->debug('sending msg (len: '.strlen($soapmsg).") w/ soapaction '$soapAction'...");
 		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout);
