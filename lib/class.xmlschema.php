@@ -390,7 +390,7 @@ class XMLSchema extends nusoap_base  {
 			}
 		}
 		// finish 'er up
-		$xml = "<$schemaPrefix:schema xmlns=\"$this->XMLSchemaVersion\" targetNamespace=\"$this->schemaTargetNamespace\"><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/soap/encoding/\" /><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/wsdl/\" />".$xml."</$schemaPrefix:schema>";
+		$xml = "<$schemaPrefix:schema targetNamespace=\"$this->schemaTargetNamespace\"><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/soap/encoding/\" /><$schemaPrefix:import namespace=\"http://schemas.xmlsoap.org/wsdl/\" />".$xml."</$schemaPrefix:schema>";
 		return $xml;
 	}
 
