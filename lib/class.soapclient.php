@@ -101,6 +101,9 @@ class soapclient extends nusoap_base  {
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 
 			$this->opData = $opData;
+			foreach($opData as $key => $value){
+				$this->debug("$key -> $value");
+			}
 			$soapAction = $opData['soapAction'];
 			$this->endpoint = $opData['endpoint'];
 			$namespace = isset($opData['input']['namespace']) ? $opData['input']['namespace'] : 'http://testuri.org';
@@ -113,14 +116,16 @@ class soapclient extends nusoap_base  {
                 $this->wsdl->namespaces['nu'] = $namespace;
             }
 			// serialize payload
-			if($style == 'rpc'){
+			
+			if($opData['input']['use'] == 'literal') {
+				$payload = is_array($params) ? array_shift($params) : $params;
+			} else {
 				$this->debug("serializing RPC params for operation $operation");
 				$payload = "<".$this->wsdl->getPrefixFromNamespace($namespace).":$operation>".
 				$this->wsdl->serializeRPCParameters($operation,'input',$params).
 				'</'.$this->wsdl->getPrefixFromNamespace($namespace).":$operation>";
-			} elseif($opData['input']['use'] == 'literal') {
-				$payload = is_array($params) ? array_shift($params) : $params;
 			}
+			$this->debug('payload size: '.strlen($payload));
 			// serialize envelope
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);

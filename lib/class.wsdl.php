@@ -207,9 +207,9 @@ class wsdl extends XMLSchema {
 					if(isset($this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ])){
                    		$this->bindings[$binding]['operations'][$operation]['output']['parts'] = $this->messages[ $this->bindings[$binding]['operations'][$operation]['output']['message'] ];
                     }
-					if (isset($this->bindings[$binding]['operations'][$operation]['style'])) {
+					if (isset($bindingData['style'])) {
                         $this->bindings[$binding]['operations'][$operation]['style'] = $bindingData['style'];
-                    } 
+                    }
                     $this->bindings[$binding]['operations'][$operation]['transport'] = isset($bindingData['transport']) ? $bindingData['transport'] : '';
                     $this->bindings[$binding]['operations'][$operation]['documentation'] = isset($this->portTypes[ $bindingData['portType'] ][$operation]['documentation']) ? $this->portTypes[ $bindingData['portType'] ][$operation]['documentation'] : '';
                     $this->bindings[$binding]['operations'][$operation]['endpoint'] = isset($bindingData['endpoint']) ? $bindingData['endpoint'] : '';
@@ -581,11 +581,11 @@ class wsdl extends XMLSchema {
 			$portType_xml = '';
 			foreach($this->bindings as $bindingName => $attrs) {
 				$binding_xml .= '<binding name="' . $bindingName . '" type="tns:' . $attrs['portType'] . '">';
-				$binding_xml .= "<soap:binding style=\"" . $attrs['style'] . '" transport="' . $attrs['transport'] . '"/>';
+				$binding_xml .= '<soap:binding style="' . $attrs['style'] . '" transport="' . $attrs['transport'] . '"/>';
 				$portType_xml .= '<portType name="' . $attrs['portType'] . '">';
-				foreach($attrs["operations"] as $opName => $opParts) {
+				foreach($attrs['operations'] as $opName => $opParts) {
 					$binding_xml .= '<operation name="' . $opName . '">';
-					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '"/>';
+					$binding_xml .= '<soap:operation soapAction="' . $opParts['soapAction'] . '" style="'. $attrs['style'] . '"/>';
 					$binding_xml .= '<input><soap:body use="' . $opParts['input']['use'] . '" namespace="' . $opParts['input']['namespace'] . '" encodingStyle="' . $opParts['input']['encodingStyle'] . '"/></input>';
 					$binding_xml .= '<output><soap:body use="' . $opParts['output']['use'] . '" namespace="' . $opParts['output']['namespace'] . '" encodingStyle="' . $opParts['output']['encodingStyle'] . '"/></output>';
 					$binding_xml .= '</operation>';

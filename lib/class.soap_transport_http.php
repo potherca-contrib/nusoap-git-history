@@ -88,6 +88,7 @@ class soap_transport_http extends nusoap_base {
 		if($this->proxyhost != '' && $this->proxyport != ''){
 			$host = $this->proxyhost;
 			$port = $this->proxyport;
+			$this->debug("using http proxy: $host, $port");
 		} else {
 			$host = $this->host;
 			$port = $this->port;
@@ -97,12 +98,15 @@ class soap_transport_http extends nusoap_base {
 			$host = 'ssl://'.$host;
 			$port = 443;
 		}
+		
+		$this->debug("connection params: $host, $port, $this->errno, $this->error_str, $timeout");
 		// timeout
 		if($timeout > 0){
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str, $timeout);
 		} else {
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
 		}
+		
 		// test pointer
 		if(!$fp) {
 			$this->debug('Couldn\'t open socket connection to server '.$this->url.', Error: '.$this->error_str);

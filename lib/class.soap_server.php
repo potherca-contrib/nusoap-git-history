@@ -13,9 +13,8 @@
 */
 class soap_server extends nusoap_base {
 
-    // assoc array of operations => opData
-	var $service = '';
-    var $operations = array();
+	var $service = ''; // service name
+    var $operations = array(); // assoc array of operations => opData
     var $responseHeaders = false;
 	var $headers = '';
 	var $request = '';
@@ -23,7 +22,8 @@ class soap_server extends nusoap_base {
 	var $fault = false;
 	var $result = 'successful';
 	var $wsdl = false;
-    var $debug_flag = 1;
+    var $debug_flag = 0;
+	
 	/**
 	* constructor
     * the optional parameter is a path to a WSDL file that you'd like to bind the server instance to.
@@ -64,6 +64,7 @@ class soap_server extends nusoap_base {
 		} elseif(isset($QUERY_STRING) && $QUERY_STRING != ''){
 			$qs = $QUERY_STRING;
 		}
+		// gen wsdl
 		if(isset($qs) && ereg('wsdl', $qs) ){
 			header("Content-Type: text/xml\r\n");
 			print $this->wsdl->serialize();
@@ -340,115 +341,119 @@ class soap_server extends nusoap_base {
     * @access private
     */
     function webDescription(){
-	$b = '
-	<html><head><title>NuSOAP: '.$this->wsdl->serviceName.'</title>
-	<style type="text/css">
-	    body    { font-family: arial; color: #000000; background-color: #ffffff; margin: 0px 0px 0px 0px; }
-	    p       { font-family: arial; color: #000000; margin-top: 0px; margin-bottom: 12px; }
-	    pre { background-color: silver; padding: 5px; font-family: Courier New; font-size: x-small; color: #000000;}
-	    ul      { margin-top: 10px; margin-left: 20px; }
-	    li      { list-style-type: none; margin-top: 10px; color: #000000; }
-	    .content{
-		margin-left: 0px; padding-bottom: 2em; }
-	    .nav {
-		padding-top: 10px; padding-bottom: 10px; padding-left: 15px; font-size: .70em;
-		margin-top: 10px; margin-left: 0px; color: #000000;
-		background-color: #ccccff; width: 20%; margin-left: 20px; margin-top: 20px; }
-	    .title {
-		font-family: arial; font-size: 26px; color: #ffffff;
-		background-color: #999999; width: 105%; margin-left: 0px;
-		padding-top: 10px; padding-bottom: 10px; padding-left: 15px;}
-	    .hidden {
-		position: absolute; visibility: hidden; z-index: 200; left: 250px; top: 100px;
-		font-family: arial; overflow: hidden; width: 600;
-		padding: 20px; font-size: 10px; background-color: #999999;
-		layer-background-color:#FFFFFF; }
-	    a,a:active  { color: charcoal; font-weight: bold; }
-	    a:visited   { color: #666666; font-weight: bold; }
-	    a:hover     { color: cc3300; font-weight: bold; }
-	</style>
-	<script language="JavaScript" type="text/javascript">
-	<!--
-	// POP-UP CAPTIONS...
-	function lib_bwcheck(){ //Browsercheck (needed)
-	    this.ver=navigator.appVersion
-	    this.agent=navigator.userAgent
-	    this.dom=document.getElementById?1:0
-	    this.opera5=this.agent.indexOf("Opera 5")>-1
-	    this.ie5=(this.ver.indexOf("MSIE 5")>-1 && this.dom && !this.opera5)?1:0;
-	    this.ie6=(this.ver.indexOf("MSIE 6")>-1 && this.dom && !this.opera5)?1:0;
-	    this.ie4=(document.all && !this.dom && !this.opera5)?1:0;
-	    this.ie=this.ie4||this.ie5||this.ie6
-	    this.mac=this.agent.indexOf("Mac")>-1
-	    this.ns6=(this.dom && parseInt(this.ver) >= 5) ?1:0;
-	    this.ns4=(document.layers && !this.dom)?1:0;
-	    this.bw=(this.ie6 || this.ie5 || this.ie4 || this.ns4 || this.ns6 || this.opera5)
-	    return this
-	}
-	var bw = new lib_bwcheck()
-	//Makes crossbrowser object.
-	function makeObj(obj){
-	    this.evnt=bw.dom? document.getElementById(obj):bw.ie4?document.all[obj]:bw.ns4?document.layers[obj]:0;
-	    if(!this.evnt) return false
-	    this.css=bw.dom||bw.ie4?this.evnt.style:bw.ns4?this.evnt:0;
-	    this.wref=bw.dom||bw.ie4?this.evnt:bw.ns4?this.css.document:0;
-	    this.writeIt=b_writeIt;
-	    return this
-	}
-	// A unit of measure that will be added when setting the position of a layer.
-	//var px = bw.ns4||window.opera?"":"px";
-	function b_writeIt(text){
-	    if (bw.ns4){this.wref.write(text);this.wref.close()}
-	    else this.wref.innerHTML = text
-	}
-	//Shows the messages
-	var oDesc;
-	function popup(divid){
-	    if(oDesc = new makeObj(divid)){
-		oDesc.css.visibility = "visible"
-	    }
-	}
-	function popout(){ // Hides message
-	    if(oDesc) oDesc.css.visibility = "hidden"
-	}
-	//-->
-	</script>
-	</head>
-	<body>
-	<div class=content>
-	<br><br>
-	<div class=title>'.$this->wsdl->serviceName.'</div>
-	<div class=nav>
-	<p>View the <a href="'.$GLOBALS['PHP_SELF'].'?wsdl">WSDL</a> for the service.
-	Click on an operation name to view it&apos;s details.</p>
-	<ul>';
-	foreach($this->wsdl->getOperations() as $op => $data){
-	    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
-	    // create hidden div
-	    $b .= "<div id='$op' class='hidden'>
-	    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
-	    foreach($data as $donnie => $marie){
-		if($donnie == 'input' || $donnie == 'output'){
-		    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
-		    foreach($marie as $captain => $tenille){
-			if($captain == 'parts'){
-			    $b .= "&nbsp;&nbsp;$captain:<br>";
-                if(is_array($tenille)){
-			    foreach($tenille as $joanie => $chachi){
-					$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
-			    }
-        		}
-			} else {
-			    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
-			}
-		    }
-		} else {
-		    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
+		$b = '
+		<html><head><title>NuSOAP: '.$this->wsdl->serviceName.'</title>
+		<style type="text/css">
+		    body    { font-family: arial; color: #000000; background-color: #ffffff; margin: 0px 0px 0px 0px; }
+		    p       { font-family: arial; color: #000000; margin-top: 0px; margin-bottom: 12px; }
+		    pre { background-color: silver; padding: 5px; font-family: Courier New; font-size: x-small; color: #000000;}
+		    ul      { margin-top: 10px; margin-left: 20px; }
+		    li      { list-style-type: none; margin-top: 10px; color: #000000; }
+		    .content{
+			margin-left: 0px; padding-bottom: 2em; }
+		    .nav {
+			padding-top: 10px; padding-bottom: 10px; padding-left: 15px; font-size: .70em;
+			margin-top: 10px; margin-left: 0px; color: #000000;
+			background-color: #ccccff; width: 20%; margin-left: 20px; margin-top: 20px; }
+		    .title {
+			font-family: arial; font-size: 26px; color: #ffffff;
+			background-color: #999999; width: 105%; margin-left: 0px;
+			padding-top: 10px; padding-bottom: 10px; padding-left: 15px;}
+		    .hidden {
+			position: absolute; visibility: hidden; z-index: 200; left: 250px; top: 100px;
+			font-family: arial; overflow: hidden; width: 600;
+			padding: 20px; font-size: 10px; background-color: #999999;
+			layer-background-color:#FFFFFF; }
+		    a,a:active  { color: charcoal; font-weight: bold; }
+		    a:visited   { color: #666666; font-weight: bold; }
+		    a:hover     { color: cc3300; font-weight: bold; }
+		</style>
+		<script language="JavaScript" type="text/javascript">
+		<!--
+		// POP-UP CAPTIONS...
+		function lib_bwcheck(){ //Browsercheck (needed)
+		    this.ver=navigator.appVersion
+		    this.agent=navigator.userAgent
+		    this.dom=document.getElementById?1:0
+		    this.opera5=this.agent.indexOf("Opera 5")>-1
+		    this.ie5=(this.ver.indexOf("MSIE 5")>-1 && this.dom && !this.opera5)?1:0;
+		    this.ie6=(this.ver.indexOf("MSIE 6")>-1 && this.dom && !this.opera5)?1:0;
+		    this.ie4=(document.all && !this.dom && !this.opera5)?1:0;
+		    this.ie=this.ie4||this.ie5||this.ie6
+		    this.mac=this.agent.indexOf("Mac")>-1
+		    this.ns6=(this.dom && parseInt(this.ver) >= 5) ?1:0;
+		    this.ns4=(document.layers && !this.dom)?1:0;
+		    this.bw=(this.ie6 || this.ie5 || this.ie4 || this.ns4 || this.ns6 || this.opera5)
+		    return this
 		}
-	    }
-	}
-	$b .= '<ul></div></div></body></html>';
-	return $b;
+		var bw = new lib_bwcheck()
+		//Makes crossbrowser object.
+		function makeObj(obj){
+		    this.evnt=bw.dom? document.getElementById(obj):bw.ie4?document.all[obj]:bw.ns4?document.layers[obj]:0;
+		    if(!this.evnt) return false
+		    this.css=bw.dom||bw.ie4?this.evnt.style:bw.ns4?this.evnt:0;
+		    this.wref=bw.dom||bw.ie4?this.evnt:bw.ns4?this.css.document:0;
+		    this.writeIt=b_writeIt;
+		    return this
+		}
+		// A unit of measure that will be added when setting the position of a layer.
+		//var px = bw.ns4||window.opera?"":"px";
+		function b_writeIt(text){
+		    if (bw.ns4){this.wref.write(text);this.wref.close()}
+		    else this.wref.innerHTML = text
+		}
+		//Shows the messages
+		var oDesc;
+		function popup(divid){
+		    if(oDesc = new makeObj(divid)){
+			oDesc.css.visibility = "visible"
+		    }
+		}
+		function popout(){ // Hides message
+		    if(oDesc) oDesc.css.visibility = "hidden"
+		}
+		//-->
+		</script>
+		</head>
+		<body>
+		<div class=content>
+			<br><br>
+			<div class=title>'.$this->wsdl->serviceName.'</div>
+			<div class=nav>
+				<p>View the <a href="'.$GLOBALS['PHP_SELF'].'?wsdl">WSDL</a> for the service.
+				Click on an operation name to view it&apos;s details.</p>
+				<ul>';
+				foreach($this->wsdl->getOperations() as $op => $data){
+				    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
+				    // create hidden div
+				    $b .= "<div id='$op' class='hidden'>
+				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
+				    foreach($data as $donnie => $marie){
+						if($donnie == 'input' || $donnie == 'output'){
+						    $b .= "<font color='white'>".ucfirst($donnie).':</font><br>';
+						    foreach($marie as $captain => $tenille){
+							if($captain == 'parts'){
+							    $b .= "&nbsp;&nbsp;$captain:<br>";
+				                if(is_array($tenille)){
+							    foreach($tenille as $joanie => $chachi){
+									$b .= "&nbsp;&nbsp;&nbsp;&nbsp;$joanie: $chachi<br>";
+							    }
+				        		}
+							} else {
+							    $b .= "&nbsp;&nbsp;$captain: $tenille<br>";
+							}
+						    }
+						} else {
+						    $b .= "<font color='white'>".ucfirst($donnie).":</font> $marie<br>";
+						}
+				    }
+					$b .= '</div>';
+				}
+				$b .= '
+				<ul>
+			</div>
+		</div></body></html>';
+		return $b;
     }
 
     /**
