@@ -94,3 +94,12 @@
 - wsdl: support multiple SOAP ports
 - soapclient, soap_server: when no charset is specified, use UTF-8, even though HTTP specifies US-ASCII.
 - soap_transport_http: do not prepend $host with 'ssl://' for https (is this required for older cURL versions?)
+
+2003-08-27, version 0.6.5
+- soap_server: support compressed request messages (thanks John Huong)
+- soap_parser: deserialize Apache Vector as an array
+- xmlschema: use $this->typemap in getPHPType (which is not used)
+- soapclient, wsdl: check for WSDL errors after serializing parameters
+- nusoap_base: add serialization of Apache Map (when not using WSDL)
+- wsdl: add serialization of Apache Map (when using WSDL)
+- wsdl: only change &, <, > to entities, not all HTML entities

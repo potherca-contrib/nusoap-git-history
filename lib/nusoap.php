@@ -351,7 +351,15 @@ class nusoap_base {
 						$xml .= "<$name$xmlns$type_str$atts>";
 					}
 					foreach($val as $k => $v){
-						$xml .= $this->serialize_val($v,$k,false,false,false,false,$use);
+						// Apache Map
+						if ($type == 'Map' && $type_ns == 'http://xml.apache.org/xml-soap') {
+							$xml .= '<item>';
+							$xml .= $this->serialize_val($k,'key',false,false,false,false,$use);
+							$xml .= $this->serialize_val($v,'value',false,false,false,false,$use);
+							$xml .= '</item>';
+						} else {
+							$xml .= $this->serialize_val($v,$k,false,false,false,false,$use);
+						}
 					}
 					$xml .= "</$name>";
 				}
@@ -1034,10 +1042,9 @@ class XMLSchema extends nusoap_base  {
     * @access public
     */
 	function getPHPType($type,$ns){
-		global $typemap;
-		if(isset($typemap[$ns][$type])){
+		if(isset($this->typemap[$ns][$type])){
 			//print "found type '$type' and ns $ns in typemap<br>";
-			return $typemap[$ns][$type];
+			return $this->typemap[$ns][$type];
 		} elseif(isset($this->complexTypes[$type])){
 			//print "getting type '$type' and ns $ns from complexTypes array<br>";
 			return $this->complexTypes[$type]['phpType'];
@@ -2117,7 +2124,26 @@ class soap_server extends nusoap_base {
 				}
 			}
 		}
-		$this->debug('got encoding: '.$this->xml_encoding);
+		$this->debug('got character encoding: '.$this->xml_encoding);
+		if (isset($this->headers['Content-Encoding']) && $this->headers['Content-Encoding'] != '') {
+			$this->debug('got content encoding: ' . $this->headers['Content-Encoding']);
+			if ($this->headers['Content-Encoding'] == 'deflate' || $this->headers['Content-Encoding'] == 'gzip') {
+		    	// if decoding works, use it. else assume data wasn't gzencoded
+				if (function_exists('gzuncompress')) {
+					if ($this->headers['Content-Encoding'] == 'deflate' && $degzdata = @gzuncompress($data)) {
+						$data = $degzdata;
+					} elseif ($this->headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))) {
+						$data = $degzdata;
+					} else {
+						$this->fault('Server', 'Errors occurred when trying to decode the data');
+						return $this->fault->serialize();
+					}
+				} else {
+					$this->fault('Server', 'This Server does not support compressed data');
+					return $this->fault->serialize();
+				}
+			}
+		}
 		$this->request = $dump."\r\n\r\n".$data;
 		// parse response, get soap parser obj
 		$parser = new soap_parser($data,$this->xml_encoding);
@@ -3261,7 +3287,11 @@ class wsdl extends XMLSchema {
 					$value = 1;
 				} 
 				if ($this->charencoding && $uqType == 'string' && gettype($value) == 'string') {
-					$value = htmlspecialchars($value);
+			    	$value = str_replace('&', '&amp;', $value);
+			    	$value = str_replace("'", '&apos;', $value);
+			    	$value = str_replace('"', '&quot;', $value);
+			    	$value = str_replace('<', '&lt;', $value);
+			    	$value = str_replace('>', '&gt;', $value);
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?
@@ -3270,12 +3300,29 @@ class wsdl extends XMLSchema {
 				} else {
 					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
 				}
-			} 
+			} else if ($ns == 'http://xml.apache.org/xml-soap' ||
+						($this->getNamespaceFromPrefix($ns)) == 'http://xml.apache.org/xml-soap') {
+				if ($uqType == 'Map') {
+					$contents = '';
+					foreach($value as $k => $v) {
+						$this->debug("serializing map element: key $k, value $v");
+						$contents .= '<item>';
+						$contents .= $this->serialize_val($k,'key',false,false,false,false,$use);
+						$contents .= $this->serialize_val($v,'value',false,false,false,false,$use);
+						$contents .= '</item>';
+					}
+					if ($use == 'literal') {
+						return "<$name>$contents</$name>";
+					} else {
+						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
+					}
+				}
+			}
 		} else {
 			$uqType = $type;
 		}
 		if(!$typeDef = $this->getTypeDef($uqType)){
-			$this->setError("$uqType is not a supported type.");
+			$this->setError("$type ($uqType) is not a supported type.");
 			return false;
 		} else {
 			//foreach($typeDef as $k => $v) {
@@ -3924,18 +3971,24 @@ class soap_parser extends nusoap_base {
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
-            } else {
-            	// is array or struct? better way to do this probably
-            	foreach($children as $child_pos){
-            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
-            			$struct = 1;
-            			break;
-            		}
-            		$keys[$this->message[$child_pos]['name']] = 1;
-            	}
+		    } else {
+	    		// Apache Vector type: treat as an array
+				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
+					$notstruct = 1;
+				} else {
+	            	// is array or struct? better way to do this probably
+	            	// treat repeated element name as an array
+	            	foreach($children as $child_pos){
+	            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
+	            			$notstruct = 1;
+	            			break;
+	            		}
+	            		$keys[$this->message[$child_pos]['name']] = 1;
+	            	}
+	            }
             	//
             	foreach($children as $child_pos){
-            		if(isset($struct)){
+            		if(isset($notstruct)){
             			$params[] = &$this->message[$child_pos]['result'];
             		} else {
 				    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];
@@ -4130,10 +4183,16 @@ class soapclient extends nusoap_base  {
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
+			if ($errstr = $this->wsdl->getError()) {
+				$this->debug('got wsdl error: '.$errstr);
+				$this->setError('wsdl error: '.$errstr);
+				return false;
+			}
 		} elseif($this->endpointType == 'wsdl') {
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 			return false;
 		// no wsdl
 		} else {

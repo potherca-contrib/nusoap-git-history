@@ -440,10 +440,9 @@ class XMLSchema extends nusoap_base  {
     * @access public
     */
 	function getPHPType($type,$ns){
-		global $typemap;
-		if(isset($typemap[$ns][$type])){
+		if(isset($this->typemap[$ns][$type])){
 			//print "found type '$type' and ns $ns in typemap<br>";
-			return $typemap[$ns][$type];
+			return $this->typemap[$ns][$type];
 		} elseif(isset($this->complexTypes[$type])){
 			//print "getting type '$type' and ns $ns from complexTypes array<br>";
 			return $this->complexTypes[$type]['phpType'];

@@ -771,7 +771,11 @@ class wsdl extends XMLSchema {
 					$value = 1;
 				} 
 				if ($this->charencoding && $uqType == 'string' && gettype($value) == 'string') {
-					$value = htmlspecialchars($value);
+			    	$value = str_replace('&', '&amp;', $value);
+			    	$value = str_replace("'", '&apos;', $value);
+			    	$value = str_replace('"', '&quot;', $value);
+			    	$value = str_replace('<', '&lt;', $value);
+			    	$value = str_replace('>', '&gt;', $value);
 				} 
 				// it's a scalar
 				// TODO: what about null/nil values?
@@ -780,12 +784,29 @@ class wsdl extends XMLSchema {
 				} else {
 					return "<$name xsi:type=\"" . $this->getPrefixFromNamespace($this->XMLSchemaVersion) . ":$uqType\"$encodingStyle>$value</$name>";
 				}
+			} else if ($ns == 'http://xml.apache.org/xml-soap' ||
+						($this->getNamespaceFromPrefix($ns)) == 'http://xml.apache.org/xml-soap') {
+				if ($uqType == 'Map') {
+					$contents = '';
+					foreach($value as $k => $v) {
+						$this->debug("serializing map element: key $k, value $v");
+						$contents .= '<item>';
+						$contents .= $this->serialize_val($k,'key',false,false,false,false,$use);
+						$contents .= $this->serialize_val($v,'value',false,false,false,false,$use);
+						$contents .= '</item>';
+					}
+					if ($use == 'literal') {
+						return "<$name>$contents</$name>";
+					} else {
+						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
+					}
+				}
 			} 
 		} else {
 			$uqType = $type;
 		}
 		if(!$typeDef = $this->getTypeDef($uqType)){
-			$this->setError("$uqType is not a supported type.");
+			$this->setError("$type ($uqType) is not a supported type.");
 			return false;
 		} else {
 			//foreach($typeDef as $k => $v) {

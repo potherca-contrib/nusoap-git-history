@@ -260,7 +260,26 @@ class soap_server extends nusoap_base {
 				}
 			}
 		}
-		$this->debug('got encoding: '.$this->xml_encoding);
+		$this->debug('got character encoding: '.$this->xml_encoding);
+		if (isset($this->headers['Content-Encoding']) && $this->headers['Content-Encoding'] != '') {
+			$this->debug('got content encoding: ' . $this->headers['Content-Encoding']);
+			if ($this->headers['Content-Encoding'] == 'deflate' || $this->headers['Content-Encoding'] == 'gzip') {
+		    	// if decoding works, use it. else assume data wasn't gzencoded
+				if (function_exists('gzuncompress')) {
+					if ($this->headers['Content-Encoding'] == 'deflate' && $degzdata = @gzuncompress($data)) {
+						$data = $degzdata;
+					} elseif ($this->headers['Content-Encoding'] == 'gzip' && $degzdata = gzinflate(substr($data, 10))) {
+						$data = $degzdata;
+					} else {
+						$this->fault('Server', 'Errors occurred when trying to decode the data');
+						return $this->fault->serialize();
+					}
+				} else {
+					$this->fault('Server', 'This Server does not support compressed data');
+					return $this->fault->serialize();
+				}
+			}
+		}
 		$this->request = $dump."\r\n\r\n".$data;
 		// parse response, get soap parser obj
 		$parser = new soap_parser($data,$this->xml_encoding);

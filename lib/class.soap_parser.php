@@ -467,17 +467,23 @@ class soap_parser extends nusoap_base {
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
             } else {
-            	// is array or struct? better way to do this probably
-            	foreach($children as $child_pos){
-            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
-            			$struct = 1;
-            			break;
-            		}
-            		$keys[$this->message[$child_pos]['name']] = 1;
-            	}
+	    		// Apache Vector type: treat as an array
+				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
+					$notstruct = 1;
+				} else {
+	            	// is array or struct? better way to do this probably
+	            	// treat repeated element name as an array
+	            	foreach($children as $child_pos){
+	            		if(isset($keys) && isset($keys[$this->message[$child_pos]['name']])){
+	            			$notstruct = 1;
+	            			break;
+	            		}
+	            		$keys[$this->message[$child_pos]['name']] = 1;
+	            	}
+	            }
             	//
             	foreach($children as $child_pos){
-            		if(isset($struct)){
+            		if(isset($notstruct)){
             			$params[] = &$this->message[$child_pos]['result'];
             		} else {
 				    	$params[$this->message[$child_pos]['name']] = &$this->message[$child_pos]['result'];

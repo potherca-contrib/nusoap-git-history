@@ -172,10 +172,16 @@ class soapclient extends nusoap_base  {
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$this->wsdl->usedNamespaces,$style);
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
 			$this->wsdl->debug_str = '';
+			if ($errstr = $this->wsdl->getError()) {
+				$this->debug('got wsdl error: '.$errstr);
+				$this->setError('wsdl error: '.$errstr);
+				return false;
+			}
 		} elseif($this->endpointType == 'wsdl') {
 			$this->setError( 'operation '.$operation.' not present.');
 			$this->debug("operation '$operation' not present.");
 			$this->debug("wsdl debug: \n".$this->wsdl->debug_str);
+			$this->wsdl->debug_str = '';
 			return false;
 		// no wsdl
 		} else {

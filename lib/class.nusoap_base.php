@@ -351,7 +351,15 @@ class nusoap_base {
 						$xml .= "<$name$xmlns$type_str$atts>";
 					}
 					foreach($val as $k => $v){
-						$xml .= $this->serialize_val($v,$k,false,false,false,false,$use);
+						// Apache Map
+						if ($type == 'Map' && $type_ns == 'http://xml.apache.org/xml-soap') {
+							$xml .= '<item>';
+							$xml .= $this->serialize_val($k,'key',false,false,false,false,$use);
+							$xml .= $this->serialize_val($v,'value',false,false,false,false,$use);
+							$xml .= '</item>';
+						} else {
+							$xml .= $this->serialize_val($v,$k,false,false,false,false,$use);
+						}
 					}
 					$xml .= "</$name>";
 				}
