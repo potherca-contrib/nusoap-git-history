@@ -434,7 +434,6 @@ function iso8601_to_timestamp($datestr){
 	}
 }
 
-
 ?><?php
 
 /**
@@ -1241,6 +1240,8 @@ class soap_transport_http extends nusoap_base {
 	 **/
 	function send($data, $timeout=0) {
 	    flush();
+		//global $timer;
+		//$timer->setMarker('http::send(): soapaction = '.$this->soapaction);
 		$this->debug('entered send() with data of length: '.strlen($data));
 
 		if($this->proxyhost != '' && $this->proxyport != ''){
@@ -1256,14 +1257,15 @@ class soap_transport_http extends nusoap_base {
 		} else {
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
 		}
-
+		
 		if (!$fp) {
 			$this->debug('Couldn\'t open socket connection to server: '.$server);
 			$this->setError('Couldn\'t open socket connection to server: '.$server);
 			return false;
 		}
 		$this->debug('socket connected');
-
+		//$timer->setMarker('opened socket connection to server');
+		
 		$credentials = '';
 		if($this->username != '') {
 			$this->debug('setting http auth credentials');
@@ -1299,6 +1301,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('Write error');
 		}
+		//$timer->setMarker('wrote data to socket');
 		$this->debug('wrote data to socket');
 		
 		// get response
@@ -1306,10 +1309,14 @@ class soap_transport_http extends nusoap_base {
 		//$start = time();
         //$timeout = $timeout + $start;*/
 		//while($data = fread($fp, 32768) && $t < $timeout){
+		//$timer->setMarker('starting fread()');
+		$strlen = 0;
 		while( $data = fread($fp, 32768) ){
 			$this->incoming_payload .= $data;
 			//$t = time();
+			$strlen += strlen($data);
 	    }
+		//$timer->setMarker('finished fread(), bytes read: '.$strlen);
 		/*$end = time();
 		if ($t >= $timeout) {
 			$this->setError('server response timed out');
@@ -2047,7 +2054,8 @@ class wsdl extends XMLSchema {
         }
 
         $this->debug('getting '.$wsdl);
-	    if ($fp = @fopen($wsdl,'r')) {
+	    /* old
+		if ($fp = @fopen($wsdl,'r')) {
         	$wsdl_string = '';
 			while($data = fread($fp, 32768)) {
 				$wsdl_string .= $data;
@@ -2056,7 +2064,81 @@ class wsdl extends XMLSchema {
 		} else {
 			$this->setError('bad path to WSDL file.');
 			return false;
-		}
+		}*/
+		
+		// *** start new code added ***
+		// props go to robert tuttle for the wsdl-grabbing code
+        // parse $wsdl for url format
+        $wsdl_props = parse_url($wsdl);
+		
+        if (array_key_exists('host', $wsdl_props)) {
+        // $wsdl seems to be a valid url, not a file path, do an fsockopen/HTTP GET
+        
+            $fsockopen_timeout = 30;
+        	
+            // check if a port value is supplied in url
+            if (array_key_exists('port', $wsdl_props)) {
+                // yes
+                $wsdl_url_port = $wsdl_props['port'];
+            } else {
+                // no, assign port number, based on url protocol (scheme)
+                switch ($wsdl_props['scheme']) {
+                    case ('https') :
+                    case ('ssl') :
+                    case ('tls') :
+                        $wsdl_url_port = 443;
+                        break;
+                    case ('http') :
+                    default :
+                        $wsdl_url_port = 80;
+                }
+            }
+        
+            if ($fp = fsockopen($wsdl_props['host'], $wsdl_url_port, $fsockopen_errnum, $fsockopen_errstr, $fsockopen_timeout)) {
+            
+                // perform HTTP GET for WSDL file
+                fputs($fp, "GET " . $wsdl_props['path'] . " HTTP/1.0\r\nHost: ".$wsdl_props['host']."\r\n\r\n");
+            
+                while (fgets($fp, 1024) != "\r\n") {
+                    // do nothing, just read/skip past HTTP headers
+                    // HTTP headers end with extra CRLF before content body
+                }
+            
+                // read in WSDL just like regular fopen()
+                $wsdl_string = '';
+                while($data = fread($fp, 32768)) {
+                    $wsdl_string .= $data;
+                }
+                fclose($fp);
+				
+				//print '<xmp>'.$wsdl_string.'</xmp>';
+				
+             } else {
+                $this->setError('bad path to WSDL file.');
+                return false;
+             }
+            
+            
+        } else {  
+        // $wsdl seems to be a non-url file path, do the regular fopen
+     
+            if ($fp = @fopen($wsdl,'r')) {
+                    
+            	$wsdl_string = '';
+                while($data = fread($fp, 32768)) {
+                    $wsdl_string .= $data;
+                }
+                fclose($fp);
+                
+             } else {
+                $this->setError('bad path to WSDL file.');
+                return false;
+             }
+        
+        }
+
+		// *** end new code added ***
+
 	    // Create an XML parser.
 	    $this->parser = xml_parser_create();
 	    // Set the options for parsing the XML data.

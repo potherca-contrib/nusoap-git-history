@@ -87,6 +87,8 @@ class soap_transport_http extends nusoap_base {
 	 **/
 	function send($data, $timeout=0) {
 	    flush();
+		//global $timer;
+		//$timer->setMarker('http::send(): soapaction = '.$this->soapaction);
 		$this->debug('entered send() with data of length: '.strlen($data));
 
 		if($this->proxyhost != '' && $this->proxyport != ''){
@@ -102,14 +104,15 @@ class soap_transport_http extends nusoap_base {
 		} else {
 			$fp = fsockopen($host, $port, $this->errno, $this->error_str);
 		}
-
+		
 		if (!$fp) {
 			$this->debug('Couldn\'t open socket connection to server: '.$server);
 			$this->setError('Couldn\'t open socket connection to server: '.$server);
 			return false;
 		}
 		$this->debug('socket connected');
-
+		//$timer->setMarker('opened socket connection to server');
+		
 		$credentials = '';
 		if($this->username != '') {
 			$this->debug('setting http auth credentials');
@@ -145,6 +148,7 @@ class soap_transport_http extends nusoap_base {
 			$this->setError('couldn\'t write message data to socket');
 			$this->debug('Write error');
 		}
+		//$timer->setMarker('wrote data to socket');
 		$this->debug('wrote data to socket');
 		
 		// get response
@@ -152,10 +156,14 @@ class soap_transport_http extends nusoap_base {
 		//$start = time();
         //$timeout = $timeout + $start;*/
 		//while($data = fread($fp, 32768) && $t < $timeout){
+		//$timer->setMarker('starting fread()');
+		$strlen = 0;
 		while( $data = fread($fp, 32768) ){
 			$this->incoming_payload .= $data;
 			//$t = time();
+			$strlen += strlen($data);
 	    }
+		//$timer->setMarker('finished fread(), bytes read: '.$strlen);
 		/*$end = time();
 		if ($t >= $timeout) {
 			$this->setError('server response timed out');
