@@ -150,6 +150,7 @@ class soapclient extends nusoap_base  {
 					$this->debug("serializing literal params for operation $operation");
 					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
+					var_dump($params);
 				} else {
 					$this->debug("serializing literal document for operation $operation");
 					//$payload = is_array($params) ? array_shift($params) : $params;
@@ -195,10 +196,12 @@ class soapclient extends nusoap_base  {
             }
 			// serialize envelope
 			$payload = '';
-			foreach($params as $k => $v){
-				$payload .= $this->serialize_val($v,$k);
+			if(is_array($params)){
+				foreach($params as $k => $v){
+					$payload .= $this->serialize_val($v,$k);
+				}
 			}
-			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">\n".$payload."</ns1:$operation>\n";
+			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">".$payload."</ns1:$operation>";
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders);
 		}
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");

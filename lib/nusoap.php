@@ -1380,7 +1380,7 @@ class soap_transport_http extends nusoap_base {
 		if(isset($u['query']) && $u['query'] != ''){
             $this->path .= '?' . $u['query'];
 		}
-		
+
 		// set default port
 		if(!isset($u['port'])){
 			if($u['scheme'] == 'https'){
@@ -1389,7 +1389,7 @@ class soap_transport_http extends nusoap_base {
 				$this->port = 80;
 			}
 		}
-		
+
 		$this->uri = $this->path;
 		
 		// build headers
@@ -1426,7 +1426,7 @@ class soap_transport_http extends nusoap_base {
 		
 		// set response timeout
 		socket_set_timeout( $this->fp, $response_timeout);
-
+		
 		$this->debug('socket connected');
 		return true;
 	  } else if ($this->scheme == 'https') {
@@ -1598,6 +1598,7 @@ class soap_transport_http extends nusoap_base {
 		// while (chunk-size > 0) {
 		while ($chunk_size > 0) {
 			$this->debug("chunkstart: $chunkstart chunk_size: $chunk_size");
+			
 			$chunkend = strpos( $buffer, "\r\n", $chunkstart + $chunk_size);
 		  	
 			// Just in case we got a broken connection
@@ -1628,7 +1629,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		return $new;
 	}
-	
+
 	/*
 	 *	Writes payload, including HTTP headers, to $this->outgoing_payload.
 	 */
@@ -1679,7 +1680,7 @@ class soap_transport_http extends nusoap_base {
 	
 	function getResponse(){
 		$this->incoming_payload = '';
-	    
+
 	  if ($this->scheme == 'http') {
 	    // loop until headers have been retrieved
 	    $data = '';
@@ -1715,8 +1716,8 @@ class soap_transport_http extends nusoap_base {
 		$data = substr($data,$pos);
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		foreach($header_array as $header_line){
-			$arr = explode(':',$header_line, 2);
-			if(count($arr) > 1){
+			$arr = explode(':',$header_line);
+			if(count($arr) >= 2){
 				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 			}
 		}
@@ -1800,10 +1801,8 @@ class soap_transport_http extends nusoap_base {
 		$this->debug('cleaned data, stringlen: '.strlen($data));
 		// clean headers
 		foreach ($header_array as $header_line) {
-			$arr = explode(':',$header_line,2);
-			if (count($arr) > 1) {
-				$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
-			}
+			$arr = explode(':',$header_line);
+			$this->incoming_headers[strtolower(trim($arr[0]))] = trim($arr[1]);
 		}
 		if (strlen($data) == 0) {
 			$this->debug('no data after headers!');
@@ -1811,7 +1810,7 @@ class soap_transport_http extends nusoap_base {
 			return false;
 		}
 	  }
-		
+
 		// decode transfer-encoding
 		if(isset($this->incoming_headers['transfer-encoding']) && strtolower($this->incoming_headers['transfer-encoding']) == 'chunked'){
 			if(!$data = $this->decodeChunked($data)){
@@ -2599,7 +2598,7 @@ class wsdl extends XMLSchema {
 				}
             } 
         } 
-    }
+    } 
 
     /**
      * parses the wsdl document
@@ -2614,6 +2613,7 @@ class wsdl extends XMLSchema {
             $this->setError('no wsdl passed to parseWSDL()!!');
             return false;
         }
+        $this->debug('getting ' . $wsdl);
         
         // parse $wsdl for url format
         $wsdl_props = parse_url($wsdl);
@@ -3273,7 +3273,6 @@ class wsdl extends XMLSchema {
 		if($use == 'encoded' && $encodingStyle) {
 			$encodingStyle = ' SOAP-ENV:encodingStyle="' . $encodingStyle . '"';
 		}
-		
 		$xml = '';
 		if (strpos($type, ':')) {
 			$uqType = substr($type, strrpos($type, ':') + 1);
@@ -3319,7 +3318,7 @@ class wsdl extends XMLSchema {
 						return "<$name xsi:type=\"" . $this->getPrefixFromNamespace('http://xml.apache.org/xml-soap') . ":$uqType\"$encodingStyle>$contents</$name>";
 					}
 				}
-			}
+			} 
 		} else {
 			$uqType = $type;
 		}
@@ -3553,7 +3552,6 @@ class soap_parser extends nusoap_base {
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
-	* @param    string $method
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method=''){
@@ -3801,7 +3799,7 @@ class soap_parser extends nusoap_base {
 						$this->message[$pos]['result'] = $this->message[$pos]['cdata'];
 					}
 				}
-
+				
 				/* add value to parent's result, if parent is struct/array
 				$parent = $this->message[$pos]['parent'];
 				if($this->message[$parent]['type'] != 'map'){
@@ -3973,7 +3971,7 @@ class soap_parser extends nusoap_base {
                 }
             // generic compound type
             //} elseif($this->message[$pos]['type'] == 'SOAPStruct' || $this->message[$pos]['type'] == 'struct') {
-		    } else {
+            } else {
 	    		// Apache Vector type: treat as an array
 				if ($this->message[$pos]['type'] == 'Vector' && $this->message[$pos]['type_namespace'] == 'http://xml.apache.org/xml-soap') {
 					$notstruct = 1;
@@ -4055,7 +4053,7 @@ class soapclient extends nusoap_base  {
 	var $request = '';
 	var $response = '';
 	var $responseData = '';
-	
+
 	/**
 	* fault related variables
 	*
@@ -4163,6 +4161,7 @@ class soapclient extends nusoap_base  {
 					$this->debug("serializing literal params for operation $operation");
 					$payload = $this->wsdl->serializeRPCParameters($operation,'input',$params);
 					$defaultNamespace = $this->wsdl->wsdl_info['targetNamespace'];
+					var_dump($params);
 				} else {
 					$this->debug("serializing literal document for operation $operation");
 					//$payload = is_array($params) ? array_shift($params) : $params;
@@ -4208,10 +4207,12 @@ class soapclient extends nusoap_base  {
             }
 			// serialize envelope
 			$payload = '';
-			foreach($params as $k => $v){
-				$payload .= $this->serialize_val($v,$k);
+			if(is_array($params)){
+				foreach($params as $k => $v){
+					$payload .= $this->serialize_val($v,$k);
+				}
 			}
-			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">\n".$payload."</ns1:$operation>\n";
+			$payload = "<ns1:$operation xmlns:ns1=\"$namespace\">".$payload."</ns1:$operation>";
 			$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders);
 		}
 		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace");
