@@ -55,16 +55,17 @@ require_once('class.soap_server.php');//
 * nusoap_base
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.5
+* @version  $Id$
 * @access   public
 */
 class nusoap_base {
 
 	var $title = 'NuSOAP';
-	var $version = '0.6.5';
+	var $version = '0.6.6';
 	var $error_str = false;
     var $debug_str = '';
-	// toggles automatic encoding of special characters
+	// toggles automatic encoding of special characters as entities
+	// (should always be true, I think)
 	var $charencoding = true;
 
     /**

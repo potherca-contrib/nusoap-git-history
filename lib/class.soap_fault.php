@@ -7,7 +7,7 @@
 * mainly used for returning faults from deployed functions
 * in a server instance.
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.5
+* @version  $Id$
 * @access public
 */
 class soap_fault extends nusoap_base {

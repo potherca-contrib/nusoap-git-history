@@ -7,7 +7,7 @@
 * NOTE: PHP must be compiled with the CURL extension for HTTPS support
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.5
+* @version  $Id$
 * @access public
 */
 class soap_transport_http extends nusoap_base {

@@ -10,7 +10,7 @@
 * NOTE: WSDL functionality is experimental
 *
 * @author   Dietrich Ayala <dietrich@ganx4.com>
-* @version  v 0.6.5
+* @version  $Id$
 * @access   public
 */
 class soap_server extends nusoap_base {
