@@ -5,7 +5,7 @@
  *	WSDL client sample.
  *
  *	Service: WSDL
- *	Payload: rpc/encoded
+ *	Payload: rpc/literal
  *	Transport: http
  *	Authentication: none
  */
