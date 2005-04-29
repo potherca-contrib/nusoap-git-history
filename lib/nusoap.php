@@ -50,6 +50,10 @@ require_once('class.wsdl.php');
 // server class
 require_once('class.soap_server.php');*/
 
+// class variable emulation
+// cf. http://www.webkreator.com/php/techniques/php-static-class-variables.html
+$GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel = 9;
+
 /**
 *
 * nusoap_base
@@ -68,6 +72,8 @@ class nusoap_base {
 	// toggles automatic encoding of special characters as entities
 	// (should always be true, I think)
 	var $charencoding = true;
+	// the debug level for this instance
+	var $debugLevel;
 
     /**
 	*  set schema version
@@ -142,13 +148,64 @@ class nusoap_base {
 		'lt' => '<','gt' => '>','apos' => "'");
 
 	/**
+	* constructor
+	*
+	* @access	public
+	*/
+	function nusoap_base() {
+		$this->debugLevel = $GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel;
+	}
+
+	/**
+	* gets the global debug level, which applies to future instances
+	*
+	* @return	int	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function getGlobalDebugLevel() {
+		return $GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel;
+	}
+
+	/**
+	* sets the global debug level, which applies to future instances
+	*
+	* @param	int	$level	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function setGlobalDebugLevel($level) {
+		$GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel = $level;
+	}
+
+	/**
+	* gets the debug level for this instance
+	*
+	* @return	int	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function getDebugLevel() {
+		return $this->debugLevel;
+	}
+
+	/**
+	* sets the debug level for this instance
+	*
+	* @param	int	$level	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function setDebugLevel($level) {
+		$this->debugLevel = $level;
+	}
+
+	/**
 	* adds debug data to the instance debug string with formatting
 	*
 	* @param    string $string debug data
 	* @access   private
 	*/
 	function debug($string){
-		$this->appendDebug($this->getmicrotime().' '.get_class($this).": $string\n");
+		if ($this->debugLevel > 0) {
+			$this->appendDebug($this->getmicrotime().' '.get_class($this).": $string\n");
+		}
 	}
 
 	/**
@@ -158,9 +215,11 @@ class nusoap_base {
 	* @access   private
 	*/
 	function appendDebug($string){
-		// it would be nice to use a memory stream here to use
-		// memory more efficiently
-		$this->debug_str .= $string;
+		if ($this->debugLevel > 0) {
+			// it would be nice to use a memory stream here to use
+			// memory more efficiently
+			$this->debug_str .= $string;
+		}
 	}
 
 	/**
@@ -293,7 +352,7 @@ class nusoap_base {
 		$atts = '';
 		if($attributes){
 			foreach($attributes as $k => $v){
-				$atts .= " $k=\"$v\"";
+				$atts .= ' $k="'.$this->expandEntities($v).'"';
 			}
 		}
 		// serialize null value
@@ -387,7 +446,7 @@ class nusoap_base {
 							++$i;
 						}
 						if(count($array_types) > 1){
-							$array_typename = 'xsd:ur-type';
+							$array_typename = 'xsd:anyType';
 						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
 							if ($tt == 'integer') {
 								$tt = 'int';
@@ -758,6 +817,7 @@ class soap_fault extends nusoap_base {
     * @param string $faultdetail
 	*/
 	function soap_fault($faultcode,$faultactor='',$faultstring='',$faultdetail=''){
+		parent::nusoap_base();
 		$this->faultcode = $faultcode;
 		$this->faultactor = $faultactor;
 		$this->faultstring = $faultstring;
@@ -847,7 +907,7 @@ class XMLSchema extends nusoap_base  {
 	* @access   public
 	*/
 	function XMLSchema($schema='',$xml='',$namespaces=array()){
-
+		parent::nusoap_base();
 		$this->debug('xmlschema class instantiated, inside constructor');
 		// files
 		$this->schema = $schema;
@@ -1699,6 +1759,7 @@ class soapval extends nusoap_base {
 	* @access   public
 	*/
   	function soapval($name='soapval',$type=false,$value=-1,$element_ns=false,$type_ns=false,$attributes=false) {
+		parent::nusoap_base();
 		$this->name = $name;
 		$this->value = $value;
 		$this->type = $type;
@@ -1779,6 +1840,7 @@ class soap_transport_http extends nusoap_base {
 	* constructor
 	*/
 	function soap_transport_http($url){
+		parent::nusoap_base();
 		$this->setURL($url);
 		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
@@ -1853,7 +1915,7 @@ class soap_transport_http extends nusoap_base {
 		} else {
 			$host = $this->host;
 		}
-		$this->debug('calling fsockopen with host ' . $host);
+		$this->debug('calling fsockopen with host ' . $host . ' connection_timeout ' . $connection_timeout);
 
 		// open socket
 		if($connection_timeout > 0){
@@ -1876,6 +1938,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// set response timeout
+		$this->debug('set response timeout to ' . $response_timeout);
 		socket_set_timeout( $this->fp, $response_timeout);
 
 		$this->debug('socket connected');
@@ -2036,7 +2099,7 @@ class soap_transport_http extends nusoap_base {
 				// calculate the Digest hashes (calculate code based on digest implementation found at: http://www.rassoc.com/gregr/weblog/stories/2002/07/09/webServicesSecurityHttpDigestAuthenticationWithoutActiveDirectory.html)
 	
 				// A1 = unq(username-value) ":" unq(realm-value) ":" passwd
-				$A1 = $username. ':' . $digestRequest['realm'] . ':' . $password;
+				$A1 = $username. ':' . (isset($digestRequest['realm']) ? $digestRequest['realm'] : '') . ':' . $password;
 	
 				// H(A1) = MD5(A1)
 				$HA1 = md5($A1);
@@ -2102,16 +2165,18 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $enc encoding style. supported values: gzip, deflate, or both
 	* @access   public
 	*/
-	function setEncoding($enc='gzip, deflate'){
-		$this->protocol_version = '1.1';
-		$this->outgoing_headers['Accept-Encoding'] = $enc;
-		if (!isset($this->outgoing_headers['Connection'])) {
-			$this->outgoing_headers['Connection'] = 'close';
-			$this->persistentConnection = false;
+	function setEncoding($enc='gzip, deflate') {
+		if (function_exists('gzdeflate')) {
+			$this->protocol_version = '1.1';
+			$this->outgoing_headers['Accept-Encoding'] = $enc;
+			if (!isset($this->outgoing_headers['Connection'])) {
+				$this->outgoing_headers['Connection'] = 'close';
+				$this->persistentConnection = false;
+			}
+			set_magic_quotes_runtime(0);
+			// deprecated
+			$this->encoding = $enc;
 		}
-		set_magic_quotes_runtime(0);
-		// deprecated
-		$this->encoding = $enc;
 	}
 	
 	/**
@@ -2287,7 +2352,7 @@ class soap_transport_http extends nusoap_base {
 			if ($tmplen == 0) {
 				$this->incoming_payload = $data;
 				$this->debug('socket read of headers timed out after length ' . strlen($data));
-				$this->debug("read before timeout:\n" . $data);
+				$this->debug("read before timeout: " . $data);
 				$this->setError('socket read of headers timed out');
 				return false;
 			}
@@ -2517,7 +2582,7 @@ class soap_transport_http extends nusoap_base {
  		// see if we need to resend the request with http digest authentication
  		if (isset($this->incoming_headers['www-authenticate']) && $http_status == 401) {
  			$this->debug("Got 401 $http_reason with WWW-Authenticate: " . $this->incoming_headers['www-authenticate']);
- 			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
+ 			if (strstr($this->incoming_headers['www-authenticate'], "Digest ")) {
  				$this->debug('Server wants digest authentication');
  				// remove "Digest " from our elements
  				$digestString = str_replace('Digest ', '', $this->incoming_headers['www-authenticate']);
@@ -2796,7 +2861,7 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function soap_server($wsdl=false){
-
+		parent::nusoap_base();
 		// turn on debugging?
 		global $debug;
 		global $_REQUEST;
@@ -3112,17 +3177,21 @@ class soap_server extends nusoap_base {
 		}
 
 		// does method exist?
-		if ($class == '' && !function_exists($this->methodname)) {
-			$this->debug("function '$this->methodname' not found!");
-			$this->result = 'fault: method not found';
-			$this->fault('Client',"method '$this->methodname' not defined in service");
-			return;
-		}
-		if ($class != '' && !in_array(strtolower($method), get_class_methods($class))) {
-			$this->debug("method '$this->methodname' not found in class '$class'!");
-			$this->result = 'fault: method not found';
-			$this->fault('Client',"method '$this->methodname' not defined in service");
-			return;
+		if ($class == '') {
+			if (!function_exists($this->methodname)) {
+				$this->debug("function '$this->methodname' not found!");
+				$this->result = 'fault: method not found';
+				$this->fault('Client',"method '$this->methodname' not defined in service");
+				return;
+			}
+		} else {
+			$method_to_compare = (substr(phpversion(), 0, 2) == '4.') ? strtolower($method) : $method;
+			if (!in_array($method_to_compare, get_class_methods($class))) {
+				$this->debug("method '$this->methodname' not found in class '$class'!");
+				$this->result = 'fault: method not found';
+				$this->fault('Client',"method '$this->methodname' not defined in service");
+				return;
+			}
 		}
 
 		if($this->wsdl){
@@ -3579,6 +3648,7 @@ class wsdl extends nusoap_base {
      * @access public 
      */
     function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false,$timeout=0,$response_timeout=30){
+		parent::nusoap_base();
         $this->wsdl = $wsdl;
         $this->proxyhost = $proxyhost;
         $this->proxyport = $proxyport;
@@ -4245,7 +4315,7 @@ class wsdl extends nusoap_base {
 				Click on an operation name to view it&apos;s details.</p>
 				<ul>';
 				foreach($this->getOperations() as $op => $data){
-				    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
+				    $b .= "<li><a href='#' onclick=\"popout();popup('$op')\">$op</a></li>";
 				    // create hidden div
 				    $b .= "<div id='$op' class='hidden'>
 				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
@@ -4866,7 +4936,7 @@ class wsdl extends nusoap_base {
 					$this->debug("no value provided for attribute $aName");
 				}
 				if ($xname) {
-					$xml .=  " $aName=\"" . $xvalue[$xname] . "\"";
+					$xml .=  " $aName=\"" . $this->expandEntities($xvalue[$xname]) . "\"";
 				}
 			} 
 		} else {
@@ -5212,6 +5282,7 @@ class soap_parser extends nusoap_base {
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
+		parent::nusoap_base();
 		$this->xml = $xml;
 		$this->xml_encoding = $encoding;
 		$this->method = $method;
@@ -5809,6 +5880,7 @@ class soapclient extends nusoap_base  {
 	* @access   public
 	*/
 	function soapclient($endpoint,$wsdl = false,$proxyhost = false,$proxyport = false,$proxyusername = false, $proxypassword = false, $timeout = 0, $response_timeout = 30){
+		parent::nusoap_base();
 		$this->endpoint = $endpoint;
 		$this->proxyhost = $proxyhost;
 		$this->proxyport = $proxyport;

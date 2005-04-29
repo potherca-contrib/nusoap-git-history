@@ -56,6 +56,7 @@ class soap_parser extends nusoap_base {
 	* @access   public
 	*/
 	function soap_parser($xml,$encoding='UTF-8',$method='',$decode_utf8=true){
+		parent::nusoap_base();
 		$this->xml = $xml;
 		$this->xml_encoding = $encoding;
 		$this->method = $method;

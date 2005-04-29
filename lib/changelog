@@ -343,3 +343,21 @@
 - soapclient: use get_class instead of is_a (thanks Thomas Noel)
 - soapclient: add setEndpoint method
 - soap_transport_http: fix client certificates (thanks Doug Anarino and Eryan Eriobowo)
+
+2005-04-29, version 0.6.9
+- nusoap_base: add global variable and methods for setting debug level
+- nusoap_base: use xsd:anyType instead of xsd:ur-type to serialize arrays with multiple element types (thanks Ingo Fischer)
+- nusoap_base: expand entities in attributes (thanks Gaetano Giunta)
+- soapclient: call parent constructor
+- soapval: call parent constructor
+- soap_fault: call parent constructor
+- soap_parser: call parent constructor
+- soap_server: assume get_class_methods always returns lower case for PHP 4.x only
+- soap_server: call parent constructor
+- soap_transport_http: do nothing in setEncoding if gzdeflate is not present (thanks Franck Touanen for pointing this out)
+- soap_transport_http: fix check for server request for digest authentication (thanks Mark Spavin)
+- soap_transport_http: call parent constructor
+- wsdl: fix documentation page popup of one method after another (thanks Owen)
+- wsdl: call parent constructor
+- wsdl: expand entities in attributes (thanks Gaetano Giunta)
+- xmlschema: call parent constructor

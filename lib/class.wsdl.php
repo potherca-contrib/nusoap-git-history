@@ -59,6 +59,7 @@ class wsdl extends nusoap_base {
      * @access public 
      */
     function wsdl($wsdl = '',$proxyhost=false,$proxyport=false,$proxyusername=false,$proxypassword=false,$timeout=0,$response_timeout=30){
+		parent::nusoap_base();
         $this->wsdl = $wsdl;
         $this->proxyhost = $proxyhost;
         $this->proxyport = $proxyport;
@@ -725,7 +726,7 @@ class wsdl extends nusoap_base {
 				Click on an operation name to view it&apos;s details.</p>
 				<ul>';
 				foreach($this->getOperations() as $op => $data){
-				    $b .= "<li><a href='#' onclick=\"popup('$op')\">$op</a></li>";
+				    $b .= "<li><a href='#' onclick=\"popout();popup('$op')\">$op</a></li>";
 				    // create hidden div
 				    $b .= "<div id='$op' class='hidden'>
 				    <a href='#' onclick='popout()'><font color='#ffffff'>Close</font></a><br><br>";
@@ -1346,7 +1347,7 @@ class wsdl extends nusoap_base {
 					$this->debug("no value provided for attribute $aName");
 				}
 				if ($xname) {
-					$xml .=  " $aName=\"" . $xvalue[$xname] . "\"";
+					$xml .=  " $aName=\"" . $this->expandEntities($xvalue[$xname]) . "\"";
 				}
 			} 
 		} else {

@@ -47,6 +47,7 @@ class soap_transport_http extends nusoap_base {
 	* constructor
 	*/
 	function soap_transport_http($url){
+		parent::nusoap_base();
 		$this->setURL($url);
 		ereg('\$Revisio' . 'n: ([^ ]+)', $this->revision, $rev);
 		$this->outgoing_headers['User-Agent'] = $this->title.'/'.$this->version.' ('.$rev[1].')';
@@ -121,7 +122,7 @@ class soap_transport_http extends nusoap_base {
 		} else {
 			$host = $this->host;
 		}
-		$this->debug('calling fsockopen with host ' . $host);
+		$this->debug('calling fsockopen with host ' . $host . ' connection_timeout ' . $connection_timeout);
 
 		// open socket
 		if($connection_timeout > 0){
@@ -144,6 +145,7 @@ class soap_transport_http extends nusoap_base {
 		}
 		
 		// set response timeout
+		$this->debug('set response timeout to ' . $response_timeout);
 		socket_set_timeout( $this->fp, $response_timeout);
 
 		$this->debug('socket connected');
@@ -304,7 +306,7 @@ class soap_transport_http extends nusoap_base {
 				// calculate the Digest hashes (calculate code based on digest implementation found at: http://www.rassoc.com/gregr/weblog/stories/2002/07/09/webServicesSecurityHttpDigestAuthenticationWithoutActiveDirectory.html)
 	
 				// A1 = unq(username-value) ":" unq(realm-value) ":" passwd
-				$A1 = $username. ':' . $digestRequest['realm'] . ':' . $password;
+				$A1 = $username. ':' . (isset($digestRequest['realm']) ? $digestRequest['realm'] : '') . ':' . $password;
 	
 				// H(A1) = MD5(A1)
 				$HA1 = md5($A1);
@@ -370,16 +372,18 @@ class soap_transport_http extends nusoap_base {
 	* @param    string $enc encoding style. supported values: gzip, deflate, or both
 	* @access   public
 	*/
-	function setEncoding($enc='gzip, deflate'){
-		$this->protocol_version = '1.1';
-		$this->outgoing_headers['Accept-Encoding'] = $enc;
-		if (!isset($this->outgoing_headers['Connection'])) {
-			$this->outgoing_headers['Connection'] = 'close';
-			$this->persistentConnection = false;
+	function setEncoding($enc='gzip, deflate') {
+		if (function_exists('gzdeflate')) {
+			$this->protocol_version = '1.1';
+			$this->outgoing_headers['Accept-Encoding'] = $enc;
+			if (!isset($this->outgoing_headers['Connection'])) {
+				$this->outgoing_headers['Connection'] = 'close';
+				$this->persistentConnection = false;
+			}
+			set_magic_quotes_runtime(0);
+			// deprecated
+			$this->encoding = $enc;
 		}
-		set_magic_quotes_runtime(0);
-		// deprecated
-		$this->encoding = $enc;
 	}
 	
 	/**
@@ -555,7 +559,7 @@ class soap_transport_http extends nusoap_base {
 			if ($tmplen == 0) {
 				$this->incoming_payload = $data;
 				$this->debug('socket read of headers timed out after length ' . strlen($data));
-				$this->debug("read before timeout:\n" . $data);
+				$this->debug("read before timeout: " . $data);
 				$this->setError('socket read of headers timed out');
 				return false;
 			}
@@ -785,7 +789,7 @@ class soap_transport_http extends nusoap_base {
  		// see if we need to resend the request with http digest authentication
  		if (isset($this->incoming_headers['www-authenticate']) && $http_status == 401) {
  			$this->debug("Got 401 $http_reason with WWW-Authenticate: " . $this->incoming_headers['www-authenticate']);
- 			if (substr("Digest ", $this->incoming_headers['www-authenticate'])) {
+ 			if (strstr($this->incoming_headers['www-authenticate'], "Digest ")) {
  				$this->debug('Server wants digest authentication');
  				// remove "Digest " from our elements
  				$digestString = str_replace('Digest ', '', $this->incoming_headers['www-authenticate']);

@@ -27,6 +27,7 @@ class soap_fault extends nusoap_base {
     * @param string $faultdetail
 	*/
 	function soap_fault($faultcode,$faultactor='',$faultstring='',$faultdetail=''){
+		parent::nusoap_base();
 		$this->faultcode = $faultcode;
 		$this->faultactor = $faultactor;
 		$this->faultstring = $faultstring;

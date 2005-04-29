@@ -50,7 +50,7 @@ class soap_server extends nusoap_base {
 	* @access   public
 	*/
 	function soap_server($wsdl=false){
-
+		parent::nusoap_base();
 		// turn on debugging?
 		global $debug;
 		global $_REQUEST;
@@ -366,17 +366,21 @@ class soap_server extends nusoap_base {
 		}
 
 		// does method exist?
-		if ($class == '' && !function_exists($this->methodname)) {
-			$this->debug("function '$this->methodname' not found!");
-			$this->result = 'fault: method not found';
-			$this->fault('Client',"method '$this->methodname' not defined in service");
-			return;
-		}
-		if ($class != '' && !in_array(strtolower($method), get_class_methods($class))) {
-			$this->debug("method '$this->methodname' not found in class '$class'!");
-			$this->result = 'fault: method not found';
-			$this->fault('Client',"method '$this->methodname' not defined in service");
-			return;
+		if ($class == '') {
+			if (!function_exists($this->methodname)) {
+				$this->debug("function '$this->methodname' not found!");
+				$this->result = 'fault: method not found';
+				$this->fault('Client',"method '$this->methodname' not defined in service");
+				return;
+			}
+		} else {
+			$method_to_compare = (substr(phpversion(), 0, 2) == '4.') ? strtolower($method) : $method;
+			if (!in_array($method_to_compare, get_class_methods($class))) {
+				$this->debug("method '$this->methodname' not found in class '$class'!");
+				$this->result = 'fault: method not found';
+				$this->fault('Client',"method '$this->methodname' not defined in service");
+				return;
+			}
 		}
 
 		if($this->wsdl){

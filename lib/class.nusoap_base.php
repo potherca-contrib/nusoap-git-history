@@ -50,6 +50,10 @@ require_once('class.wsdl.php');
 // server class
 require_once('class.soap_server.php');*/
 
+// class variable emulation
+// cf. http://www.webkreator.com/php/techniques/php-static-class-variables.html
+$GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel = 9;
+
 /**
 *
 * nusoap_base
@@ -68,6 +72,8 @@ class nusoap_base {
 	// toggles automatic encoding of special characters as entities
 	// (should always be true, I think)
 	var $charencoding = true;
+	// the debug level for this instance
+	var $debugLevel;
 
     /**
 	*  set schema version
@@ -142,13 +148,64 @@ class nusoap_base {
 		'lt' => '<','gt' => '>','apos' => "'");
 
 	/**
+	* constructor
+	*
+	* @access	public
+	*/
+	function nusoap_base() {
+		$this->debugLevel = $GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel;
+	}
+
+	/**
+	* gets the global debug level, which applies to future instances
+	*
+	* @return	int	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function getGlobalDebugLevel() {
+		return $GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel;
+	}
+
+	/**
+	* sets the global debug level, which applies to future instances
+	*
+	* @param	int	$level	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function setGlobalDebugLevel($level) {
+		$GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel = $level;
+	}
+
+	/**
+	* gets the debug level for this instance
+	*
+	* @return	int	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function getDebugLevel() {
+		return $this->debugLevel;
+	}
+
+	/**
+	* sets the debug level for this instance
+	*
+	* @param	int	$level	Debug level 0-9, where 0 turns off
+	* @access	public
+	*/
+	function setDebugLevel($level) {
+		$this->debugLevel = $level;
+	}
+
+	/**
 	* adds debug data to the instance debug string with formatting
 	*
 	* @param    string $string debug data
 	* @access   private
 	*/
 	function debug($string){
-		$this->appendDebug($this->getmicrotime().' '.get_class($this).": $string\n");
+		if ($this->debugLevel > 0) {
+			$this->appendDebug($this->getmicrotime().' '.get_class($this).": $string\n");
+		}
 	}
 
 	/**
@@ -158,9 +215,11 @@ class nusoap_base {
 	* @access   private
 	*/
 	function appendDebug($string){
-		// it would be nice to use a memory stream here to use
-		// memory more efficiently
-		$this->debug_str .= $string;
+		if ($this->debugLevel > 0) {
+			// it would be nice to use a memory stream here to use
+			// memory more efficiently
+			$this->debug_str .= $string;
+		}
 	}
 
 	/**
@@ -293,7 +352,7 @@ class nusoap_base {
 		$atts = '';
 		if($attributes){
 			foreach($attributes as $k => $v){
-				$atts .= " $k=\"$v\"";
+				$atts .= ' $k="'.$this->expandEntities($v).'"';
 			}
 		}
 		// serialize null value
@@ -387,7 +446,7 @@ class nusoap_base {
 							++$i;
 						}
 						if(count($array_types) > 1){
-							$array_typename = 'xsd:ur-type';
+							$array_typename = 'xsd:anyType';
 						} elseif(isset($tt) && isset($this->typemap[$this->XMLSchemaVersion][$tt])) {
 							if ($tt == 'integer') {
 								$tt = 'int';

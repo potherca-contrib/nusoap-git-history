@@ -2,6 +2,7 @@
 
 
 
+
 /**
 * for creating serializable abstractions of native PHP types
 * NOTE: this is only really used when WSDL is not available.
@@ -23,6 +24,7 @@ class soapval extends nusoap_base {
 	* @access   public
 	*/
   	function soapval($name='soapval',$type=false,$value=-1,$element_ns=false,$type_ns=false,$attributes=false) {
+		parent::nusoap_base();
 		$this->name = $name;
 		$this->value = $value;
 		$this->type = $type;
@@ -52,6 +54,7 @@ class soapval extends nusoap_base {
 		return $this->value;
 	}
 }
+
 
 
 
