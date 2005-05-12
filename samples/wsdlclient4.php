@@ -15,6 +15,7 @@ require_once('../lib/nusoap.php');
  */
 $method = isset($_POST['method']) ? $_POST['method'] : '';
 $null = isset($_POST['null']) ? $_POST['null'] : '';
+$empty = isset($_POST['empty']) ? $_POST['empty'] : '';
 $proxyhost = isset($_POST['proxyhost']) ? $_POST['proxyhost'] : '';
 $proxyport = isset($_POST['proxyport']) ? $_POST['proxyport'] : '';
 $proxyusername = isset($_POST['proxyusername']) ? $_POST['proxyusername'] : '';
@@ -41,7 +42,8 @@ if ($method == '') {
 	echo '<option>echoBoolean</option>';
 	echo '<option>echoBase64</option>';
 	echo '</select><br><br>';
-	echo 'Null parameter? <input type="checkbox" name="null" value="1"><br><br>';
+	echo 'Null parameter? <input type="checkbox" name="null" value="1"><br>';
+	echo 'Empty array? <input type="checkbox" name="empty" value="1"><br><br>';
 	echo '<input type="submit" value="&#160;Execute&#160;">';
 	echo '</form>';
 	exit();
@@ -57,7 +59,11 @@ if ($method == 'echoString') {
 	}
 } elseif ($method == 'echoStringArray') {
 	if ($null != '1') {
-		$params = array('inputStringArray' => array('String 1', 'String 2', 'String Three'));
+		if ($empty != '1') {
+			$params = array('inputStringArray' => array('String 1', 'String 2', 'String Three'));
+		} else {
+			$params = array('inputStringArray' => array());
+		}
 	} else {
 		$params = array('inputStringArray' => null);
 	}
@@ -69,7 +75,11 @@ if ($method == 'echoString') {
 	}
 } elseif ($method == 'echoIntegerArray') {
 	if ($null != '1') {
-		$params = array('inputIntegerArray' => array(451, 43, -392220011, 1, 1, 2, 3, 5, 8, 13, 21));
+		if ($empty != '1') {
+			$params = array('inputIntegerArray' => array(451, 43, -392220011, 1, 1, 2, 3, 5, 8, 13, 21));
+		} else {
+			$params = array('inputIntegerArray' => array());
+		}
 	} else {
 		$params = array('inputIntegerArray' => null);
 	}
@@ -81,7 +91,11 @@ if ($method == 'echoString') {
 	}
 } elseif ($method == 'echoFloatArray') {
 	if ($null != '1') {
-		$params = array('inputFloatArray' => array(1.1, 2.2, 3.3, 1/4, -1/9));
+		if ($empty != '1') {
+			$params = array('inputFloatArray' => array(1.1, 2.2, 3.3, 1/4, -1/9));
+		} else {
+			$params = array('inputFloatArray' => array());
+		}
 	} else {
 		$params = array('inputFloatArray' => null);
 	}
@@ -94,9 +108,13 @@ if ($method == 'echoString') {
 	}
 } elseif ($method == 'echoStructArray') {
 	if ($null != '1') {
-		$structs[] = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
-		$structs[] = array('varString' => 'when', 'varInt' => 4, 'varFloat' => 99.9876);
-		$params = array('inputStructArray' => $structs);
+		if ($empty != '1') {
+			$structs[] = array('varString' => 'who', 'varInt' => 2, 'varFloat' => 3.14159);
+			$structs[] = array('varString' => 'when', 'varInt' => 4, 'varFloat' => 99.9876);
+			$params = array('inputStructArray' => $structs);
+		} else {
+			$params = array('inputStructArray' => array());
+		}
 	} else {
 		$params = array('inputStructArray' => null);
 	}
