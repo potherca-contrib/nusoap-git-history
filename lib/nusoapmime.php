@@ -37,9 +37,8 @@ require_once('Mail/mimeDecode.php');
 require_once('Mail/mimePart.php');
 
 /**
-*
-* soapclientmime client supporting 
-* <a href="http://www.w3.org/TR/SOAP-attachments">MIME attachments</a>.
+* soapclientmime client supporting MIME attachments defined at
+* http://www.w3.org/TR/SOAP-attachments.  It depends on the PEAR Mail_MIME library.
 *
 * @author   Scott Nichol <snichol@sourceforge.net>
 * @author	Thanks to Guillaume and Henning Reich for posting great attachment code to the mail list
@@ -47,8 +46,22 @@ require_once('Mail/mimePart.php');
 * @access   public
 */
 class soapclientmime extends soapclient {
+	/**
+	 * @var array Each array element in the return is an associative array with keys
+	 * data, filename, contenttype, cid
+	 * @access private
+	 */
 	var $requestAttachments = array();
+	/**
+	 * @var array Each array element in the return is an associative array with keys
+	 * data, filename, contenttype, cid
+	 * @access private
+	 */
 	var $responseAttachments;
+	/**
+	 * @var string
+	 * @access private
+	 */
 	var $mimeContentType;
 	
 	/**
@@ -109,7 +122,7 @@ class soapclientmime extends soapclient {
 	*
 	* @param string $soapmsg The SOAP payload
 	* @return string The HTTP body, which includes the SOAP payload
-	* @access protected
+	* @access private
 	*/
 	function getHTTPBody($soapmsg) {
 		if (count($this->requestAttachments) > 0) {
@@ -168,7 +181,7 @@ class soapclientmime extends soapclient {
 	* Note: getHTTPBody must be called before this.
 	*
 	* @return string the HTTP content type for the current request.
-	* @access protected
+	* @access private
 	*/
 	function getHTTPContentType() {
 		if (count($this->requestAttachments) > 0) {
@@ -184,7 +197,7 @@ class soapclientmime extends soapclient {
 	* Note: getHTTPBody must be called before this.
 	*
 	* @return string the HTTP content type charset for the current request.
-	* @access protected
+	* @access private
 	*/
 	function getHTTPContentTypeCharset() {
 		if (count($this->requestAttachments) > 0) {
@@ -199,7 +212,7 @@ class soapclientmime extends soapclient {
 	* @param	array	$headers	The HTTP headers
 	* @param	string	$data		unprocessed response data from server
 	* @return	mixed	value of the message, decoded into a PHP type
-	* @access   protected
+	* @access   private
 	*/
     function parseResponse($headers, $data) {
 		$this->debug('Entering parseResponse() for payload of length ' . strlen($data) . ' and type of ' . $headers['content-type']);
