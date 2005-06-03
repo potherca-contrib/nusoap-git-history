@@ -63,39 +63,80 @@ $GLOBALS['_transient']['static']['nusoap_base']->globalDebugLevel = 9;
 * @access   public
 */
 class nusoap_base {
-
+	/**
+	 * Identification for HTTP headers.
+	 *
+	 * @var string
+	 * @access private
+	 */
 	var $title = 'NuSOAP';
-	var $version = '0.6.9';
+	/**
+	 * Version for HTTP headers.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	var $version = '0.7.0';
+	/**
+	 * CVS revision for HTTP headers.
+	 *
+	 * @var string
+	 * @access private
+	 */
 	var $revision = '$Revision$';
+    /**
+     * Current error string (manipulated by getError/setError)
+	 *
+	 * @var string
+	 * @access private
+	 */
 	var $error_str = '';
+    /**
+     * Current debug string (manipulated by debug/appendDebug/clearDebug/getDebug/getDebugAsXMLComment)
+	 *
+	 * @var string
+	 * @access private
+	 */
     var $debug_str = '';
-	// toggles automatic encoding of special characters as entities
-	// (should always be true, I think)
+    /**
+	 * toggles automatic encoding of special characters as entities
+	 * (should always be true, I think)
+	 *
+	 * @var boolean
+	 * @access private
+	 */
 	var $charencoding = true;
-	// the debug level for this instance
+	/**
+	 * the debug level for this instance
+	 *
+	 * @var	integer
+	 * @access private
+	 */
 	var $debugLevel;
 
     /**
-	*  set schema version
+	* set schema version
 	*
-	* @var      XMLSchemaVersion
+	* @var      string
 	* @access   public
 	*/
 	var $XMLSchemaVersion = 'http://www.w3.org/2001/XMLSchema';
 	
     /**
-	*  set charset encoding for outgoing messages
+	* charset encoding for outgoing messages
 	*
-	* @var      soap_defencoding
+	* @var      string
 	* @access   public
 	*/
-	//var $soap_defencoding = 'UTF-8';
     var $soap_defencoding = 'ISO-8859-1';
+	//var $soap_defencoding = 'UTF-8';
 
 	/**
-	*  load namespace uris into an array of uri => prefix
+	* namespaces in an array of prefix => uri
 	*
-	* @var      namespaces
+	* this is "seeded" by a set of constants, but it may be altered by code
+	*
+	* @var      array
 	* @access   public
 	*/
 	var $namespaces = array(
@@ -104,13 +145,20 @@ class nusoap_base {
 		'xsi' => 'http://www.w3.org/2001/XMLSchema-instance',
 		'SOAP-ENC' => 'http://schemas.xmlsoap.org/soap/encoding/',
 		'si' => 'http://soapinterop.org/xsd');
+
+	/**
+	* namespaces used in the current context
+	*
+	* @var      array
+	* @access   private
+	*/
 	var $usedNamespaces = array();
 
 	/**
-	* load types into typemap array
+	* XML Schema types in an array of uri => (array of xml type => php type)
 	* is this legacy yet?
 	* no, this is used by the xmlschema class to verify type => namespace mappings.
-	* @var      typemap
+	* @var      array
 	* @access   public
 	*/
 	var $typemap = array(
@@ -139,10 +187,12 @@ class nusoap_base {
 	);
 
 	/**
-	*  entities to convert
+	* XML entities to convert
 	*
-	* @var      xmlEntities
+	* @var      array
 	* @access   public
+	* @deprecated
+	* @see	expandEntities
 	*/
 	var $xmlEntities = array('quot' => '"','amp' => '&',
 		'lt' => '<','gt' => '>','apos' => "'");
@@ -159,7 +209,7 @@ class nusoap_base {
 	/**
 	* gets the global debug level, which applies to future instances
 	*
-	* @return	int	Debug level 0-9, where 0 turns off
+	* @return	integer	Debug level 0-9, where 0 turns off
 	* @access	public
 	*/
 	function getGlobalDebugLevel() {
@@ -212,7 +262,7 @@ class nusoap_base {
 	* adds debug data to the instance debug string without formatting
 	*
 	* @param    string $string debug data
-	* @access   private
+	* @access   public
 	*/
 	function appendDebug($string){
 		if ($this->debugLevel > 0) {
@@ -578,13 +628,21 @@ class nusoap_base {
 	"</SOAP-ENV:Envelope>";
     }
 
+	/**
+	 * formats a string to be inserted into an HTML stream
+	 *
+	 * @param string $str The string to format
+	 * @return string The formatted string
+	 * @access public
+	 * @deprecated
+	 */
     function formatDump($str){
 		$str = htmlspecialchars($str);
 		return nl2br($str);
     }
 
 	/**
-	* contracts a qualified name
+	* contracts (changes namespace to prefix) a qualified name
 	*
 	* @param    string $string qname
 	* @return	string contracted qname
@@ -609,7 +667,7 @@ class nusoap_base {
 	}
 
 	/**
-	* expands a qualified name
+	* expands (changes prefix to namespace) a qualified name
 	*
 	* @param    string $string qname
 	* @return	string expanded qname
@@ -636,8 +694,8 @@ class nusoap_base {
     * returns the local part of a prefixed string
     * returns the original string, if not prefixed
     *
-    * @param string
-    * @return string
+    * @param string $str The prefixed string
+    * @return string The local part
     * @access public
     */
 	function getLocalPart($str){
@@ -653,8 +711,8 @@ class nusoap_base {
     * returns the prefix part of a prefixed string
     * returns false, if not prefixed
     *
-    * @param string
-    * @return mixed
+    * @param string The prefixed string
+    * @return mixed The prefix or false if there is no prefix
     * @access public
     */
 	function getPrefix($str){
@@ -667,10 +725,9 @@ class nusoap_base {
 
 	/**
     * pass it a prefix, it returns a namespace
-	* returns false if no namespace registered with the given prefix
     *
-    * @param string
-    * @return mixed
+    * @param string $prefix The prefix
+    * @return mixed The namespace, false if no namespace has the specified prefix
     * @access public
     */
 	function getNamespaceFromPrefix($prefix){
@@ -685,8 +742,8 @@ class nusoap_base {
     * returns the prefix for a given namespace (or prefix)
     * or false if no prefixes registered for the given namespace
     *
-    * @param string
-    * @return mixed
+    * @param string $ns The namespace
+    * @return mixed The prefix, false if the namespace has no prefixes
     * @access public
     */
 	function getPrefixFromNamespace($ns) {
@@ -702,7 +759,7 @@ class nusoap_base {
 	/**
     * returns the time in ODBC canonical form with microseconds
     *
-    * @return string
+    * @return string The time in ODBC canonical form with microseconds
     * @access public
     */
 	function getmicrotime() {
@@ -717,6 +774,13 @@ class nusoap_base {
 		return strftime('%Y-%m-%d %H:%M:%S', $sec) . '.' . sprintf('%06d', $usec);
 	}
 
+	/**
+	 * Returns a string with the output of var_dump
+	 *
+	 * @param mixed $data The variable to var_dump
+	 * @return string The output of var_dump
+	 * @access public
+	 */
     function varDump($data) {
 		ob_start();
 		var_dump($data);

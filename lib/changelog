@@ -380,3 +380,8 @@
 - wsdl: specify encodingStyle for operations
 - wsdl: improve debug and comments
 - xmlschema: improve debug and comments
+
+2005-06-03, version 0.7.0
+- nusoap_base: improve debug and comments
+- nusoap_base: fix version, which should have been 0.7.0 since 2005-03-04
+
