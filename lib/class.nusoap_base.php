@@ -304,7 +304,7 @@ class nusoap_base {
 	/**
 	* detect if array is a simple array or a struct (associative array)
 	*
-	* @param	$val	The PHP array
+	* @param	mixed	$val	The PHP array
 	* @return	string	(arraySimple|arrayStruct)
 	* @access	private
 	*/
@@ -322,14 +322,26 @@ class nusoap_base {
 	* serializes PHP values in accordance w/ section 5. Type information is
 	* not serialized if $use == 'literal'.
 	*
-	* @return	string
+	* @param	mixed	$val	The value to serialize
+	* @param	string	$name	The name (local part) of the XML element
+	* @param	string	$type	The XML schema type (local part) for the element
+	* @param	string	$name_ns	The namespace for the name of the XML element
+	* @param	string	$type_ns	The namespace for the type of the element
+	* @param	array	$attributes	The attributes to serialize as name=>value pairs
+	* @param	string	$use	The WSDL "use" (encoded|literal)
+	* @return	string	The serialized element, possibly with child elements
     * @access	public
 	*/
 	function serialize_val($val,$name=false,$type=false,$name_ns=false,$type_ns=false,$attributes=false,$use='encoded'){
+		$this->appendDebug("in serialize_val: name=$name, type=$type, name_ns=$name_ns, type_ns=$type_ns, use=$use, value=");
+		$this->appendDebug($this->varDump($val));
+		$this->appendDebug(", attributes=");
+		$this->appendDebug($this->varDump($attributes));
+		$this->debug("");
+		
     	if(is_object($val) && get_class($val) == 'soapval'){
         	return $val->serialize($use);
         }
-		$this->debug( "in serialize_val: $val, $name, $type, $name_ns, $type_ns, $attributes, $use");
 		// if no name, use item
 		$name = (!$name|| is_numeric($name)) ? 'soapVal' : $name;
 		// if name has ns, add ns prefix to name
@@ -358,10 +370,15 @@ class nusoap_base {
 		// serialize null value
 		if (is_null($val)) {
 			if ($use == 'literal') {
-				// TODO: depends on nillable
+				// TODO: depends on minOccurs
 	        	return "<$name$xmlns $atts/>";
         	} else {
-	        	return "<$name$xmlns $atts xsi:nil=\"true\"/>";
+				if (isset($type) && isset($type_prefix)) {
+					$type_str = " xsi:type=\"$type_prefix:$type\"";
+				} else {
+					$type_str = '';
+				}
+	        	return "<$name$xmlns$type_str $atts xsi:nil=\"true\"/>";
         	}
 		}
         // serialize if an xsd built-in primitive type
@@ -483,7 +500,7 @@ class nusoap_base {
 						} else if (isset($type) && isset($type_prefix)) {
 							$type_str = " xsi:type=\"$type_prefix:$type\"";
 						} else {
-							$type_str = " xsi:type=\"SOAP-ENC:Array\"";
+							$type_str = " xsi:type=\"SOAP-ENC:Array\" SOAP-ENC:arrayType=\"xsd:anyType[0]\"";
 						}
 					}
 					$xml = "<$name$xmlns$type_str$atts>".$xml."</$name>";
@@ -528,10 +545,11 @@ class nusoap_base {
     * @param array namespaces optional
     * @param string style optional (rpc|document)
     * @param string use optional (encoded|literal)
+    * @param string encodingStyle optional (usually 'http://schemas.xmlsoap.org/soap/encoding/' for encoded)
     * @return string message
     * @access public
     */
-    function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc',$use='encoded'){
+    function serializeEnvelope($body,$headers=false,$namespaces=array(),$style='rpc',$use='encoded',$encodingStyle='http://schemas.xmlsoap.org/soap/encoding/'){
     // TODO: add an option to automatically run utf8_encode on $body and $headers
     // if $this->soap_defencoding is UTF-8.  Not doing this automatically allows
     // one to send arbitrary UTF-8 characters, not just characters that map to ISO-8859-1
@@ -541,8 +559,8 @@ class nusoap_base {
 	foreach(array_merge($this->namespaces,$namespaces) as $k => $v){
 		$ns_string .= " xmlns:$k=\"$v\"";
 	}
-	if($style == 'rpc' && $use == 'encoded') {
-		$ns_string = ' SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"' . $ns_string;
+	if($encodingStyle) {
+		$ns_string = " SOAP-ENV:encodingStyle=\"$encodingStyle\"$ns_string";
 	}
 
 	// serialize headers

@@ -389,8 +389,8 @@ class soap_server extends nusoap_base {
 				$this->fault('Client',"Operation '$this->methodname' is not defined in the WSDL for this service");
 				return;
 			}
-			$this->debug('opData:');
-			$this->appendDebug($this->varDump($this->opData));
+			$this->debug('Found operation');
+			$this->appendDebug('opData=' . $this->varDump($this->opData));
 		}
 		$this->debug("method '$this->methodname' exists");
 		// evaluate message, getting back parameters
@@ -531,8 +531,13 @@ class soap_server extends nusoap_base {
 			//if($this->debug_flag){
             	$this->appendDebug($this->wsdl->getDebug());
             //	}
+			if (isset($opData['output']['encodingStyle'])) {
+				$encodingStyle = $opData['output']['encodingStyle'];
+			} else {
+				$encodingStyle = '';
+			}
 			// Added: In case we use a WSDL, return a serialized env. WITH the usedNamespaces.
-			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces,$this->opData['style']);
+			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders,$this->wsdl->usedNamespaces,$this->opData['style'],$encodingStyle);
 		} else {
 			$this->responseSOAP = $this->serializeEnvelope($payload,$this->responseHeaders);
 		}
@@ -658,9 +663,10 @@ class soap_server extends nusoap_base {
 	* @param	string $style optional (rpc|document)
 	* @param	string $use optional (encoded|literal)
 	* @param	string $documentation optional Description to include in WSDL
+	* @param	string $encodingStyle optional (usually 'http://schemas.xmlsoap.org/soap/encoding/' for encoded)
 	* @access   public
 	*/
-	function register($name,$in=array(),$out=array(),$namespace=false,$soapaction=false,$style=false,$use=false,$documentation=''){
+	function register($name,$in=array(),$out=array(),$namespace=false,$soapaction=false,$style=false,$use=false,$documentation='',$encodingStyle=''){
 		if($this->externalWSDLURL){
 			die('You cannot bind to an external WSDL file, and register methods outside of it! Please choose either WSDL or no WSDL.');
 		}
@@ -677,7 +683,10 @@ class soap_server extends nusoap_base {
 		if(false == $use) {
 			$use = "encoded";
 		}
-		
+		if ($use == 'encoded' && $encodingStyle = '') {
+			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+		}
+
 		$this->operations[$name] = array(
 	    'name' => $name,
 	    'in' => $in,
@@ -686,7 +695,7 @@ class soap_server extends nusoap_base {
 	    'soapaction' => $soapaction,
 	    'style' => $style);
         if($this->wsdl){
-        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use,$documentation);
+        	$this->wsdl->addOperation($name,$in,$out,$namespace,$soapaction,$style,$use,$documentation,$encodingStyle);
 	    }
 		return true;
 	}

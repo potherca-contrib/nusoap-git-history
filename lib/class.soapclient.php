@@ -51,16 +51,29 @@ class soapclient extends nusoap_base  {
     var $decode_utf8 = true;		// toggles whether the parser decodes element content w/ utf8_decode()
 	var $operations = array();		// WSDL operations, empty for WSDL initialization error
 	
+	/*
+	 * fault related variables
+	 */
 	/**
-	* fault related variables
-	*
-	* @var      fault
-	* @var      faultcode
-	* @var      faultstring
-	* @var      faultdetail
-	* @access   public
-	*/
-	var $fault, $faultcode, $faultstring, $faultdetail;
+	 * @var      fault
+	 * @access   public
+	 */
+	var $fault;
+	/**
+	 * @var      faultcode
+	 * @access   public
+	 */
+	var $faultcode;
+	/**
+	 * @var      faultstring
+	 * @access   public
+	 */
+	var $faultstring;
+	/**
+	 * @var      faultdetail
+	 * @access   public
+	 */
+	var $faultdetail;
 
 	/**
 	* constructor
@@ -114,6 +127,7 @@ class soapclient extends nusoap_base  {
 				$this->setError('no operations defined in the WSDL document!');
 			}
 		} else {
+			$this->debug("instantiate SOAP with endpoint at $endpoint");
 			$this->endpointType = 'soap';
 		}
 	}
@@ -140,7 +154,7 @@ class soapclient extends nusoap_base  {
 	* @param	boolean $rpcParams optional (no longer used)
 	* @param	string	$style optional (rpc|document) the style to use when serializing parameters (WSDL can override)
 	* @param	string	$use optional (encoded|literal) the use when serializing parameters (WSDL can override)
-	* @return	mixed
+	* @return	mixed	response from SOAP call
 	* @access   public
 	*/
 	function call($operation,$params=array(),$namespace='http://tempuri.org',$soapAction='',$headers=false,$rpcParams=null,$style='rpc',$use='encoded'){
@@ -154,7 +168,9 @@ class soapclient extends nusoap_base  {
 		$this->faultcode = '';
 		$this->opData = array();
 		
-		$this->debug("call: $operation, $params, $namespace, $soapAction, $headers, $style, $use; endpointType: $this->endpointType");
+		$this->debug("call: operation=$operation, namespace=$namespace, soapAction=$soapAction, rpcParams=$rpcParams, style=$style, use=$use, endpointType=$this->endpointType");
+		$this->appendDebug('params=' . $this->varDump($params));
+		$this->appendDebug('headers=' . $this->varDump($headers));
 		if ($headers) {
 			$this->requestHeaders = $headers;
 		}
@@ -162,8 +178,8 @@ class soapclient extends nusoap_base  {
 		if($this->endpointType == 'wsdl' && $opData = $this->getOperationData($operation)){
 			// use WSDL for operation
 			$this->opData = $opData;
-			$this->debug("opData:");
-			$this->appendDebug($this->varDump($opData));
+			$this->debug("found operation");
+			$this->appendDebug('opData=' . $this->varDump($opData));
 			if (isset($opData['soapAction'])) {
 				$soapAction = $opData['soapAction'];
 			}
@@ -194,12 +210,10 @@ class soapclient extends nusoap_base  {
 				return false;
 			}
             $usedNamespaces = $this->wsdl->usedNamespaces;
-			// Partial fix for multiple encoding styles in the same function call
-			$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
-			if (isset($opData['output']['encodingStyle']) && $encodingStyle != $opData['output']['encodingStyle']) {
-				$methodEncodingStyle = ' SOAP-ENV:encodingStyle="' . $opData['output']['encodingStyle'] . '"';
+			if (isset($opData['input']['encodingStyle'])) {
+				$encodingStyle = $opData['input']['encodingStyle'];
 			} else {
-				$methodEncodingStyle = '';
+				$encodingStyle = '';
 			}
 			$this->appendDebug($this->wsdl->getDebug());
 			$this->wsdl->clearDebug();
@@ -235,7 +249,11 @@ class soapclient extends nusoap_base  {
 				return false;
 			}
 			$usedNamespaces = array();
-			$methodEncodingStyle = '';
+			if ($use == 'encoded') {
+				$encodingStyle = 'http://schemas.xmlsoap.org/soap/encoding/';
+			} else {
+				$encodingStyle = '';
+			}
 		}
 		// wrap RPC calls with method element
 		if ($style == 'rpc') {
@@ -249,20 +267,20 @@ class soapclient extends nusoap_base  {
 			} else {
 				$this->debug("wrapping RPC request with encoded method element");
 				if ($namespace) {
-					$payload = "<$nsPrefix:$operation$methodEncodingStyle xmlns:$nsPrefix=\"$namespace\">" .
+					$payload = "<$nsPrefix:$operation xmlns:$nsPrefix=\"$namespace\">" .
 								$payload .
 								"</$nsPrefix:$operation>";
 				} else {
-					$payload = "<$operation$methodEncodingStyle>" .
+					$payload = "<$operation>" .
 								$payload .
 								"</$operation>";
 				}
 			}
 		}
 		// serialize envelope
-		$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$usedNamespaces,$style,$use);
-		$this->debug("endpoint: $this->endpoint, soapAction: $soapAction, namespace: $namespace, style: $style, use: $use");
-		$this->debug('SOAP message length: ' . strlen($soapmsg) . ' contents: ' . substr($soapmsg, 0, 1000));
+		$soapmsg = $this->serializeEnvelope($payload,$this->requestHeaders,$usedNamespaces,$style,$use,$encodingStyle);
+		$this->debug("endpoint=$this->endpoint, soapAction=$soapAction, namespace=$namespace, style=$style, use=$use, encodingStyle=$encodingStyle");
+		$this->debug('SOAP message length=' . strlen($soapmsg) . ' contents (max 1000 bytes)=' . substr($soapmsg, 0, 1000));
 		// send
 		$return = $this->send($this->getHTTPBody($soapmsg),$soapAction,$this->timeout,$this->response_timeout);
 		if($errstr = $this->getError()){
@@ -270,8 +288,8 @@ class soapclient extends nusoap_base  {
 			return false;
 		} else {
 			$this->return = $return;
-			$this->debug('sent message successfully and got a(n) '.gettype($return).' back: ');
-           	$this->appendDebug($this->varDump($return));
+			$this->debug('sent message successfully and got a(n) '.gettype($return));
+           	$this->appendDebug('return=' . $this->varDump($return));
 			
 			// fault?
 			if(is_array($return) && isset($return['faultcode'])){
@@ -362,7 +380,7 @@ class soapclient extends nusoap_base  {
 				if($this->http_encoding != ''){
 					$http->setEncoding($this->http_encoding);
 				}
-				$this->debug('sending message, length: '.strlen($msg));
+				$this->debug('sending message, length='.strlen($msg));
 				if(ereg('^http:',$this->endpoint)){
 				//if(strpos($this->endpoint,'http:')){
 					$this->responseData = $http->send($msg,$timeout,$response_timeout,$this->cookies);
@@ -396,7 +414,7 @@ class soapclient extends nusoap_base  {
 				} elseif($this->getError()){
 					return false;
 				} else {
-					$this->debug('got response, length: '. strlen($this->responseData).' type: '.$http->incoming_headers['content-type']);
+					$this->debug('got response, length='. strlen($this->responseData).' type='.$http->incoming_headers['content-type']);
 					return $this->parseResponse($http->incoming_headers, $this->responseData);
 				}
 			break;
@@ -413,7 +431,7 @@ class soapclient extends nusoap_base  {
 	* @param	array	$headers	The HTTP headers
 	* @param	string	$data		unprocessed response data from server
 	* @return	mixed	value of the message, decoded into a PHP type
-	* @access   protected
+	* @access   private
 	*/
     function parseResponse($headers, $data) {
 		$this->debug('Entering parseResponse() for data of length ' . strlen($data) . ' and type ' . $headers['content-type']);
@@ -545,6 +563,7 @@ class soapclient extends nusoap_base  {
 	*
 	* This is no longer used.
 	*
+	* @return boolean
 	* @access public
 	* @deprecated
 	*/
@@ -568,41 +587,16 @@ class soapclient extends nusoap_base  {
 	}
 	
 	/**
-	* dynamically creates proxy class, allowing user to directly call methods from wsdl
+	* dynamically creates an instance of a proxy class,
+	* allowing user to directly call methods from wsdl
 	*
 	* @return   object soap_proxy object
 	* @access   public
 	*/
 	function getProxy(){
-		if ($this->endpointType != 'wsdl') {
-			$this->setError('The getProxy method only works for a WSDL client');
-			return null;
-		}
-		$evalStr = '';
-		foreach($this->operations as $operation => $opData){
-			if($operation != ''){
-				// create param string
-				$paramStr = '';
-				if(sizeof($opData['input']['parts']) > 0){
-					foreach($opData['input']['parts'] as $name => $type){
-						$paramStr .= "\$$name,";
-					}
-					$paramStr = substr($paramStr,0,strlen($paramStr)-1);
-				}
-				$opData['namespace'] = !isset($opData['namespace']) ? 'http://testuri.com' : $opData['namespace'];
-				$evalStr .= "function " . str_replace('.', '__', $operation) . " ($paramStr) {
-					// load params into array
-					\$params = array($paramStr);
-					return \$this->call('$operation',\$params,'".$opData['namespace']."','".(isset($opData['soapAction']) ? $opData['soapAction'] : '')."');
-				}";
-				unset($paramStr);
-			}
-		}
 		$r = rand();
-		$evalStr = 'class soap_proxy_'.$r.' extends soapclient {
-				'.$evalStr.'
-			}';
-		//print "proxy class:<pre>$evalStr</pre>";
+		$evalStr = $this->_getProxyClassCode($r);
+		//$this->debug("proxy class: $evalStr";
 		// eval the class
 		eval($evalStr);
 		// instantiate proxy object
@@ -633,11 +627,68 @@ class soapclient extends nusoap_base  {
 	}
 
 	/**
+	* dynamically creates proxy class code
+	*
+	* @return   string PHP/NuSOAP code for the proxy class
+	* @access   private
+	*/
+	function _getProxyClassCode($r) {
+		if ($this->endpointType != 'wsdl') {
+			$evalStr = 'A proxy can only be created for a WSDL client';
+			$this->setError($evalStr);
+			return $evalStr;
+		}
+		$evalStr = '';
+		foreach ($this->operations as $operation => $opData) {
+			if ($operation != '') {
+				// create param string and param comment string
+				if (sizeof($opData['input']['parts']) > 0) {
+					$paramStr = '';
+					$paramCommentStr = '';
+					foreach ($opData['input']['parts'] as $name => $type) {
+						$paramStr .= "\$$name, ";
+						$paramCommentStr .= "$type \$$name, ";
+					}
+					$paramStr = substr($paramStr, 0, strlen($paramStr)-2);
+					$paramCommentStr = substr($paramCommentStr, 0, strlen($paramCommentStr)-2);
+				} else {
+					$paramStr = '';
+					$paramCommentStr = 'void';
+				}
+				$opData['namespace'] = !isset($opData['namespace']) ? 'http://testuri.com' : $opData['namespace'];
+				$evalStr .= "// $paramCommentStr
+	function " . str_replace('.', '__', $operation) . "($paramStr) {
+		\$params = array($paramStr);
+		return \$this->call('$operation', \$params, '".$opData['namespace']."', '".(isset($opData['soapAction']) ? $opData['soapAction'] : '')."');
+	}
+	";
+				unset($paramStr);
+				unset($paramCommentStr);
+			}
+		}
+		$evalStr = 'class soap_proxy_'.$r.' extends soapclient {
+	'.$evalStr.'
+}';
+		return $evalStr;
+	}
+
+	/**
+	* dynamically creates proxy class code
+	*
+	* @return   string PHP/NuSOAP code for the proxy class
+	* @access   public
+	*/
+	function getProxyClassCode() {
+		$r = rand();
+		return $this->_getProxyClassCode($r);
+	}
+
+	/**
 	* gets the HTTP body for the current request.
 	*
 	* @param string $soapmsg The SOAP payload
 	* @return string The HTTP body, which includes the SOAP payload
-	* @access protected
+	* @access private
 	*/
 	function getHTTPBody($soapmsg) {
 		return $soapmsg;
@@ -649,7 +700,7 @@ class soapclient extends nusoap_base  {
 	* Note: getHTTPBody must be called before this.
 	*
 	* @return string the HTTP content type for the current request.
-	* @access protected
+	* @access private
 	*/
 	function getHTTPContentType() {
 		return 'text/xml';
@@ -662,7 +713,7 @@ class soapclient extends nusoap_base  {
 	* Note: getHTTPBody must be called before this.
 	*
 	* @return string the HTTP content type charset for the current request.
-	* @access protected
+	* @access private
 	*/
 	function getHTTPContentTypeCharset() {
 		return $this->soap_defencoding;
@@ -709,7 +760,7 @@ class soapclient extends nusoap_base  {
 	 * checks all Cookies and delete those which are expired
 	 *
 	 * @return   always return true
-	 * @access   public
+	 * @access   private
 	 */
 	function checkCookies() {
 		if (sizeof($this->cookies) == 0) {
@@ -742,7 +793,7 @@ class soapclient extends nusoap_base  {
 	 *
 	 * @param	array $cookies new cookies with which to update current ones
 	 * @return	always return true
-	 * @access	public
+	 * @access	private
 	 */
 	function UpdateCookies($cookies) {
 		if (sizeof($this->cookies) == 0) {

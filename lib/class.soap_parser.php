@@ -47,11 +47,11 @@ class soap_parser extends nusoap_base {
 	var $decode_utf8 = true;
 
 	/**
-	* constructor
+	* constructor that actually does the parsing
 	*
 	* @param    string $xml SOAP message
 	* @param    string $encoding character encoding scheme of message
-	* @param    string $method
+	* @param    string $method method for which XML is parsed (unused?)
 	* @param    string $decode_utf8 whether to decode UTF-8 to ISO-8859-1
 	* @access   public
 	*/
@@ -140,9 +140,9 @@ class soap_parser extends nusoap_base {
 	/**
 	* start-element handler
 	*
-	* @param    string $parser XML parser object
+	* @param    resource $parser XML parser object
 	* @param    string $name element name
-	* @param    string $attrs associative array of attributes
+	* @param    array $attrs associative array of attributes
 	* @access   private
 	*/
 	function start_element($parser, $name, $attrs) {
@@ -292,7 +292,7 @@ class soap_parser extends nusoap_base {
 	/**
 	* end-element handler
 	*
-	* @param    string $parser XML parser object
+	* @param    resource $parser XML parser object
 	* @param    string $name element name
 	* @access   private
 	*/
@@ -396,7 +396,7 @@ class soap_parser extends nusoap_base {
 	/**
 	* element content handler
 	*
-	* @param    string $parser XML parser object
+	* @param    resource $parser XML parser object
 	* @param    string $data element content
 	* @access   private
 	*/
@@ -443,6 +443,7 @@ class soap_parser extends nusoap_base {
 	* decodes entities
 	*
 	* @param    string $text string to translate
+	* @return	string translated text
 	* @access   private
 	*/
 	function decode_entities($text){
@@ -458,6 +459,7 @@ class soap_parser extends nusoap_base {
 	* @param    string $value value to decode
 	* @param    string $type XML type to decode
 	* @param    string $typens XML type namespace to decode
+	* @return	mixed PHP value
 	* @access   private
 	*/
 	function decodeSimple($value, $type, $typens) {
@@ -478,6 +480,7 @@ class soap_parser extends nusoap_base {
 			return (boolean) $value;
 		}
 		if ($type == 'base64' || $type == 'base64Binary') {
+			$this->debug('Decode base64 value');
 			return base64_decode($value);
 		}
 		// obscure numeric types
@@ -487,6 +490,10 @@ class soap_parser extends nusoap_base {
 			|| $type == 'unsignedShort' || $type == 'unsignedByte') {
 			return (int) $value;
 		}
+		// bogus: parser treats array with no elements as a simple type
+		if ($type == 'array') {
+			return array();
+		}
 		// everything else
 		return (string) $value;
 	}
@@ -494,7 +501,8 @@ class soap_parser extends nusoap_base {
 	/**
 	* builds response structures for compound values (arrays/structs)
 	*
-	* @param    string $pos position in node tree
+	* @param    integer $pos position in node tree
+	* @return	mixed	PHP value
 	* @access   private
 	*/
 	function buildVal($pos){

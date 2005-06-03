@@ -361,3 +361,22 @@
 - wsdl: call parent constructor
 - wsdl: expand entities in attributes (thanks Gaetano Giunta)
 - xmlschema: call parent constructor
+
+2005-06-03, version 0.6.9
+- nusoap_base: serialize empty arrays as having elements xsd:anyType[0]
+- nusoap_base: add encodingStyle parameter to serializeEnvelope
+- nusoap_base: serialize xsi:type with nil values
+- nusoap_base: improve debug and comments
+- soap_parser: correctly parse an empty array to an empty array, not an empty string
+- soap_parser: improve debug and comments
+- soap_server: specify encodingStyle for envelope when WSDL is used
+- soapclient: factor out new getProxyClassCode method
+- soapclient: specify encodingStyle for envelope
+- soapclient: improve debug and comments
+- wsdl: add namespace for Apache SOAP types if a variable of such type is serialized
+- wsdl: serialize nil value for nillable elements when no value is provided
+- wsdl: serialize xsi:type with nil values
+- wsdl: copy attributes as well as elements to an element from its complexType
+- wsdl: specify encodingStyle for operations
+- wsdl: improve debug and comments
+- xmlschema: improve debug and comments

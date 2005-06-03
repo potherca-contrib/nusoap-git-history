@@ -664,7 +664,8 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->simpleTypes[$type]['type'], 0, strrpos($this->simpleTypes[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
-					$this->xdebug("in getTypeDef, found type $etype for simpleType $type");
+					$this->xdebug("in getTypeDef, found type for simpleType $type:");
+					$this->xdebug($this->varDump($etype));
 					if (isset($etype['phpType'])) {
 						$this->simpleTypes[$type]['phpType'] = $etype['phpType'];
 					}
@@ -682,7 +683,8 @@ class XMLSchema extends nusoap_base  {
 				$ns = substr($this->elements[$type]['type'], 0, strrpos($this->elements[$type]['type'], ':'));
 				$etype = $this->getTypeDef($uqType);
 				if ($etype) {
-					$this->xdebug("in getTypeDef, found type $etype for element $type");
+					$this->xdebug("in getTypeDef, found type for element $type:");
+					$this->xdebug($this->varDump($etype));
 					if (isset($etype['phpType'])) {
 						$this->elements[$type]['phpType'] = $etype['phpType'];
 					}
@@ -863,9 +865,9 @@ class XMLSchema extends nusoap_base  {
 	/**
 	* adds an element to the schema
 	*
-	* @param name
 	* @param array $attrs attributes that must include name and type
 	* @see xmlschema
+	* @access public
 	*/
 	function addElement($attrs) {
 		if (! $this->getPrefix($attrs['type'])) {
